@@ -1,0 +1,28 @@
+version: 1
+server:
+  http:
+    port: 3031
+    routes:
+      - method: post
+        path: /state-runtime-demo
+        flow: demo-state-runtime
+closures:
+  - type: core
+flows:
+  - name: demo-state-runtime
+    steps:
+      - closure: core.assign
+        parameters:
+          target: order
+          value: "${request.body}"
+      - closure: core.log
+        parameters:
+          level: info
+          message: "processing ${state.order.userId} (req ${runtime.requestId})"
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            ok: true
+            order: "${state.order}"
+            requestId: "${runtime.requestId}"

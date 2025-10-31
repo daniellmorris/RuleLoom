@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "tree-exe-lib": ["packages/tree-exe-lib/src/index.ts"],
+      "tree-exe-engine": ["packages/tree-exe-engine/src/index.ts"],
+      "tree-exe-core": ["packages/tree-exe-core/src/index.ts"],
+      "tree-exe-runner": ["packages/tree-exe-runner/src/index.ts"]
+    }
+  }
+}

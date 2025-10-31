@@ -1,0 +1,217 @@
+import { strict as assert } from 'node:assert';
+import TreeExeEngine from 'tree-exe-engine';
+import { createCoreClosures } from 'tree-exe-core';
+
+async function testBranchInference() {
+  const engine = new TreeExeEngine({
+    closures: createCoreClosures(),
+  });
+
+  engine.registerFlow({
+    name: 'order-evaluation',
+    steps: [
+      {
+        closure: 'core.assign',
+        parameters: {
+          target: 'order.total',
+          value: '${state.request.body.total}',
+        },
+      },
+      {
+        cases: [
+          {
+            when: {
+              closure: 'core.greater-than',
+              parameters: {
+                left: '${state.order.total}',
+                right: 100,
+              },
+            },
+            steps: [
+              {
+                closure: 'core.log',
+                parameters: {
+                  level: 'info',
+                  message: 'High value order for ${state.request.body.userId}',
+                },
+              },
+              {
+                cases: [
+                  {
+                    when: {
+                      closure: 'core.truthy',
+                      parameters: {
+                        value: '${state.request.body.items}',
+                      },
+                    },
+                    steps: [
+                      {
+                        closure: 'core.respond',
+                        parameters: {
+                          status: 202,
+                          body: {
+                            status: 'queued',
+                            category: 'vip',
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
+                otherwise: [
+                  {
+                    closure: 'core.respond',
+                    parameters: {
+                      status: 400,
+                      body: { error: 'missing items' },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        otherwise: [
+          {
+            closure: 'core.respond',
+            parameters: {
+              status: 200,
+              body: {
+                status: 'accepted',
+                category: 'standard',
+              },
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const { state } = await engine.execute(
+    'order-evaluation',
+    {
+      request: {
+        body: {
+          userId: 'abc-123',
+          total: 150,
+          items: ['A1'],
+        },
+      },
+    },
+    { requestId: 'REQ-1' },
+  );
+
+  assert.equal(state.response?.status, 202);
+  assert.equal(state.response?.body?.category, 'vip');
+}
+
+async function testFlowClosure() {
+  const engine = new TreeExeEngine({
+    closures: createCoreClosures(),
+  });
+
+  engine.registerClosure({
+    name: 'flow.respond-standard',
+    handler: (state, context) => {
+      const runtimeEngine = context.runtime.engine ?? engine;
+      return runtimeEngine.runSteps(
+        [
+          {
+            closure: 'core.respond',
+            parameters: {
+              status: 200,
+              body: {
+                status: 'accepted',
+                total: '${state.order.total}',
+              },
+            },
+          },
+        ],
+        state,
+        context.runtime,
+      );
+    },
+  });
+
+  engine.registerFlow({
+    name: 'flow-wrapper',
+    steps: [
+      {
+        closure: 'core.assign',
+        parameters: {
+          target: 'order.total',
+          value: '${runtime.payload.total}',
+        },
+      },
+      {
+        closure: 'flow.respond-standard',
+      },
+    ],
+  });
+
+  const { state } = await engine.execute(
+    'flow-wrapper',
+    {},
+    {
+      payload: { total: 42 },
+      requestId: 'REQ-2',
+    },
+  );
+
+  assert.equal(state.response?.status, 200);
+  assert.equal(state.response?.body?.total, 42);
+}
+
+async function testForEachClosure() {
+  const engine = new TreeExeEngine({
+    closures: createCoreClosures(),
+  });
+
+  engine.registerFlow({
+    name: 'collection-handler',
+    steps: [
+      {
+        closure: 'core.assign',
+        parameters: {
+          target: 'items',
+          value: ['A', 'B', 'C'],
+        },
+      },
+      {
+        closure: 'core.for-each',
+        parameters: {
+          collection: '${state.items}',
+          steps: [
+            {
+              type: 'invoke',
+              closure: 'core.assign',
+              parameters: {
+                target: 'processed.${state.currentIndex}',
+                value: '${state.currentItem}',
+              },
+            },
+          ],
+        },
+      },
+    ],
+  });
+
+  const { state } = await engine.execute('collection-handler');
+
+  assert.deepEqual(state.processed, ['A', 'B', 'C']);
+  assert.ok(!('currentItem' in state));
+  assert.ok(!('currentIndex' in state));
+}
+
+async function run() {
+  await testBranchInference();
+  await testFlowClosure();
+  await testForEachClosure();
+  // eslint-disable-next-line no-console
+  console.log('All engine tests passed');
+}
+
+run().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

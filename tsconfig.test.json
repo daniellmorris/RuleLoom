@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "module": "ESNext",
+    "target": "ES2020"
+  },
+  "include": [
+    "tests/**/*.ts"
+  ]
+}

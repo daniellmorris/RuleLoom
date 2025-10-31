@@ -1,0 +1,202 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import yaml from 'js-yaml';
+import { z } from 'zod';
+import type { FlowDefinition, FlowInvokeStep, FlowBranchStep } from 'tree-exe-engine';
+import type { LogLevel } from 'tree-exe-lib';
+
+const logLevelSchema = z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']) as z.ZodType<LogLevel>;
+
+const conditionSchema = z.object({
+  closure: z.string().min(1),
+  parameters: z.record(z.any()).optional(),
+  negate: z.boolean().optional(),
+});
+
+const whenSchema = z.union([conditionSchema, z.array(conditionSchema)]);
+
+let flowStepSchema: z.ZodType<FlowDefinition['steps'][number]>;
+
+const invokeStepSchema = z
+  .object({
+    type: z.literal('invoke').optional(),
+    closure: z.string().min(1),
+    parameters: z.record(z.any()).optional(),
+    assign: z.string().min(1).optional(),
+    mergeResult: z.boolean().optional(),
+    when: whenSchema.optional(),
+  })
+  .passthrough()
+  .transform((step) => {
+    const { type, closure, parameters, assign, mergeResult, when, ...rest } = step as any;
+    const computedParams: Record<string, unknown> = { ...(parameters ?? {}) };
+
+    for (const [key, value] of Object.entries(rest)) {
+      if (value === undefined) continue;
+      if (key === 'steps') {
+        computedParams.steps = flowStepSchema.array().parse(value);
+      } else {
+        computedParams[key] = value;
+      }
+    }
+
+    return {
+      type: 'invoke' as const,
+      closure,
+      parameters: Object.keys(computedParams).length ? computedParams : undefined,
+      assign,
+      mergeResult,
+      when,
+    } satisfies FlowInvokeStep;
+  });
+
+const branchCaseSchema = z.object({
+  when: whenSchema,
+  steps: z.lazy(() => flowStepSchema.array().min(1)),
+});
+
+const rawBranchStepSchema = z.object({
+  type: z.literal('branch').optional(),
+  cases: z.array(branchCaseSchema).min(1),
+  otherwise: z.lazy(() => flowStepSchema.array()).optional(),
+}).superRefine((value, ctx) => {
+  if ('closure' in (value as Record<string, unknown>)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Branch steps cannot specify "closure".',
+    });
+  }
+});
+
+const branchStepSchema = rawBranchStepSchema.transform((step) => ({
+  type: 'branch' as const,
+  cases: step.cases,
+  otherwise: step.otherwise,
+})) as unknown as z.ZodType<FlowBranchStep>;
+
+flowStepSchema = z.union([
+  invokeStepSchema as unknown as z.ZodType<FlowInvokeStep>,
+  branchStepSchema,
+]) as unknown as z.ZodType<FlowDefinition['steps'][number]>;
+
+const flowSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  steps: z.array(flowStepSchema).min(1),
+}) satisfies z.ZodType<FlowDefinition>;
+
+export type FlowConfig = z.infer<typeof flowSchema>;
+
+const templateClosureSchema = z
+  .object({
+    type: z.literal('template'),
+    template: z.enum(['set-state', 'respond']),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    options: z.record(z.any()).optional(),
+  })
+  .and(
+    z.discriminatedUnion('template', [
+      z.object({
+        template: z.literal('set-state'),
+        target: z.string().min(1),
+        value: z.any().optional(),
+        merge: z.boolean().optional().default(false),
+      }),
+      z.object({
+        template: z.literal('respond'),
+        status: z.number().int().optional().default(200),
+        body: z.any().optional(),
+        headers: z.record(z.string()).optional(),
+      }),
+    ]),
+  );
+
+const moduleClosureSchema = z.object({
+  type: z.literal('module'),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  module: z.string().min(1),
+  export: z.string().optional(),
+  config: z.any().optional(),
+});
+
+const flowClosureSchema = z.object({
+  type: z.literal('flow'),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  steps: z.array(flowStepSchema).min(1),
+});
+
+const coreClosureSchema = z.object({
+  type: z.literal('core'),
+  preset: z.enum(['default']).optional().default('default'),
+});
+
+const closureSchema = z.union([templateClosureSchema, moduleClosureSchema, flowClosureSchema, coreClosureSchema]);
+
+export type ClosureConfig = z.infer<typeof closureSchema>;
+
+const httpRouteSchema = z.object({
+  id: z.string().optional(),
+  method: z.enum(['get', 'post', 'put', 'patch', 'delete']).default('post'),
+  path: z.string().min(1),
+  flow: z.string().min(1),
+  respondWith: z
+    .object({
+      status: z.number().int().optional(),
+      headers: z.record(z.string()).optional(),
+      body: z.any().optional(),
+    })
+    .optional(),
+});
+
+export type HttpRouteConfig = z.infer<typeof httpRouteSchema>;
+
+const serverSchema = z.object({
+  http: z.object({
+    port: z.number().int().min(1).max(65535).default(3000),
+    basePath: z.string().optional(),
+    routes: z.array(httpRouteSchema).min(1),
+    bodyLimit: z.union([z.number(), z.string()]).optional().default('1mb'),
+  }),
+});
+
+const runnerConfigSchema = z.object({
+  version: z.number().int().positive().optional().default(1),
+  logger: z
+    .object({
+      level: logLevelSchema.optional(),
+    })
+    .optional(),
+  metadata: z.record(z.any()).optional(),
+  server: serverSchema,
+  closures: z.array(closureSchema).optional().default([]),
+  flows: z.array(flowSchema).min(1),
+});
+
+export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
+
+export interface RunnerConfigWithMeta {
+  config: RunnerConfig;
+  configPath: string;
+  configDir: string;
+}
+
+export async function loadRunnerConfig(configPath: string): Promise<RunnerConfigWithMeta> {
+  const absolutePath = path.resolve(configPath);
+  const file = await fs.readFile(absolutePath, 'utf8');
+  const parsed = (yaml.load(file) ?? {}) as Record<string, unknown>;
+  const config = runnerConfigSchema.parse(parsed);
+  return {
+    config,
+    configPath: absolutePath,
+    configDir: path.dirname(absolutePath),
+  };
+}
+
+export async function importClosureModule(modulePath: string, baseDir: string) {
+  const resolved = path.isAbsolute(modulePath) ? modulePath : path.resolve(baseDir, modulePath);
+  return import(pathToFileURL(resolved).href);
+}

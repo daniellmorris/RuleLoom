@@ -1,0 +1,33 @@
+{
+  "name": "tree-exe-orchestrator",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "treeexe-orchestrator": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "config"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "commander": "^11.1.0",
+    "express": "^4.19.2",
+    "morgan": "^1.10.0",
+    "tree-exe-lib": "file:../tree-exe-lib",
+    "tree-exe-runner": "file:../tree-exe-runner",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/js-yaml": "^4.0.9",
+    "@types/morgan": "^1.9.7",
+    "@types/node": "^20.12.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.2"
+  }
+}

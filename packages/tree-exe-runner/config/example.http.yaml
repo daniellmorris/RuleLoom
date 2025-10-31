@@ -1,0 +1,55 @@
+version: 1
+server:
+  http:
+    port: 3030
+    bodyLimit: 1mb
+    routes:
+      - method: post
+        path: /echo
+        flow: echo-request
+closures:
+  - type: core
+  - type: flow
+    name: capture-request
+    steps:
+      - closure: core.assign
+        parameters:
+          target: payload
+          value: "${request.body}"
+      - closure: core.for-each
+        collection: "${state.payload.items}"
+        steps:
+          - closure: core.log
+            parameters:
+              level: info
+              message: "payload item: ${state.currentItem}"
+  - type: flow
+    name: respond-success
+    steps:
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            ok: true
+            received: "${state.payload}"
+  - type: flow
+    name: respond-empty
+    steps:
+      - closure: core.respond
+        parameters:
+          status: 204
+flows:
+  - name: echo-request
+    steps:
+      - closure: capture-request
+        parameters:
+          value: "${request.body}"
+      - cases:
+          - when:
+              closure: core.truthy
+              parameters:
+                value: "${state.payload}"
+            steps:
+              - closure: respond-success
+        otherwise:
+          - closure: respond-empty

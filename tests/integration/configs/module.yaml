@@ -1,0 +1,29 @@
+version: 1
+server:
+  http:
+    port: 3034
+    routes:
+      - method: post
+        path: /module
+        flow: pricing
+closures:
+  - type: core
+  - type: module
+    module: ../modules/custom-closures.js
+flows:
+  - name: pricing
+    steps:
+      - closure: core.assign
+        parameters:
+          target: result
+          value:
+            total:
+              $call:
+                name: module.apply-discount
+                parameters:
+                  amount: "${request.body.amount}"
+                  rate: "${request.body.rate}"
+      - closure: core.respond
+        parameters:
+          status: 200
+          body: "${state.result}"

@@ -22,6 +22,7 @@
     "js-yaml": "^4.1.0",
     "lodash": "^4.17.21",
     "morgan": "^1.10.0",
+    "bree": "^9.1.5",
     "tree-exe-core": "file:../tree-exe-core",
     "tree-exe-lib": "file:../tree-exe-lib",
     "tree-exe-engine": "file:../tree-exe-engine",

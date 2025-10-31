@@ -46,6 +46,7 @@ Supplies reusable closures (assign/respond/log/comparisons/iterators) that follo
 - Parses YAML configs with Zod, builds closure lists (core/module/flow), and creates an Express app.
 - Injects the HTTP request into `state.request` and passes route metadata through `runtime`.
 - Provides CLI/programmatic APIs for running a single configuration.
+- Starts a Bree-backed scheduler when `scheduler.jobs` are defined, executing flows on intervals or cron schedules.
 
 ### tree-exe-orchestrator
 - Loads multiple runner configs, mounts their Express apps under configurable base paths.

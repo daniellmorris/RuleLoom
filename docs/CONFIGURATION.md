@@ -189,6 +189,33 @@ Some closures (e.g., `core.for-each`) expect raw step arrays. In YAML you can pa
 
 The engine skips interpolation on `steps` because the closure declares it via `functionalParams`.
 
+## Scheduler Jobs
+
+Runner configs can declare scheduled jobs via Bree:
+
+```yaml
+scheduler:
+  jobs:
+    - name: heartbeat
+      flow: heartbeat-flow
+      interval: "1m"
+      initialState:
+        counter: 0
+      runtime:
+        source: scheduler
+```
+
+Job fields:
+
+- `name` – unique identifier.
+- `flow` – name of the flow to execute.
+- `interval` / `cron` / `timeout` – scheduling hints; at least one must be provided. Strings like `"5m"` are parsed with human-interval support. Numbers use milliseconds. `timeout` represents a one-off delay.
+- `initialState` – optional object cloned before each execution.
+- `runtime` – merged into the execution runtime; the engine automatically adds `scheduler.job` and `scheduler.triggeredAt`.
+- `enabled` – set to `false` to skip the job without removing it from the config.
+
+Scheduler runs are tracked on the runner instance (`runner.scheduler.jobStates`) for observability and testing.
+
 ## Inline Flow Closures
 
 `type: flow` closures can be invoked like normal closures in subsequent steps:

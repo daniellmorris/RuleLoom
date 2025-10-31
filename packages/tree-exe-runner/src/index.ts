@@ -1,5 +1,7 @@
 import http from 'node:http';
-import TreeExeEngine, { type FlowDefinition } from 'tree-exe-engine';
+import _ from 'lodash';
+import Bree from 'bree';
+import TreeExeEngine, { type FlowDefinition, type ExecutionResult } from 'tree-exe-engine';
 import { buildClosures } from './closures.js';
 import { createRunnerApp } from './http-server.js';
 import { createLogger, type TreeExeLogger } from 'tree-exe-lib';
@@ -9,6 +11,7 @@ import {
   type RunnerConfigWithMeta,
   type ClosureConfig,
   type FlowConfig,
+  type SchedulerJobConfig,
 } from './config.js';
 
 export interface RunnerInstance {
@@ -19,11 +22,26 @@ export interface RunnerInstance {
   app: ReturnType<typeof createRunnerApp>;
   listen: (port?: number) => Promise<http.Server>;
   close: () => Promise<void>;
+  scheduler?: RunnerScheduler;
 }
 
 export interface StartOptions {
   configPath: string;
   portOverride?: number;
+}
+
+interface SchedulerJobState {
+  runs: number;
+  lastRun?: Date;
+  lastResult?: ExecutionResult;
+  lastError?: unknown;
+}
+
+interface RunnerScheduler {
+  controller: Bree;
+  jobStates: Map<string, SchedulerJobState>;
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
 }
 
 function normalizeFlows(flows: FlowConfig[]): FlowDefinition[] {
@@ -70,7 +88,93 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
     return server;
   };
 
+  const schedulerJobs = (config.scheduler?.jobs ?? []).filter((job) => job.enabled !== false);
+  const schedulerJobStates = new Map<string, SchedulerJobState>();
+  let schedulerController: Bree | undefined;
+
+  if (schedulerJobs.length > 0) {
+    const jobDefinitions = schedulerJobs.map((job) => {
+      const jobCode = `(() => {
+  const { parentPort, workerData } = require('node:worker_threads');
+  const jobName = (workerData && workerData.name) || ${JSON.stringify(job.name)};
+  if (parentPort) {
+    parentPort.postMessage({ type: 'run-flow', name: jobName });
+    parentPort.postMessage('done');
+  }
+})()`;
+      const definition: any = {
+        name: job.name,
+        path: jobCode,
+        worker: {
+          eval: true,
+          workerData: { name: job.name },
+        },
+      };
+      if (job.interval !== undefined) definition.interval = job.interval;
+      if (job.cron !== undefined) definition.cron = job.cron;
+      if (job.timeout !== undefined) definition.timeout = job.timeout;
+      return definition;
+    });
+
+    const jobConfigByName = new Map<string, SchedulerJobConfig>(
+      schedulerJobs.map((job) => [job.name, job]),
+    );
+
+    const breeLogger =
+      logger && logger.info
+        ? {
+            info: logger.info.bind(logger),
+            warn: logger.warn.bind(logger),
+            error: logger.error.bind(logger),
+          }
+        : false;
+
+    schedulerController = new Bree({
+      logger: breeLogger,
+      root: false,
+      doRootCheck: false,
+      jobs: jobDefinitions,
+      workerMessageHandler: ({ name, message }) => {
+        if (message && typeof message === 'object' && message.type === 'run-flow') {
+          const jobConfig = jobConfigByName.get(name);
+          if (!jobConfig) return;
+          const initialState = jobConfig.initialState ? _.cloneDeep(jobConfig.initialState) : {};
+          const runtimeContext = {
+            ...(jobConfig.runtime ? _.cloneDeep(jobConfig.runtime) : {}),
+            scheduler: {
+              job: jobConfig.name,
+              triggeredAt: new Date().toISOString(),
+            },
+          };
+          engine
+            .execute(jobConfig.flow, initialState, runtimeContext)
+            .then((result) => {
+              const entry = schedulerJobStates.get(name) ?? { runs: 0 };
+              entry.runs += 1;
+              entry.lastRun = new Date();
+              entry.lastResult = result;
+              entry.lastError = undefined;
+              schedulerJobStates.set(name, entry);
+            })
+            .catch((error) => {
+              const entry = schedulerJobStates.get(name) ?? { runs: 0 };
+              entry.lastRun = new Date();
+              entry.lastError = error;
+              schedulerJobStates.set(name, entry);
+              logger.error?.(`Scheduler job "${name}" failed`, error);
+            });
+        }
+      },
+    });
+
+    await schedulerController.start();
+  }
+
   const close = async () => {
+    if (schedulerController) {
+      await schedulerController.stop();
+      schedulerController = undefined;
+    }
     if (server) {
       await new Promise<void>((resolve, reject) => {
         server?.close((err) => {
@@ -82,6 +186,15 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
     }
   };
 
+  const scheduler: RunnerScheduler | undefined = schedulerController
+    ? {
+        controller: schedulerController,
+        jobStates: schedulerJobStates,
+        start: () => schedulerController!.start(),
+        stop: () => schedulerController!.stop(),
+      }
+    : undefined;
+
   return {
     engine,
     logger,
@@ -90,6 +203,7 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
     app,
     listen,
     close,
+    scheduler,
   };
 }
 
@@ -99,4 +213,5 @@ export async function startRunner(options: StartOptions): Promise<{ instance: Ru
   return { instance, server };
 }
 
-export type { RunnerConfig, RunnerConfigWithMeta } from './config.js';
+export type { RunnerConfig, RunnerConfigWithMeta, SchedulerConfig, SchedulerJobConfig } from './config.js';
+export type { RunnerScheduler };

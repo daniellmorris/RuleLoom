@@ -7,6 +7,7 @@
 - HTTP executor with configurable routes, per-route flows, and automatic request snapshotting into `state.request`.
 - Inline lambdas via `core.for-each` and other functional closures.
 - `$call` expressions for evaluating closures (or inline steps) inside parameters.
+- Bree-backed scheduler for running flows on intervals or cron expressions.
 - Schema validation via Zod with helpful error messages.
 
 ## CLI Usage
@@ -67,6 +68,20 @@ flows:
 ```
 
 See [Configuration How-To](../../docs/CONFIGURATION.md) for the full schema, examples of `$call`, branches, inline steps, and closure types.
+
+### Scheduler Example
+
+```yaml
+scheduler:
+  jobs:
+    - name: heartbeat
+      flow: heartbeat-flow
+      interval: "1m"
+      runtime:
+        source: scheduler
+```
+
+Each job executes the named flow using the runner’s engine; results are recorded on `runner.scheduler.jobStates`.
 
 ## Development
 

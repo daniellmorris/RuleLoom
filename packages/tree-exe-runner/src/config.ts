@@ -138,6 +138,29 @@ const closureSchema = z.union([templateClosureSchema, moduleClosureSchema, flowC
 
 export type ClosureConfig = z.infer<typeof closureSchema>;
 
+const schedulerJobSchema = z
+  .object({
+    name: z.string().min(1),
+    flow: z.string().min(1),
+    interval: z.union([z.number().positive(), z.string().min(1)]).optional(),
+    cron: z.string().min(1).optional(),
+    timeout: z.union([z.number().nonnegative(), z.string().min(1), z.boolean()]).optional(),
+    initialState: z.record(z.any()).optional(),
+    runtime: z.record(z.any()).optional(),
+    enabled: z.boolean().optional().default(true),
+  })
+  .refine((job) => job.interval !== undefined || job.cron !== undefined || job.timeout !== undefined, {
+    message: 'Scheduler job requires interval, cron, or timeout',
+    path: ['interval'],
+  });
+
+const schedulerSchema = z.object({
+  jobs: z.array(schedulerJobSchema).min(1),
+});
+
+export type SchedulerJobConfig = z.infer<typeof schedulerJobSchema>;
+export type SchedulerConfig = z.infer<typeof schedulerSchema>;
+
 const httpRouteSchema = z.object({
   id: z.string().optional(),
   method: z.enum(['get', 'post', 'put', 'patch', 'delete']).default('post'),
@@ -174,6 +197,7 @@ const runnerConfigSchema = z.object({
   server: serverSchema,
   closures: z.array(closureSchema).optional().default([]),
   flows: z.array(flowSchema).min(1),
+  scheduler: schedulerSchema.optional(),
 });
 
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;

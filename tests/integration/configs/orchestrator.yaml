@@ -1,0 +1,10 @@
+version: 1
+server:
+  port: 4100
+runners:
+  - name: branching
+    config: ./branching.yaml
+    basePath: /branch
+  - name: functional
+    config: ./functional.yaml
+    basePath: /func

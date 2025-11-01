@@ -1,0 +1,42 @@
+version: 1
+logger:
+  level: warn
+server:
+  http:
+    port: 3035
+    routes:
+      - method: get
+        path: /status
+        flow: status
+closures:
+  - type: core
+flows:
+  - name: status
+    steps:
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            ok: true
+  - name: heartbeat-flow
+    steps:
+      - closure: core.assign
+        parameters:
+          target: lastHeartbeat
+          value: "${runtime.scheduler.job}"
+      - closure: core.assign
+        parameters:
+          target: runValue
+          value: "Heartbeat at ${runtime.scheduler.triggeredAt}"
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            message: "heartbeat"
+scheduler:
+  jobs:
+    - name: heartbeat
+      flow: heartbeat-flow
+      interval: "1s"
+      runtime:
+        info: "from scheduler"

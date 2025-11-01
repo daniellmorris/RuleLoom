@@ -1,0 +1,39 @@
+version: 1
+server:
+  http:
+    port: 3031
+    routes:
+      - method: post
+        path: /format
+        flow: format-order
+closures:
+  - type: core
+  - type: flow
+    name: build-response
+    steps:
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            message: "${state.formatted}"
+flows:
+  - name: format-order
+    steps:
+      - closure: core.assign
+        parameters:
+          target: order
+          value: "${request.body}"
+      - closure: core.assign
+        parameters:
+          target: formatted
+          value:
+            $call:
+              name: core.assign
+              parameters:
+                target: temp.message
+                value: "Order ${state.order.id} total ${state.order.total}"
+      - closure: core.assign
+        parameters:
+          target: formatted
+          value: "${state.temp.message}"
+      - closure: build-response

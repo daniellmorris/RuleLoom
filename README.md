@@ -9,6 +9,7 @@ TreeExe is a configuration-first execution platform for composing rules, closure
 - **Core closure library** – `tree-exe-core` ships practical building blocks (`core.assign`, `core.respond`, `core.for-each`, comparisons, includes, length, …).
 - **CLI runner + orchestrator** – run a single configuration via `treeexe-runner`, or mount multiple configs behind one Express server with `treeexe-orchestrator`.
 - **Inline lambdas and closure references** – nest step arrays directly in parameters and call closures (or step bundles) inline with `$call`.
+- **Scheduled flows** – run jobs on cron/intervals using Bree-backed scheduler.
 
 ## Repository Layout
 

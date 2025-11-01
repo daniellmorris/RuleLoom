@@ -1,0 +1,36 @@
+version: 1
+server:
+  http:
+    port: 3032
+    routes:
+      - method: post
+        path: /items
+        flow: transform-items
+closures:
+  - type: core
+flows:
+  - name: transform-items
+    steps:
+      - closure: core.assign
+        parameters:
+          target: items
+          value: "${request.body.items}"
+      - closure: core.assign
+        parameters:
+          target: transformed
+          value: []
+      - closure: core.for-each
+        parameters:
+          collection: "${state.items}"
+          steps:
+            - closure: core.assign
+              parameters:
+                target: "transformed.${state.currentIndex}"
+                value:
+                  index: "${state.currentIndex}"
+                  value: "${state.currentItem}"
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            items: "${state.transformed}"

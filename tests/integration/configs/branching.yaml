@@ -1,0 +1,44 @@
+version: 1
+logger:
+  level: info
+server:
+  http:
+    port: 3030
+    routes:
+      - method: post
+        path: /orders
+        flow: process-order
+closures:
+  - type: core
+flows:
+  - name: process-order
+    steps:
+      - closure: core.assign
+        parameters:
+          target: payload
+          value: "${request.body}"
+      - cases:
+          - when:
+              closure: core.greater-than
+              parameters:
+                left:
+                  $call:
+                    name: core.length
+                    parameters:
+                      value: "${state.payload.items}"
+                right: 0
+            steps:
+              - closure: core.respond
+                parameters:
+                  status: 200
+                  body:
+                    ok: true
+                    itemCount:
+                      $call:
+                        name: core.length
+                        parameters:
+                          value: "${state.payload.items}"
+        otherwise:
+          - closure: core.respond
+            parameters:
+              status: 204

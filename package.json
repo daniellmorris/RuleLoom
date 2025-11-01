@@ -10,9 +10,13 @@
     "build": "npm run build --workspaces",
     "dev": "npm run dev --workspace tree-exe-runner",
     "start": "npm run start --workspace tree-exe-runner",
-    "test": "ts-node --project tsconfig.test.json tests/engine.spec.ts"
+    "test": "ts-node --project tsconfig.test.json tests/engine.spec.ts",
+    "test:integration": "vitest run --config vitest.config.ts"
   },
   "devDependencies": {
-    "ts-node": "^10.9.2"
+    "@types/supertest": "^2.0.16",
+    "supertest": "^6.3.4",
+    "ts-node": "^10.9.2",
+    "vitest": "^2.0.5"
   }
 }

@@ -210,14 +210,12 @@ export class TreeExeEngine {
         throw new Error(`Condition closure "${condition.closure}" is not registered.`);
       }
 
-      const templateContext: TemplateContext = {
+      const resolvedParameters = await this.prepareParameters(
+        closure,
+        condition.parameters,
         state,
         runtime,
-        parameters: condition.parameters,
-      };
-      const resolvedParameters = condition.parameters
-        ? resolveDynamicValues(condition.parameters, templateContext)
-        : undefined;
+      );
 
       const context: ClosureContext = {
         parameters: resolvedParameters,
@@ -244,34 +242,7 @@ export class TreeExeEngine {
       throw new Error(`Closure "${step.closure}" is not registered.`);
     }
 
-    const templateContext: TemplateContext = {
-      state,
-      runtime,
-      parameters: step.parameters,
-    };
-    const reserved: Record<string, unknown> = {};
-    let baseParameters = step.parameters ? _.cloneDeep(step.parameters) : undefined;
-    if (baseParameters && closure.functionalParams) {
-      for (const spec of closure.functionalParams) {
-        if (spec.name in baseParameters) {
-          reserved[spec.name] = (baseParameters as Record<string, unknown>)[spec.name];
-          delete (baseParameters as Record<string, unknown>)[spec.name];
-        }
-      }
-    }
-
-    let resolvedParameters = baseParameters
-      ? (resolveDynamicValues(baseParameters, templateContext) as Record<string, unknown>)
-      : undefined;
-
-    if (closure.functionalParams) {
-      resolvedParameters = { ...(resolvedParameters ?? {}) };
-      for (const spec of closure.functionalParams) {
-        if (spec.name in reserved) {
-          resolvedParameters[spec.name] = reserved[spec.name];
-        }
-      }
-    }
+    const resolvedParameters = await this.prepareParameters(closure, step.parameters, state, runtime);
 
     const context: ClosureContext = {
       parameters: resolvedParameters,
@@ -288,6 +259,144 @@ export class TreeExeEngine {
     }
 
     return result;
+  }
+
+  private async prepareParameters(
+    closure: ClosureDefinition,
+    rawParameters: Record<string, unknown> | undefined,
+    state: Record<string, unknown>,
+    runtime: ExecutionRuntime,
+  ): Promise<Record<string, unknown> | undefined> {
+    if (!rawParameters) {
+      return undefined;
+    }
+
+    let working = _.cloneDeep(rawParameters);
+    const reserved: Record<string, unknown> = {};
+
+    if (closure.functionalParams && working) {
+      for (const spec of closure.functionalParams) {
+        if (spec.name in working) {
+          reserved[spec.name] = working[spec.name];
+          delete working[spec.name];
+        }
+      }
+    }
+
+    const templateContext: TemplateContext = {
+      state,
+      runtime,
+      parameters: working,
+    };
+
+    let resolved = working
+      ? (resolveDynamicValues(working, templateContext) as Record<string, unknown>)
+      : undefined;
+
+    if (closure.functionalParams) {
+      resolved = resolved ?? {};
+      for (const spec of closure.functionalParams) {
+        if (spec.name in reserved) {
+          resolved[spec.name] = reserved[spec.name];
+        }
+      }
+    }
+
+    if (resolved) {
+      const skipKeys = new Set(closure.functionalParams?.map((spec) => spec.name));
+      resolved = (await this.resolveClosureReferences(resolved, state, runtime, skipKeys)) as Record<
+        string,
+        unknown
+      >;
+    }
+
+    return resolved && Object.keys(resolved).length ? resolved : undefined;
+  }
+
+  private async resolveClosureReferences(
+    value: any,
+    state: Record<string, unknown>,
+    runtime: ExecutionRuntime,
+    skipKeys?: Set<string>,
+  ): Promise<any> {
+    if (Array.isArray(value)) {
+      const results = [];
+      for (const item of value) {
+        results.push(await this.resolveClosureReferences(item, state, runtime, skipKeys));
+      }
+      return results;
+    }
+
+    if (value && typeof value === 'object') {
+      const entries = Object.entries(value);
+
+      if ('$call' in value && Object.keys(value).length === 1) {
+        const ref = value.$call as any;
+        return this.executeCallDirective(ref, state, runtime);
+      }
+
+      const evaluatedEntries = await Promise.all(
+        entries.map(async ([key, val]) => {
+          if (skipKeys?.has(key)) {
+            return [key, val];
+          }
+          return [key, await this.resolveClosureReferences(val, state, runtime, skipKeys)];
+        }),
+      );
+      return Object.fromEntries(evaluatedEntries);
+    }
+
+    return value;
+  }
+
+  private async executeCallDirective(
+    ref: any,
+    state: Record<string, unknown>,
+    runtime: ExecutionRuntime,
+  ): Promise<any> {
+    if (!ref) {
+      return undefined;
+    }
+
+    if (Array.isArray(ref)) {
+      const results = [];
+      for (const entry of ref) {
+        results.push(await this.executeSingleCall(entry, state, runtime));
+      }
+      return results;
+    }
+
+    return this.executeSingleCall(ref, state, runtime);
+  }
+
+  private async executeSingleCall(
+    ref: { name?: string; steps?: FlowStep[]; parameters?: Record<string, unknown> },
+    state: Record<string, unknown>,
+    runtime: ExecutionRuntime,
+  ): Promise<any> {
+    if (ref.steps) {
+      if (!runtime.engine) {
+        throw new Error('Inline step execution requires runtime.engine to be available.');
+      }
+      return runtime.engine.runSteps(ref.steps, state, runtime);
+    }
+
+    if (!ref.name) {
+      throw new Error('$call requires either a name or steps array.');
+    }
+
+    const target = this.closures.get(ref.name);
+    if (!target) {
+      throw new Error(`Referenced closure "${ref.name}" is not registered.`);
+    }
+
+    const prepared = await this.prepareParameters(target, ref.parameters, state, runtime);
+    const context: ClosureContext = {
+      parameters: prepared,
+      state,
+      runtime,
+    };
+    return target.handler(state, context);
   }
 }
 

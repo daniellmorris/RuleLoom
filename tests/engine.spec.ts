@@ -203,10 +203,52 @@ async function testForEachClosure() {
   assert.ok(!('currentIndex' in state));
 }
 
+async function testClosureParameterReference() {
+  const engine = new TreeExeEngine({
+    closures: createCoreClosures(),
+  });
+
+  engine.registerFlow({
+    name: 'closure-parameter-flow',
+    steps: [
+      {
+        closure: 'core.assign',
+        parameters: {
+          target: 'order.amount',
+          value: 50,
+        },
+      },
+      {
+        closure: 'core.assign',
+        parameters: {
+          target: 'formatted',
+          value: {
+            $call: {
+              steps: [
+                {
+                  closure: 'core.assign',
+                  parameters: {
+                    target: 'result',
+                    value: 'Value:${state.order.amount}',
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    ],
+  });
+
+  const { state } = await engine.execute('closure-parameter-flow');
+  assert.equal(state.formatted, 'Value:50');
+}
+
 async function run() {
   await testBranchInference();
   await testFlowClosure();
   await testForEachClosure();
+  await testClosureParameterReference();
   // eslint-disable-next-line no-console
   console.log('All engine tests passed');
 }

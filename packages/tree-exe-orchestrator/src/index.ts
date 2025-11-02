@@ -1,20 +1,16 @@
 import http from 'node:http';
 import express from 'express';
 import morgan from 'morgan';
-import { createRunner, type RunnerInstance } from 'tree-exe-runner';
 import { createLogger } from 'tree-exe-lib';
 import { loadOrchestratorConfig, type OrchestratorConfig } from './config.js';
-
-export interface OrchestratedRunner {
-  entry: OrchestratorConfig['runners'][number];
-  instance: RunnerInstance;
-}
+import { RunnerRegistry } from './registry.js';
+import { createOrchestratorApi } from './api/app.js';
 
 export interface OrchestratorInstance {
   app: express.Express;
   config: OrchestratorConfig;
   logger: ReturnType<typeof createLogger>;
-  runners: OrchestratedRunner[];
+  registry: RunnerRegistry;
   listen: (port?: number) => Promise<http.Server>;
   close: () => Promise<void>;
 }
@@ -31,17 +27,24 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
   const app = express();
   app.use(morgan('combined'));
 
-  const runners: OrchestratedRunner[] = [];
+  const registry = new RunnerRegistry(logger);
+
   for (const entry of config.runners) {
-    const instance = await createRunner(entry.config);
-    const mountPath = entry.basePath ?? instance.config.server.http.basePath ?? '/';
-    app.use(mountPath, instance.app);
-    logger.info(`Mounted runner ${entry.name ?? instance.configPath} at ${mountPath}`);
-    runners.push({ entry, instance });
+    await registry.addRunner({
+      id: entry.name,
+      configPath: entry.config,
+      basePath: entry.basePath,
+    });
   }
 
+  const apiRouter = await createOrchestratorApi(registry);
+  app.use('/api', apiRouter);
+
+  const dispatcher = registry.createDispatcher();
+  app.use(dispatcher);
+
   app.get('/__treeexe/health', (_req, res) => {
-    res.json({ status: 'ok', runners: runners.length });
+    res.json({ status: 'ok', runners: registry.list().length });
   });
 
   let server: http.Server | undefined;
@@ -70,14 +73,14 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
       });
       server = undefined;
     }
-    await Promise.all(runners.map((runner) => runner.instance.close().catch(() => undefined)));
+    await registry.closeAll();
   };
 
   return {
     app,
     config,
     logger,
-    runners,
+    registry,
     listen,
     close,
   };
@@ -88,3 +91,6 @@ export async function startOrchestrator(options: StartOptions): Promise<{ instan
   const server = await instance.listen(options.portOverride);
   return { instance, server };
 }
+
+export { RunnerRegistry } from './registry.js';
+export { createOrchestratorApi } from './api/app.js';

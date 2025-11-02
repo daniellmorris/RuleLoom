@@ -10,6 +10,7 @@ TreeExe is a configuration-first execution platform for composing rules, closure
 - **CLI runner + orchestrator** – run a single configuration via `treeexe-runner`, or mount multiple configs behind one Express server with `treeexe-orchestrator`.
 - **Inline lambdas and closure references** – nest step arrays directly in parameters and call closures (or step bundles) inline with `$call`.
 - **Scheduled flows** – run jobs on cron/intervals using Bree-backed scheduler.
+- **OpenAPI orchestrator API** – create/destroy runners, inspect routes, and view scheduler state via REST.
 
 ## Repository Layout
 

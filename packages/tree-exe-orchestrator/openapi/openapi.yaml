@@ -1,0 +1,240 @@
+openapi: 3.0.3
+info:
+  title: TreeExe Orchestrator API
+  version: 0.1.0
+servers:
+  - url: /api
+paths:
+  /runners:
+    get:
+      summary: List runner instances
+      operationId: listRunners
+      responses:
+        '200':
+          description: List of runner instances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunnerSummary'
+    post:
+      summary: Create a runner from configuration
+      operationId: createRunner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRunnerRequest'
+      responses:
+        '201':
+          description: Runner created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunnerDetail'
+  /runners/{id}:
+    parameters:
+      - $ref: '#/components/parameters/RunnerId'
+    get:
+      summary: Get runner details
+      operationId: getRunner
+      responses:
+        '200':
+          description: Runner details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunnerDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Remove a runner
+      operationId: deleteRunner
+      responses:
+        '204':
+          description: Runner deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /runners/{id}/routes:
+    parameters:
+      - $ref: '#/components/parameters/RunnerId'
+    get:
+      summary: View configured routes
+      operationId: getRunnerRoutes
+      responses:
+        '200':
+          description: Route definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  basePath:
+                    type: string
+                  routes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RunnerRoute'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /runners/{id}/jobs:
+    parameters:
+      - $ref: '#/components/parameters/RunnerId'
+    get:
+      summary: View scheduler jobs
+      operationId: getRunnerJobs
+      responses:
+        '200':
+          description: Scheduler jobs and state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SchedulerJob'
+                  states:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SchedulerJobState'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /runners/{id}/health:
+    parameters:
+      - $ref: '#/components/parameters/RunnerId'
+    get:
+      summary: Get runner health information
+      operationId: getRunnerHealth
+      responses:
+        '200':
+          description: Runner health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunnerHealth'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  parameters:
+    RunnerId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    NotFound:
+      description: Entity not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+  schemas:
+    RunnerRoute:
+      type: object
+      properties:
+        method:
+          type: string
+        path:
+          type: string
+        flow:
+          type: string
+      required: [method, path, flow]
+    SchedulerJob:
+      type: object
+      properties:
+        name:
+          type: string
+        interval:
+          oneOf:
+            - type: string
+            - type: number
+        cron:
+          type: string
+        timeout:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+        enabled:
+          type: boolean
+      required: [name]
+    SchedulerJobState:
+      type: object
+      properties:
+        name:
+          type: string
+        runs:
+          type: integer
+          format: int32
+        lastRun:
+          type: string
+          format: date-time
+        lastResult:
+          type: object
+        lastError:
+          type: string
+      required: [name, runs]
+    RunnerSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        basePath:
+          type: string
+        configPath:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunnerRoute'
+        scheduler:
+          type: object
+          properties:
+            jobs:
+              type: array
+              items:
+                $ref: '#/components/schemas/SchedulerJob'
+            states:
+              type: array
+              items:
+                $ref: '#/components/schemas/SchedulerJobState'
+      required: [id, basePath, createdAt]
+    RunnerDetail:
+      allOf:
+        - $ref: '#/components/schemas/RunnerSummary'
+    CreateRunnerRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        configPath:
+          type: string
+        basePath:
+          type: string
+      required: [configPath]
+    RunnerHealth:
+      type: object
+      properties:
+        status:
+          type: string
+        scheduler:
+          type: object
+          properties:
+            jobCount:
+              type: integer
+            jobs:
+              type: array
+              items:
+                $ref: '#/components/schemas/SchedulerJobState'
+      required: [status]

@@ -20,7 +20,7 @@ const orchestratorConfigSchema = z.object({
     port: z.number().int().min(1).max(65535).default(8080),
     basePath: z.string().optional(),
   }),
-  runners: z.array(runnerEntrySchema).min(1),
+  runners: z.array(runnerEntrySchema).optional().default([]),
 });
 
 export type OrchestratorConfig = z.infer<typeof orchestratorConfigSchema>;

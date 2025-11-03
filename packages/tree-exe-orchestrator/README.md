@@ -44,6 +44,10 @@ An OpenAPI 3.0 spec is served at `/api/docs` (Swagger UI). Core endpoints includ
 - `DELETE /api/runners/{id}` – stop and remove a runner.
 - `GET /api/runners/{id}/routes`, `/jobs`, `/health` – inspect configuration and runtime state.
 
+## Web UI
+
+If the `tree-exe-orchestrator-ui` package has been built (`npm run build --workspace tree-exe-orchestrator-ui`), the orchestrator serves the static bundle at the root path. The UI consumes the `/api` endpoints to list runners, create/remove instances, and render route/scheduler graphs.
+
 ## Programmatic Usage
 
 ```ts

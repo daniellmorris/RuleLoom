@@ -1,6 +1,8 @@
 import http from 'node:http';
 import express from 'express';
 import morgan from 'morgan';
+import fs from 'node:fs';
+import path from 'node:path';
 import { createLogger } from 'tree-exe-lib';
 import { loadOrchestratorConfig, type OrchestratorConfig } from './config.js';
 import { RunnerRegistry } from './registry.js';
@@ -39,6 +41,15 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
 
   const apiRouter = await createOrchestratorApi(registry);
   app.use('/api', apiRouter);
+
+  const uiDistPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../tree-exe-orchestrator-ui/dist');
+  if (fs.existsSync(uiDistPath)) {
+    app.use(express.static(uiDistPath));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/__treeexe')) return next();
+      res.sendFile(path.join(uiDistPath, 'index.html'));
+    });
+  }
 
   const dispatcher = registry.createDispatcher();
   app.use(dispatcher);

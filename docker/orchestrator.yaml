@@ -1,0 +1,7 @@
+version: 1
+server:
+  port: 4100
+runners:
+  - name: example
+    config: ../packages/tree-exe-runner/config/example.http.yaml
+    basePath: /

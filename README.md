@@ -31,6 +31,7 @@ TreeExe is a configuration-first execution platform for composing rules, closure
 
 ```bash
 npm install
+npm run build --workspace tree-exe-orchestrator-ui
 npm run build
 ```
 
@@ -50,11 +51,20 @@ npx treeexe-orchestrator --config packages/tree-exe-orchestrator/config/example.
 
 ## Testing
 
-The `tests/` directory contains engine-focused unit tests (branch inference, inline lambdas, `$call`). Run them with:
-
 ```bash
 npm run test
+npm run test:integration
 ```
+
+## Docker Compose (orchestrator + UI)
+
+To build and run the orchestrator (serving the production UI and REST API) inside Docker:
+
+```bash
+./dev.sh
+```
+
+This uses `docker-compose.yml` together with `docker/orchestrator.yaml` (which you can edit to point at your own runner configs). Once started, visit <http://localhost:4100> for the UI and <http://localhost:4100/api/docs> for the API explorer.
 
 ## Development Notes
 

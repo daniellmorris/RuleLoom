@@ -1,0 +1,10 @@
+version: '3.9'
+services:
+  orchestrator:
+    build: .
+    ports:
+      - "4100:4100"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - ./docker/orchestrator.yaml:/app/config/orchestrator.yaml:ro

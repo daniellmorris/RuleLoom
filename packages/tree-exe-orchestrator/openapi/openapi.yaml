@@ -57,6 +57,48 @@ paths:
           description: Runner deleted
         '404':
           $ref: '#/components/responses/NotFound'
+    put:
+      summary: Update a runner's configuration
+      operationId: updateRunner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRunnerRequest'
+      responses:
+        '200':
+          description: Runner updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunnerDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /runners/{id}/config:
+    parameters:
+      - $ref: '#/components/parameters/RunnerId'
+    get:
+      summary: Fetch runner configuration content
+      operationId: getRunnerConfig
+      responses:
+        '200':
+          description: Runner configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  source:
+                    type: string
+                    enum: [path, inline]
+                  config:
+                    type: string
+                required: [id, source, config]
+        '404':
+          $ref: '#/components/responses/NotFound'
   /runners/{id}/routes:
     parameters:
       - $ref: '#/components/parameters/RunnerId'
@@ -152,6 +194,8 @@ components:
       properties:
         name:
           type: string
+        flow:
+          type: string
         interval:
           oneOf:
             - type: string
@@ -191,6 +235,9 @@ components:
           type: string
         configPath:
           type: string
+        configSource:
+          type: string
+          enum: [path, inline]
         createdAt:
           type: string
           format: date-time
@@ -209,7 +256,11 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/SchedulerJobState'
-      required: [id, basePath, createdAt]
+        flows:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlowDefinition'
+      required: [id, basePath, configSource, createdAt]
     RunnerDetail:
       allOf:
         - $ref: '#/components/schemas/RunnerSummary'
@@ -220,9 +271,39 @@ components:
           type: string
         configPath:
           type: string
+        configContent:
+          type: string
         basePath:
           type: string
-      required: [configPath]
+      oneOf:
+        - required: [configPath]
+        - required: [configContent]
+    UpdateRunnerRequest:
+      type: object
+      properties:
+        configPath:
+          type: string
+        configContent:
+          type: string
+        basePath:
+          type: string
+      anyOf:
+        - required: [configPath]
+        - required: [configContent]
+        - required: [basePath]
+    FlowDefinition:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      required: [name, steps]
     RunnerHealth:
       type: object
       properties:

@@ -8,6 +8,8 @@ import {
   getRunnerRoutes,
   getRunnerJobs,
   getRunnerHealth,
+  updateRunnerController,
+  getRunnerConfigController,
 } from './controllers/runners.js';
 
 export function createRouter(registry: RunnerRegistry): express.Router {
@@ -16,7 +18,9 @@ export function createRouter(registry: RunnerRegistry): express.Router {
   router.get('/runners', listRunners(registry));
   router.post('/runners', createRunnerController(registry));
   router.get('/runners/:id', getRunner(registry));
+  router.put('/runners/:id', updateRunnerController(registry));
   router.delete('/runners/:id', deleteRunner(registry));
+  router.get('/runners/:id/config', getRunnerConfigController(registry));
   router.get('/runners/:id/routes', getRunnerRoutes(registry));
   router.get('/runners/:id/jobs', getRunnerJobs(registry));
   router.get('/runners/:id/health', getRunnerHealth(registry));

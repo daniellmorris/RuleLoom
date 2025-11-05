@@ -11,10 +11,22 @@ function serializeRoutes(record: ReturnType<RunnerRegistry['get']>): Array<{ met
   }));
 }
 
+function serializeFlows(
+  record: ReturnType<RunnerRegistry['get']>,
+): Array<{ name: string; description?: string; steps: unknown[] }> {
+  const flows = record?.instance.config.flows ?? [];
+  return flows.map((flow) => ({
+    name: flow.name,
+    description: flow.description,
+    steps: flow.steps,
+  }));
+}
+
 function serializeJobs(record: ReturnType<RunnerRegistry['get']>) {
   const jobs = record?.instance.config.scheduler?.jobs ?? [];
   return jobs.map((job) => ({
     name: job.name,
+    flow: job.flow,
     interval: job.interval,
     cron: job.cron,
     timeout: job.timeout,
@@ -39,7 +51,9 @@ function summarize(record: ReturnType<RunnerRegistry['get']>) {
     id: record.id,
     basePath: record.basePath,
     configPath: record.configPath,
+    configSource: record.configSource,
     createdAt: record.createdAt.toISOString(),
+    flows: serializeFlows(record),
     routes: serializeRoutes(record),
     scheduler: {
       jobs: serializeJobs(record),
@@ -65,12 +79,41 @@ export function getRunner(registry: RunnerRegistry) {
 
 export function createRunnerController(registry: RunnerRegistry) {
   return async (req: Request, res: Response) => {
-    const { configPath, basePath, id } = req.body as { configPath?: string; basePath?: string; id?: string };
-    if (!configPath) {
-      throw createHttpError(400, 'configPath is required');
+    const { configPath, configContent, basePath, id } = req.body as {
+      configPath?: string;
+      configContent?: string;
+      basePath?: string;
+      id?: string;
+    };
+    if (!configPath && !configContent) {
+      throw createHttpError(400, 'configPath or configContent is required');
     }
-    const record = await registry.addRunner({ id, configPath, basePath });
+    const record = await registry.addRunner({
+      id,
+      configPath: configPath?.trim(),
+      configContent,
+      basePath: basePath?.trim(),
+    });
     res.status(201).json(summarize(record));
+  };
+}
+
+export function updateRunnerController(registry: RunnerRegistry) {
+  return async (req: Request, res: Response) => {
+    const { configPath, configContent, basePath } = req.body as {
+      configPath?: string;
+      configContent?: string;
+      basePath?: string;
+    };
+    if (!configPath && !configContent && basePath === undefined) {
+      throw createHttpError(400, 'configPath, configContent, or basePath is required');
+    }
+    const record = await registry.updateRunner(req.params.id, {
+      configPath: configPath?.trim(),
+      configContent,
+      basePath: basePath?.trim(),
+    });
+    res.json(summarize(record));
   };
 }
 
@@ -78,6 +121,13 @@ export function deleteRunner(registry: RunnerRegistry) {
   return async (req: Request, res: Response) => {
     await registry.removeRunner(req.params.id);
     res.status(204).end();
+  };
+}
+
+export function getRunnerConfigController(registry: RunnerRegistry) {
+  return async (req: Request, res: Response) => {
+    const result = await registry.getRunnerConfig(req.params.id);
+    res.json({ id: req.params.id, source: result.source, config: result.content });
   };
 }
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   AppShell,
   Burger,
@@ -18,25 +18,65 @@ import {
   Tooltip,
   Loader,
   Box,
+  SegmentedControl,
+  Textarea,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconPlus, IconRefresh, IconTrash, IconEdit } from '@tabler/icons-react';
 import RunnerVisualizer from './components/RunnerVisualizer';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
+
+type FlowConditionClause = {
+  closure: string;
+  parameters?: Record<string, unknown>;
+  negate?: boolean;
+};
+
+type FlowCondition = FlowConditionClause | FlowConditionClause[];
+
+interface FlowInvokeStep {
+  type: 'invoke';
+  closure: string;
+  parameters?: Record<string, unknown>;
+  assign?: string;
+  mergeResult?: boolean;
+  when?: FlowCondition;
+}
+
+interface FlowBranchCase {
+  when: FlowCondition;
+  steps: FlowStep[];
+}
+
+interface FlowBranchStep {
+  type: 'branch';
+  cases: FlowBranchCase[];
+  otherwise?: FlowStep[];
+}
+
+type FlowStep = FlowInvokeStep | FlowBranchStep;
+
+interface FlowDefinition {
+  name: string;
+  description?: string;
+  steps: FlowStep[];
+}
 
 interface RunnerSummary {
   id: string;
   basePath: string;
   configPath: string;
+  configSource: 'path' | 'inline';
   createdAt: string;
   routes: Array<{ method: string; path: string; flow: string }>;
   scheduler: {
-    jobs: Array<{ name: string; interval?: string | number; cron?: string; timeout?: string | number | boolean; enabled?: boolean }>;
+    jobs: Array<{ name: string; flow?: string; interval?: string | number; cron?: string; timeout?: string | number | boolean; enabled?: boolean }>;
     states: Array<{ name: string; runs: number; lastRun?: string; lastResult?: unknown; lastError?: string }>;
   };
+  flows: FlowDefinition[];
 }
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -63,28 +103,71 @@ function useRunnerDetail(id?: string) {
   });
 }
 
+function useRunnerConfig(id?: string, enabled?: boolean) {
+  return useQuery<{ id: string; config: string; source: 'path' | 'inline' }>({
+    queryKey: ['runner-config', id],
+    queryFn: () => fetchJSON(`${API_BASE}/runners/${id}/config`),
+    enabled: Boolean(id) && Boolean(enabled),
+  });
+}
+
 export default function App() {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure();
   const [configPath, setConfigPath] = useState('');
+  const [configContent, setConfigContent] = useState('');
+  const [createMode, setCreateMode] = useState<'path' | 'inline'>('inline');
   const [basePath, setBasePath] = useState('');
   const [selectedRunnerId, setSelectedRunnerId] = useState<string | undefined>(undefined);
+  const [editOpened, setEditOpened] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [editBasePath, setEditBasePath] = useState('');
+  const [editMode, setEditMode] = useState<'path' | 'inline'>('inline');
+  const [editConfigPath, setEditConfigPath] = useState('');
   const queryClient = useQueryClient();
 
   const { data: runners, isLoading: runnersLoading } = useRunners();
   const { data: runnerDetail, isLoading: detailLoading } = useRunnerDetail(selectedRunnerId);
+  const runnerConfigQuery = useRunnerConfig(selectedRunnerId, editOpened);
+
+  const handleOpenCreate = () => {
+    setConfigPath('');
+    setConfigContent('');
+    setBasePath('');
+    setCreateMode('inline');
+    openCreate();
+  };
+
+  const handleOpenEdit = () => {
+    if (!runnerDetail) return;
+    setEditContent('');
+    setEditConfigPath(runnerDetail.configPath ?? '');
+    setEditBasePath(runnerDetail.basePath ?? '');
+    setEditMode(runnerDetail.configSource);
+    setEditOpened(true);
+  };
 
   const createRunnerMutation = useMutation({
     mutationFn: async () => {
+      const payload: Record<string, unknown> = {};
+      if (basePath.trim()) payload.basePath = basePath.trim();
+      if (createMode === 'inline') {
+        if (!configContent.trim()) throw new Error('Configuration content is required');
+        payload.configContent = configContent;
+      } else {
+        if (!configPath.trim()) throw new Error('Config path is required');
+        payload.configPath = configPath.trim();
+      }
       return fetchJSON(`${API_BASE}/runners`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ configPath: configPath.trim(), basePath: basePath.trim() || undefined }),
+        body: JSON.stringify(payload),
       });
     },
     onSuccess: (data: RunnerSummary) => {
       notifications.show({ title: 'Runner created', message: `Runner ${data.id} mounted at ${data.basePath}`, color: 'green' });
       setConfigPath('');
+      setConfigContent('');
       setBasePath('');
       queryClient.invalidateQueries({ queryKey: ['runners'] });
       setSelectedRunnerId(data.id);
@@ -92,6 +175,36 @@ export default function App() {
     },
     onError: (error: unknown) => {
       notifications.show({ title: 'Failed to create runner', message: String(error), color: 'red' });
+    },
+  });
+
+  const editRunnerMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedRunnerId) throw new Error('No runner selected');
+      const payload: Record<string, unknown> = {};
+      if (editBasePath.trim()) payload.basePath = editBasePath.trim();
+      if (editMode === 'inline') {
+        if (!editContent.trim()) throw new Error('Configuration content is required');
+        payload.configContent = editContent;
+      } else {
+        if (!editConfigPath.trim()) throw new Error('Config path is required');
+        payload.configPath = editConfigPath.trim();
+      }
+      return fetchJSON<RunnerSummary>(`${API_BASE}/runners/${selectedRunnerId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    },
+    onSuccess: (data) => {
+      notifications.show({ title: 'Runner updated', message: `Runner ${data.id} updated`, color: 'green' });
+      queryClient.invalidateQueries({ queryKey: ['runners'] });
+      queryClient.invalidateQueries({ queryKey: ['runner', selectedRunnerId] });
+      setSelectedRunnerId(data.id);
+      setEditOpened(false);
+    },
+    onError: (error: unknown) => {
+      notifications.show({ title: 'Failed to update runner', message: String(error), color: 'red' });
     },
   });
 
@@ -117,8 +230,27 @@ export default function App() {
       id: runnerDetail.id,
       routes: runnerDetail.routes,
       scheduler: runnerDetail.scheduler,
+      flows: runnerDetail.flows,
     };
   }, [runnerDetail]);
+
+  useEffect(() => {
+    if (runnerDetail) {
+      setEditBasePath(runnerDetail.basePath);
+      setEditConfigPath(runnerDetail.configPath);
+      setEditMode(runnerDetail.configSource);
+    } else {
+      setEditBasePath('');
+      setEditConfigPath('');
+      setEditMode('inline');
+    }
+  }, [runnerDetail]);
+
+  useEffect(() => {
+    if (runnerConfigQuery.data) {
+      setEditContent(runnerConfigQuery.data.config);
+    }
+  }, [runnerConfigQuery.data]);
 
   return (
     <AppShell
@@ -142,7 +274,7 @@ export default function App() {
                 <IconRefresh size={18} />
               </ActionIcon>
             </Tooltip>
-            <Button leftSection={<IconPlus size={18} />} onClick={openCreate}>
+            <Button leftSection={<IconPlus size={18} />} onClick={handleOpenCreate}>
               Add Runner
             </Button>
           </Group>
@@ -162,7 +294,9 @@ export default function App() {
                     <Badge>{runner.basePath}</Badge>
                   </Group>
                 }
-                description={runner.configPath}
+                description={
+                  runner.configSource === 'inline' ? 'Inline configuration' : runner.configPath
+                }
                 active={selectedRunnerId === runner.id}
                 onClick={() => setSelectedRunnerId(runner.id)}
                 rightSection={
@@ -194,17 +328,37 @@ export default function App() {
           {!selectedRunnerId && <Text>Select a runner to view details.</Text>}
           {runnerDetail && (
             <Stack>
-              <Group justify="space-between">
-                <div>
+              <Group justify="space-between" align="flex-start">
+                <Stack gap="xs">
                   <Title order={4}>{runnerDetail.id}</Title>
                   <Text c="dimmed">Mounted at {runnerDetail.basePath}</Text>
-                  <Text size="sm">Config: {runnerDetail.configPath}</Text>
-                </div>
-                <Group>
+                  <Text size="sm">
+                    {runnerDetail.configSource === 'inline'
+                      ? 'Configuration stored inline on the orchestrator'
+                      : `Server config path: ${runnerDetail.configPath}`}
+                  </Text>
+                  {runnerDetail.configSource === 'path' && (
+                    <Text size="xs" c="dimmed">
+                      Paths are resolved relative to the orchestrator host.
+                    </Text>
+                  )}
+                </Stack>
+                <Group gap="xs">
+                  <Badge variant="light" color={runnerDetail.configSource === 'inline' ? 'blue' : 'gray'}>
+                    {runnerDetail.configSource === 'inline' ? 'Inline config' : 'Server path'}
+                  </Badge>
                   <Badge>{new Date(runnerDetail.createdAt).toLocaleString()}</Badge>
                   <Badge color={runnerDetail.scheduler.jobs.length > 0 ? 'green' : 'gray'}>
                     {runnerDetail.scheduler.jobs.length} jobs
                   </Badge>
+                  <Button
+                    size="sm"
+                    leftSection={<IconEdit size={16} />}
+                    variant="light"
+                    onClick={handleOpenEdit}
+                  >
+                    Edit
+                  </Button>
                 </Group>
               </Group>
               <Divider />
@@ -268,15 +422,96 @@ export default function App() {
         </Stack>
       </AppShell.Main>
 
+      <Modal opened={editOpened} onClose={() => setEditOpened(false)} title="Edit Runner" centered size="lg">
+        <Stack>
+          <SegmentedControl
+            value={editMode}
+            onChange={(value) => setEditMode(value as 'path' | 'inline')}
+            data={[
+              { label: 'Inline YAML', value: 'inline' },
+              { label: 'Server Path', value: 'path' },
+            ]}
+          />
+          {editMode === 'path' ? (
+            <TextInput
+              label="Config Path"
+              placeholder="/absolute/path/to/config.yaml"
+              value={editConfigPath}
+              onChange={(event) => setEditConfigPath(event.currentTarget.value)}
+              required
+              description="This path is resolved on the orchestrator server."
+            />
+          ) : (
+            <Stack gap="xs">
+              {runnerConfigQuery.isFetching && (
+                <Group gap="xs">
+                  <Loader size="sm" />
+                  <Text size="sm">Loading configuration...</Text>
+                </Group>
+              )}
+              <Textarea
+                label="Configuration YAML"
+                placeholder="Update runner configuration YAML"
+                value={editContent}
+                onChange={(event) => setEditContent(event.currentTarget.value)}
+                minRows={14}
+                autosize
+                disabled={runnerConfigQuery.isFetching}
+                required
+              />
+            </Stack>
+          )}
+          <TextInput
+            label="Base Path"
+            placeholder="/my-runner"
+            value={editBasePath}
+            onChange={(event) => setEditBasePath(event.currentTarget.value)}
+            description="Leave empty to keep the current base path."
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setEditOpened(false)} disabled={editRunnerMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => editRunnerMutation.mutate()}
+              loading={editRunnerMutation.isPending}
+              disabled={editMode === 'inline' ? !editContent.trim() : !editConfigPath.trim()}
+            >
+              Save changes
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       <Modal opened={createOpened} onClose={closeCreate} title="Create Runner" centered>
         <Stack>
-          <TextInput
-            label="Config Path"
-            placeholder="/absolute/path/to/config.yaml"
-            value={configPath}
-            onChange={(event) => setConfigPath(event.currentTarget.value)}
-            required
+          <SegmentedControl
+            value={createMode}
+            onChange={(value) => setCreateMode(value as 'path' | 'inline')}
+            data={[
+              { label: 'Inline YAML', value: 'inline' },
+              { label: 'Server Path', value: 'path' },
+            ]}
           />
+          {createMode === 'path' ? (
+            <TextInput
+              label="Config Path"
+              placeholder="/absolute/path/to/config.yaml"
+              value={configPath}
+              onChange={(event) => setConfigPath(event.currentTarget.value)}
+              required
+            />
+          ) : (
+            <Textarea
+              label="Configuration YAML"
+              placeholder="Paste runner configuration YAML"
+              value={configContent}
+              onChange={(event) => setConfigContent(event.currentTarget.value)}
+              minRows={12}
+              autosize
+              required
+            />
+          )}
           <TextInput
             label="Base Path"
             placeholder="/my-runner"
@@ -286,7 +521,9 @@ export default function App() {
           <Button
             onClick={() => createRunnerMutation.mutate()}
             loading={createRunnerMutation.isPending}
-            disabled={!configPath.trim()}
+            disabled={
+              createMode === 'inline' ? !configContent.trim() : !configPath.trim()
+            }
           >
             Create
           </Button>

@@ -65,6 +65,15 @@ interface FlowDefinition {
   steps: FlowStep[];
 }
 
+interface ClosureDefinition {
+  type: string;
+  name?: string;
+  description?: string;
+  template?: string;
+  module?: string;
+  preset?: string;
+}
+
 interface RunnerSummary {
   id: string;
   basePath: string;
@@ -77,6 +86,7 @@ interface RunnerSummary {
     states: Array<{ name: string; runs: number; lastRun?: string; lastResult?: unknown; lastError?: string }>;
   };
   flows: FlowDefinition[];
+  closures: ClosureDefinition[];
 }
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -231,6 +241,7 @@ export default function App() {
       routes: runnerDetail.routes,
       scheduler: runnerDetail.scheduler,
       flows: runnerDetail.flows,
+      closures: runnerDetail.closures,
     };
   }, [runnerDetail]);
 
@@ -351,6 +362,9 @@ export default function App() {
                   <Badge color={runnerDetail.scheduler.jobs.length > 0 ? 'green' : 'gray'}>
                     {runnerDetail.scheduler.jobs.length} jobs
                   </Badge>
+                  <Badge color={runnerDetail.closures.length > 0 ? 'indigo' : 'gray'}>
+                    {runnerDetail.closures.length} closures
+                  </Badge>
                   <Button
                     size="sm"
                     leftSection={<IconEdit size={16} />}
@@ -366,6 +380,7 @@ export default function App() {
                 <Tabs.List>
                   <Tabs.Tab value="routes">Routes</Tabs.Tab>
                   <Tabs.Tab value="scheduler">Scheduler</Tabs.Tab>
+                  <Tabs.Tab value="closures">Closures</Tabs.Tab>
                   <Tabs.Tab value="visual">Visualizer</Tabs.Tab>
                 </Tabs.List>
 
@@ -406,6 +421,39 @@ export default function App() {
                         </Text>
                       </Box>
                     ))}
+                  </Stack>
+                </Tabs.Panel>
+
+                <Tabs.Panel value="closures">
+                  <Stack my="md">
+                    {runnerDetail.closures.length === 0 && <Text c="dimmed">No closures defined.</Text>}
+                    {runnerDetail.closures.map((closure, index) => {
+                      const key = `${closure.type}-${closure.name ?? index}`;
+                      return (
+                        <Box key={key} p="sm" radius="md" style={{ border: '1px solid var(--mantine-color-dark-5)' }}>
+                          <Group justify="space-between" align="flex-start">
+                            <Stack gap={2}>
+                              <Group gap="xs">
+                                <Badge color="violet" variant="light">
+                                  {closure.type}
+                                </Badge>
+                                {closure.name && <Text fw={600}>{closure.name}</Text>}
+                              </Group>
+                              {closure.description && (
+                                <Text size="sm" c="dimmed">
+                                  {closure.description}
+                                </Text>
+                              )}
+                            </Stack>
+                            <Stack gap={0} align="flex-end">
+                              {closure.template && <Badge color="blue">template: {closure.template}</Badge>}
+                              {closure.module && <Badge color="cyan">module: {closure.module}</Badge>}
+                              {closure.preset && <Badge color="grape">preset: {closure.preset}</Badge>}
+                            </Stack>
+                          </Group>
+                        </Box>
+                      );
+                    })}
                   </Stack>
                 </Tabs.Panel>
 

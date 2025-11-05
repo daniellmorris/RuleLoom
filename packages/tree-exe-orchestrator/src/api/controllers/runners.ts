@@ -22,6 +22,45 @@ function serializeFlows(
   }));
 }
 
+function serializeClosures(
+  record: ReturnType<RunnerRegistry['get']>,
+): Array<{
+  type: string;
+  name?: string;
+  description?: string;
+  template?: string;
+  module?: string;
+  preset?: string;
+}> {
+  const closures = record?.instance.config.closures ?? [];
+  return closures.map((closure: any) => {
+    const base = {
+      type: closure.type as string,
+      name: closure.name as string | undefined,
+      description: closure.description as string | undefined,
+    };
+    if (closure.type === 'template') {
+      return {
+        ...base,
+        template: closure.template as string | undefined,
+      };
+    }
+    if (closure.type === 'module') {
+      return {
+        ...base,
+        module: closure.module as string | undefined,
+      };
+    }
+    if (closure.type === 'core') {
+      return {
+        ...base,
+        preset: closure.preset as string | undefined,
+      };
+    }
+    return base;
+  });
+}
+
 function serializeJobs(record: ReturnType<RunnerRegistry['get']>) {
   const jobs = record?.instance.config.scheduler?.jobs ?? [];
   return jobs.map((job) => ({
@@ -54,6 +93,7 @@ function summarize(record: ReturnType<RunnerRegistry['get']>) {
     configSource: record.configSource,
     createdAt: record.createdAt.toISOString(),
     flows: serializeFlows(record),
+    closures: serializeClosures(record),
     routes: serializeRoutes(record),
     scheduler: {
       jobs: serializeJobs(record),

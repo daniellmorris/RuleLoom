@@ -260,6 +260,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FlowDefinition'
+        closures:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunnerClosure'
       required: [id, basePath, configSource, createdAt]
     RunnerDetail:
       allOf:
@@ -304,6 +308,22 @@ components:
             type: object
             additionalProperties: true
       required: [name, steps]
+    RunnerClosure:
+      type: object
+      properties:
+        type:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        template:
+          type: string
+        module:
+          type: string
+        preset:
+          type: string
+      required: [type]
     RunnerHealth:
       type: object
       properties:

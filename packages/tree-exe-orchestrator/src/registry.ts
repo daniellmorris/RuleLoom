@@ -69,6 +69,8 @@ export class RunnerRegistry {
       throw createHttpError(409, `A runner is already mounted at basePath "${basePath}".`);
     }
 
+    this.attachLoggerMirrors(id, instance.logger);
+
     const record: RunnerRecord = {
       id,
       basePath,
@@ -161,6 +163,20 @@ export class RunnerRegistry {
       return { configPath: resolvedPath, configSource: 'path' };
     }
     throw createHttpError(400, 'configPath or configContent is required');
+  }
+
+  private attachLoggerMirrors(id: string, logger: TreeExeLogger): void {
+    const prefix = `[runner:${id}]`;
+    const orchestratorLogger = this.logger;
+    const levels = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const;
+    for (const level of levels) {
+      const original = logger[level];
+      const orchestratorFn = orchestratorLogger[level];
+      logger[level] = ((...args: unknown[]) => {
+        original(...args);
+        orchestratorFn(prefix, ...args);
+      }) as typeof original;
+    }
   }
 
   createDispatcher(apiPrefix = '/api'): express.RequestHandler {

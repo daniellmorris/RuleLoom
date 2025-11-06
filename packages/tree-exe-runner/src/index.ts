@@ -138,6 +138,7 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
         if (message && typeof message === 'object' && message.type === 'run-flow') {
           const jobConfig = jobConfigByName.get(name);
           if (!jobConfig) return;
+          logger.info?.(`Scheduler job "${name}" triggered flow "${jobConfig.flow}".`);
           const initialState = jobConfig.initialState ? _.cloneDeep(jobConfig.initialState) : {};
           const runtimeContext = {
             ...(jobConfig.runtime ? _.cloneDeep(jobConfig.runtime) : {}),
@@ -155,6 +156,7 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
               entry.lastResult = result;
               entry.lastError = undefined;
               schedulerJobStates.set(name, entry);
+              logger.info?.(`Scheduler job "${name}" completed successfully.`);
             })
             .catch((error) => {
               const entry = schedulerJobStates.get(name) ?? { runs: 0 };

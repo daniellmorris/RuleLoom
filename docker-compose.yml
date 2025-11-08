@@ -8,3 +8,13 @@ services:
       - NODE_ENV=production
     volumes:
       - ./docker/orchestrator.yaml:/app/config/orchestrator.yaml:ro
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - orchestrator

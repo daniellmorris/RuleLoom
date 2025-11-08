@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createRunner, type RunnerInstance } from 'tree-exe-runner';
 import type { TreeExeLogger } from 'tree-exe-lib';
+import { Counter, Histogram, MetricsRegistry } from './metrics.js';
 
 interface RunnerRecord {
   id: string;
@@ -15,6 +16,7 @@ interface RunnerRecord {
   instance: RunnerInstance;
   createdAt: Date;
   tempDir?: string;
+  cleanup?: () => void;
 }
 
 function sanitizeBasePath(basePath?: string, fallback?: string): string {
@@ -29,6 +31,22 @@ function sanitizeBasePath(basePath?: string, fallback?: string): string {
 
 export class RunnerRegistry {
   private records = new Map<string, RunnerRecord>();
+  private readonly metricsRegistry = new MetricsRegistry();
+  private readonly jobRunsCounter = new Counter(this.metricsRegistry, 'treeexe_scheduler_job_runs_total', 'Total scheduler job runs', ['runner', 'job', 'status']);
+  private readonly jobDurationHistogram = new Histogram(
+    this.metricsRegistry,
+    'treeexe_scheduler_job_duration_seconds',
+    'Scheduler job execution duration in seconds',
+    ['runner', 'job', 'status'],
+    [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60],
+  );
+  private readonly httpRequestHistogram = new Histogram(
+    this.metricsRegistry,
+    'treeexe_runner_request_duration_seconds',
+    'Duration of proxied runner HTTP requests in seconds',
+    ['runner', 'method', 'status'],
+    [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+  );
 
   constructor(private readonly logger: TreeExeLogger) {}
 
@@ -70,6 +88,7 @@ export class RunnerRegistry {
     }
 
     this.attachLoggerMirrors(id, instance.logger);
+    const cleanup = this.attachMetrics(id, instance);
 
     const record: RunnerRecord = {
       id,
@@ -79,6 +98,7 @@ export class RunnerRegistry {
       tempDir,
       instance,
       createdAt: new Date(),
+      cleanup,
     };
 
     this.records.set(id, record);
@@ -91,6 +111,7 @@ export class RunnerRegistry {
     if (!record) {
       throw createHttpError(404, `Runner "${id}" not found.`);
     }
+    record.cleanup?.();
     await record.instance.close().catch(() => undefined);
     this.records.delete(id);
     this.logger.info?.(`Runner ${id} removed`);
@@ -103,12 +124,13 @@ export class RunnerRegistry {
     const tasks = Array.from(this.records.values()).map((record) =>
       record.instance.close().catch(() => undefined),
     );
-    await Promise.all(tasks);
     for (const record of this.records.values()) {
+      record.cleanup?.();
       if (record.tempDir) {
         await fs.rm(record.tempDir, { recursive: true, force: true }).catch(() => undefined);
       }
     }
+    await Promise.all(tasks);
     this.records.clear();
   }
 
@@ -128,6 +150,7 @@ export class RunnerRegistry {
       inheritedInlineContent = await fs.readFile(existing.configPath, 'utf8');
     }
 
+    existing.cleanup?.();
     await existing.instance.close().catch(() => undefined);
     if (existing.tempDir) {
       await fs.rm(existing.tempDir, { recursive: true, force: true }).catch(() => undefined);
@@ -147,6 +170,10 @@ export class RunnerRegistry {
     }
     const content = await fs.readFile(record.configPath, 'utf8');
     return { content, source: record.configSource };
+  }
+
+  getMetricsRegistry(): MetricsRegistry {
+    return this.metricsRegistry;
   }
 
   private async resolveConfig(options: { configPath?: string; configContent?: string }): Promise<{ configPath: string; tempDir?: string; configSource: 'path' | 'inline' }> {
@@ -179,6 +206,48 @@ export class RunnerRegistry {
     }
   }
 
+  private attachMetrics(id: string, instance: RunnerInstance): () => void {
+    const events = instance.events;
+    if (!events || typeof events.on !== 'function') {
+      return () => {};
+    }
+
+    const onStarted = (payload: { job: string }) => {
+      this.jobRunsCounter.inc({ runner: id, job: payload.job, status: 'started' });
+    };
+
+    const onCompleted = (payload: { job: string; durationSeconds?: number }) => {
+      this.jobRunsCounter.inc({ runner: id, job: payload.job, status: 'completed' });
+      if (typeof payload.durationSeconds === 'number') {
+        this.jobDurationHistogram.observe({ runner: id, job: payload.job, status: 'completed' }, payload.durationSeconds);
+      }
+    };
+
+    const onFailed = (payload: { job: string; durationSeconds?: number }) => {
+      this.jobRunsCounter.inc({ runner: id, job: payload.job, status: 'failed' });
+      if (typeof payload.durationSeconds === 'number') {
+        this.jobDurationHistogram.observe({ runner: id, job: payload.job, status: 'failed' }, payload.durationSeconds);
+      }
+    };
+
+    events.on('scheduler:job:started', onStarted);
+    events.on('scheduler:job:completed', onCompleted);
+    events.on('scheduler:job:failed', onFailed);
+
+    return () => {
+      const off = (event: string, handler: (...args: any[]) => void) => {
+        if (typeof (events as any).off === 'function') {
+          (events as any).off(event, handler);
+        } else {
+          (events as any).removeListener(event, handler);
+        }
+      };
+      off('scheduler:job:started', onStarted);
+      off('scheduler:job:completed', onCompleted);
+      off('scheduler:job:failed', onFailed);
+    };
+  }
+
   createDispatcher(apiPrefix = '/api'): express.RequestHandler {
     return (req, res, next) => {
       for (const record of this.records.values()) {
@@ -200,7 +269,24 @@ export class RunnerRegistry {
           };
           res.on('finish', restore);
           res.on('close', restore);
+          const method = req.method ?? 'GET';
+          const start = process.hrtime.bigint();
+          let finished = false;
+          const finalize = () => {
+            if (finished) return;
+            finished = true;
+            const durationSeconds = Number(process.hrtime.bigint() - start) / 1_000_000_000;
+            this.httpRequestHistogram.observe(
+              { runner: record.id, method: method.toUpperCase(), status: String(res.statusCode) },
+              durationSeconds,
+            );
+            res.off('finish', finalize);
+            res.off('close', finalize);
+          };
+          res.on('finish', finalize);
+          res.on('close', finalize);
           record.instance.app(req, res, (err?: any) => {
+            finalize();
             restore();
             res.off('finish', restore);
             res.off('close', restore);

@@ -30,6 +30,12 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
   app.use(morgan('combined'));
 
   const registry = new RunnerRegistry(logger);
+  const metricsRegistry = registry.getMetricsRegistry();
+
+  app.get('/metrics', (_req, res) => {
+    res.setHeader('Content-Type', metricsRegistry.contentType);
+    res.send(metricsRegistry.render());
+  });
 
   for (const entry of config.runners) {
     await registry.addRunner({

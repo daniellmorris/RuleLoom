@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { EventEmitter } from 'node:events';
 import _ from 'lodash';
 import Bree from 'bree';
 import TreeExeEngine, { type FlowDefinition, type ExecutionResult } from 'tree-exe-engine';
@@ -23,6 +24,7 @@ export interface RunnerInstance {
   listen: (port?: number) => Promise<http.Server>;
   close: () => Promise<void>;
   scheduler?: RunnerScheduler;
+  events: EventEmitter;
 }
 
 export interface StartOptions {
@@ -88,6 +90,7 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
     return server;
   };
 
+  const events = new EventEmitter();
   const schedulerJobs = (config.scheduler?.jobs ?? []).filter((job) => job.enabled !== false);
   const schedulerJobStates = new Map<string, SchedulerJobState>();
   let schedulerController: Bree | undefined;
@@ -138,7 +141,9 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
         if (message && typeof message === 'object' && message.type === 'run-flow') {
           const jobConfig = jobConfigByName.get(name);
           if (!jobConfig) return;
+          const start = process.hrtime.bigint();
           logger.info?.(`Scheduler job "${name}" triggered flow "${jobConfig.flow}".`);
+          events.emit('scheduler:job:started', { job: jobConfig.name, flow: jobConfig.flow });
           const initialState = jobConfig.initialState ? _.cloneDeep(jobConfig.initialState) : {};
           const runtimeContext = {
             ...(jobConfig.runtime ? _.cloneDeep(jobConfig.runtime) : {}),
@@ -157,6 +162,8 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
               entry.lastError = undefined;
               schedulerJobStates.set(name, entry);
               logger.info?.(`Scheduler job "${name}" completed successfully.`);
+              const durationSeconds = Number(process.hrtime.bigint() - start) / 1_000_000_000;
+              events.emit('scheduler:job:completed', { job: jobConfig.name, flow: jobConfig.flow, durationSeconds });
             })
             .catch((error) => {
               const entry = schedulerJobStates.get(name) ?? { runs: 0 };
@@ -164,6 +171,8 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
               entry.lastError = error;
               schedulerJobStates.set(name, entry);
               logger.error?.(`Scheduler job "${name}" failed`, error);
+              const durationSeconds = Number(process.hrtime.bigint() - start) / 1_000_000_000;
+              events.emit('scheduler:job:failed', { job: jobConfig.name, flow: jobConfig.flow, durationSeconds });
             });
         }
       },
@@ -206,6 +215,7 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
     listen,
     close,
     scheduler,
+    events,
   };
 }
 

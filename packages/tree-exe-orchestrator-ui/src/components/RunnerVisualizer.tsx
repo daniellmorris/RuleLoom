@@ -1,52 +1,16 @@
 import { useMemo } from 'react';
 import ReactFlow, { Background, Controls, Edge, MarkerType, MiniMap, Node, Position } from 'reactflow';
+import type {
+  FlowCondition,
+  FlowConditionClause,
+  FlowDefinition,
+  FlowStep,
+  FlowBranchStep,
+  FlowInvokeStep,
+  ClosureDefinition,
+} from '../types/flow';
 
-type FlowConditionClause = {
-  closure: string;
-  parameters?: Record<string, unknown>;
-  negate?: boolean;
-};
-
-type FlowCondition = FlowConditionClause | FlowConditionClause[];
-
-interface FlowInvokeStep {
-  type: 'invoke';
-  closure: string;
-  parameters?: Record<string, unknown>;
-  assign?: string;
-  mergeResult?: boolean;
-  when?: FlowCondition;
-}
-
-interface FlowBranchCase {
-  when: FlowCondition;
-  steps: FlowStep[];
-}
-
-interface FlowBranchStep {
-  type: 'branch';
-  cases: FlowBranchCase[];
-  otherwise?: FlowStep[];
-}
-
-type FlowStep = FlowInvokeStep | FlowBranchStep;
-
-interface FlowDefinition {
-  name: string;
-  description?: string;
-  steps: FlowStep[];
-}
-
-interface ClosureDefinition {
-  type: string;
-  name?: string;
-  description?: string;
-  template?: string;
-  module?: string;
-  preset?: string;
-}
-
-interface RunnerVisualizerProps {
+export interface RunnerVisualizerProps {
   data: {
     id: string;
     routes: Array<{ method: string; path: string; flow: string }>;
@@ -57,6 +21,8 @@ interface RunnerVisualizerProps {
     flows: FlowDefinition[];
     closures: ClosureDefinition[];
   };
+  showClosures?: boolean;
+  showRunnerContext?: boolean;
 }
 
 const X_UNIT = 220;
@@ -66,6 +32,73 @@ const INPUT_SPREAD = 120;
 const RUNNER_Y = 0;
 const INPUT_Y = RUNNER_Y + Y_UNIT;
 const FLOW_Y = INPUT_Y + Y_UNIT;
+
+type FunctionalParamDescriptor = {
+  key: string;
+  steps: FlowStep[];
+  width: number;
+};
+
+function isFlowStep(value: unknown): value is FlowStep {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  if (candidate.type === 'branch') {
+    return Array.isArray(candidate.cases);
+  }
+  return typeof candidate.closure === 'string';
+}
+
+function isFlowStepArray(value: unknown): value is FlowStep[] {
+  return Array.isArray(value) && value.every((item) => isFlowStep(item));
+}
+
+function extractFunctionalParams(step: FlowStep): FunctionalParamDescriptor[] {
+  if ((step as FlowBranchStep).type === 'branch') return [];
+  const invokeStep = step as FlowInvokeStep;
+  if (!invokeStep.parameters) return [];
+  const descriptors: FunctionalParamDescriptor[] = [];
+
+  const visitValue = (value: unknown, parts: string[]) => {
+    if (!value) return;
+    if (isFlowStepArray(value)) {
+      const label = formatLabel(parts);
+      descriptors.push({ key: label, steps: value, width: Math.max(1, measureSequence(value)) });
+      return;
+    }
+    if (isFlowStep(value)) {
+      const label = formatLabel(parts);
+      const single = [value];
+      descriptors.push({ key: label, steps: single, width: Math.max(1, measureSequence(single)) });
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        if (item && typeof item === 'object') {
+          visitValue(item, [...parts, `[${index}]`]);
+        }
+      });
+      return;
+    }
+    if (typeof value === 'object') {
+      Object.entries(value as Record<string, unknown>).forEach(([childKey, childValue]) => {
+        visitValue(childValue, [...parts, childKey]);
+      });
+    }
+  };
+
+  Object.entries(invokeStep.parameters).forEach(([key, paramValue]) => {
+    visitValue(paramValue, [key]);
+  });
+
+  return descriptors;
+}
+
+function formatLabel(parts: string[]): string {
+  const normalized = parts.filter((part) => part && part.length > 0);
+  if (normalized.length === 0) return 'steps';
+  const deduped = normalized.filter((part, index) => index === 0 || part !== normalized[index - 1]);
+  return deduped.join(' › ');
+}
 
 function formatConditionClause(condition: FlowConditionClause): string {
   const prefix = condition.negate ? 'NOT ' : '';
@@ -84,8 +117,35 @@ function formatCondition(condition: FlowCondition): string {
 function formatInvoke(step: FlowInvokeStep): string {
   const lines = [`invoke ${step.closure}`];
   if (step.assign) lines.push(`→ ${step.assign}`);
+  const paramSummary = summarizeParameters(step.parameters);
+  if (paramSummary) lines.push(paramSummary);
   if (step.when) lines.push(`when ${formatCondition(step.when)}`);
   return lines.join('\n');
+}
+
+function summarizeParameters(parameters?: Record<string, unknown>): string | null {
+  if (!parameters) return null;
+  const entries: string[] = [];
+  for (const [key, value] of Object.entries(parameters)) {
+    const isObjectLike = typeof value === 'object' && value !== null;
+    if (isFlowStep(value) || isFlowStepArray(value) || Array.isArray(value) || isObjectLike) continue;
+    entries.push(`${key}: ${formatPrimitive(value)}`);
+    if (entries.length === 4) break;
+  }
+  if (!entries.length) return null;
+  return entries.join('\n');
+}
+
+function formatPrimitive(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.length > 32 ? `${value.slice(0, 29)}…` : value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return `array(${value.length})`;
+  return typeof value;
 }
 
 function formatBranchSummary(step: FlowBranchStep): string {
@@ -125,7 +185,10 @@ function measureStep(step: FlowStep): number {
     const maxChild = childWidths.reduce((max, value) => Math.max(max, value), 1);
     return Math.max(1, combined, maxChild);
   }
-  return 1;
+  const functionalParams = extractFunctionalParams(step);
+  if (functionalParams.length === 0) return 1;
+  const functionalWidth = functionalParams.reduce((sum, descriptor) => sum + descriptor.width, 0);
+  return Math.max(1, 1 + functionalWidth);
 }
 
 function collectClosuresFromSteps(steps: FlowStep[] | undefined, accumulator: Set<string>) {
@@ -138,6 +201,7 @@ function collectClosuresFromSteps(steps: FlowStep[] | undefined, accumulator: Se
       if (step.closure) {
         accumulator.add(step.closure);
       }
+      extractFunctionalParams(step).forEach((descriptor) => collectClosuresFromSteps(descriptor.steps, accumulator));
     }
   }
 }
@@ -157,7 +221,7 @@ function formatClosureLabel(closure: ClosureDefinition): string {
   return lines.join('\n');
 }
 
-export default function RunnerVisualizer({ data }: RunnerVisualizerProps) {
+export default function RunnerVisualizer({ data, showClosures = true, showRunnerContext = true }: RunnerVisualizerProps) {
   const { nodes, edges } = useMemo(() => {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
@@ -212,32 +276,45 @@ export default function RunnerVisualizer({ data }: RunnerVisualizerProps) {
     const totalWidth = currentX > 0 ? currentX - FLOW_GAP : X_UNIT;
     const centerShift = totalWidth / 2;
 
-    const runnerId = createNode(`Runner ${data.id}`, { x: 0, y: RUNNER_Y }, {
-      type: 'input',
-      sourcePosition: Position.Bottom,
-      targetPosition: undefined,
-    });
+    const runnerId = showRunnerContext
+      ? createNode(`Runner ${data.id}`, { x: 0, y: RUNNER_Y }, {
+        type: 'input',
+        sourcePosition: Position.Bottom,
+        targetPosition: undefined,
+        style: {
+          padding: 16,
+          borderRadius: 18,
+          background: 'var(--mantine-color-dark-8)',
+          color: 'var(--mantine-color-gray-0)',
+          fontWeight: 700,
+        },
+      })
+      : undefined;
 
     const routesByFlow = new Map<string, typeof data.routes>();
-    data.routes.forEach((route) => {
-      const collection = routesByFlow.get(route.flow);
-      if (collection) {
-        collection.push(route);
-      } else {
-        routesByFlow.set(route.flow, [route]);
-      }
-    });
+    if (showRunnerContext) {
+      data.routes.forEach((route) => {
+        const collection = routesByFlow.get(route.flow);
+        if (collection) {
+          collection.push(route);
+        } else {
+          routesByFlow.set(route.flow, [route]);
+        }
+      });
+    }
 
     const jobsByFlow = new Map<string, typeof data.scheduler.jobs>();
-    data.scheduler.jobs.forEach((job) => {
-      if (!job.flow) return;
-      const collection = jobsByFlow.get(job.flow);
-      if (collection) {
-        collection.push(job);
-      } else {
-        jobsByFlow.set(job.flow, [job]);
-      }
-    });
+    if (showRunnerContext) {
+      data.scheduler.jobs.forEach((job) => {
+        if (!job.flow) return;
+        const collection = jobsByFlow.get(job.flow);
+        if (collection) {
+          collection.push(job);
+        } else {
+          jobsByFlow.set(job.flow, [job]);
+        }
+      });
+    }
 
     const flowStepStartY = FLOW_Y + Y_UNIT;
     let maxFlowDepth = flowStepStartY;
@@ -259,7 +336,13 @@ export default function RunnerVisualizer({ data }: RunnerVisualizerProps) {
       steps.forEach((step, index) => {
         if (step.type === 'branch') {
           const branchId = createNode(formatBranchSummary(step), { x: centerX, y: currentY }, {
-            style: { padding: 12, borderRadius: 12, background: 'var(--mantine-color-dark-5)' },
+            style: {
+              padding: 14,
+              borderRadius: 16,
+              background: 'var(--mantine-color-purple-8)',
+              color: 'var(--mantine-color-gray-0)',
+              fontWeight: 600,
+            },
           });
           currentEntries.forEach((source) => createEdge(source, branchId));
 
@@ -295,7 +378,13 @@ export default function RunnerVisualizer({ data }: RunnerVisualizerProps) {
           childDescriptors.forEach((child) => {
             const childCenter = centerX + (offsetUnits + (child.width - 1) / 2) * X_UNIT;
             const caseNodeId = createNode(child.label, { x: childCenter, y: currentY + Y_UNIT }, {
-              style: { padding: 10, borderRadius: 12, background: 'var(--mantine-color-dark-6)' },
+              style: {
+                padding: 10,
+                borderRadius: 12,
+                background: 'var(--mantine-color-purple-1)',
+                color: 'var(--mantine-color-purple-9)',
+                border: '1px solid var(--mantine-color-purple-4)',
+              },
             });
             createEdge(branchId, caseNodeId);
 
@@ -310,12 +399,44 @@ export default function RunnerVisualizer({ data }: RunnerVisualizerProps) {
           currentEntries = childExits.length ? childExits : [branchId];
           currentY = Math.max(deepestY, currentY + 2 * Y_UNIT);
         } else {
-          const invokeId = createNode(formatInvoke(step), { x: centerX, y: currentY }, {
-            style: { padding: 12, borderRadius: 12, background: 'var(--mantine-color-dark-6)' },
+          const invokeY = currentY;
+          const invokeId = createNode(formatInvoke(step), { x: centerX, y: invokeY }, {
+            style: {
+              padding: 14,
+              borderRadius: 16,
+              background: 'var(--mantine-color-indigo-8)',
+              color: 'var(--mantine-color-gray-0)',
+              boxShadow: '0 0 0 1px var(--mantine-color-indigo-5) inset',
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.35,
+            },
           });
           currentEntries.forEach((source) => createEdge(source, invokeId));
           currentEntries = [invokeId];
           currentY += Y_UNIT;
+
+          const functionalParams = extractFunctionalParams(step);
+          if (functionalParams.length > 0) {
+            let offsetUnits = 1;
+            functionalParams.forEach((descriptor) => {
+              const paramCenter = centerX + offsetUnits * X_UNIT;
+              const labelId = createNode(descriptor.key, { x: paramCenter, y: invokeY + Y_UNIT / 2 }, {
+                style: {
+                  padding: 10,
+                  borderRadius: 12,
+                  background: 'var(--mantine-color-yellow-2)',
+                  color: 'var(--mantine-color-yellow-9)',
+                  border: '1px dashed var(--mantine-color-yellow-6)',
+                  fontWeight: 600,
+                },
+              });
+              createEdge(invokeId, labelId, { animated: false, style: { strokeDasharray: '4 4', stroke: 'var(--mantine-color-yellow-8)' } });
+              const nested = layoutSequence(descriptor.steps, paramCenter, invokeY + Y_UNIT, [labelId]);
+              maxWidth = Math.max(maxWidth, offsetUnits + descriptor.width);
+              maxFlowDepth = Math.max(maxFlowDepth, nested.nextY);
+              offsetUnits += descriptor.width + 0.5;
+            });
+          }
         }
       });
 
@@ -324,110 +445,147 @@ export default function RunnerVisualizer({ data }: RunnerVisualizerProps) {
 
     data.flows.forEach((flow, index) => {
       const centerX = (flowCenters.get(flow.name) ?? index * (X_UNIT + FLOW_GAP)) - centerShift;
-      const closuresUsed = new Set<string>();
-      collectClosuresFromSteps(flow.steps, closuresUsed);
-      flowClosureUsage.set(flow.name, closuresUsed);
+      if (showClosures) {
+        const closuresUsed = new Set<string>();
+        collectClosuresFromSteps(flow.steps, closuresUsed);
+        flowClosureUsage.set(flow.name, closuresUsed);
+      }
       const flowNodeId = createNode(
         flow.description ? `Flow ${flow.name}\n${flow.description}` : `Flow ${flow.name}`,
         { x: centerX, y: FLOW_Y },
-        { style: { padding: 14, borderRadius: 12, background: 'var(--mantine-color-dark-4)' }, handles: { target: Position.Top, source: Position.Bottom } },
+        {
+          style: {
+            padding: 16,
+            borderRadius: 16,
+            background: 'var(--mantine-color-blue-8)',
+            color: 'var(--mantine-color-gray-0)',
+            fontWeight: 600,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+          },
+          handles: { target: Position.Top, source: Position.Bottom },
+        },
       );
       flowNodeIds.set(flow.name, flowNodeId);
 
-      const routes = routesByFlow.get(flow.name) ?? [];
-      const jobs = jobsByFlow.get(flow.name) ?? [];
-      const totalInputs = routes.length + jobs.length;
-      let inputIndex = 0;
+      if (showRunnerContext && runnerId) {
+        const routes = routesByFlow.get(flow.name) ?? [];
+        const jobs = jobsByFlow.get(flow.name) ?? [];
+        const totalInputs = routes.length + jobs.length;
+        let inputIndex = 0;
 
-      const attachInput = (label: string, x: number, style?: Node['style']) => {
-        const inputId = createNode(label, { x, y: INPUT_Y }, {
-          style: style ?? { padding: 10, borderRadius: 12, background: 'var(--mantine-color-dark-6)' },
-          handles: { source: Position.Bottom, target: Position.Top },
-        });
-        createEdge(runnerId, inputId, { animated: true });
-        createEdge(inputId, flowNodeId, { animated: true });
-      };
+        const attachInput = (label: string, x: number, style?: Node['style']) => {
+          const inputId = createNode(label, { x, y: INPUT_Y }, {
+            style:
+              style
+              ?? {
+                padding: 10,
+                borderRadius: 12,
+                background: 'var(--mantine-color-cyan-8)',
+                color: 'var(--mantine-color-gray-0)',
+                boxShadow: '0 0 0 1px var(--mantine-color-cyan-4) inset',
+              },
+            handles: { source: Position.Bottom, target: Position.Top },
+          });
+          createEdge(runnerId, inputId, { animated: true });
+          createEdge(inputId, flowNodeId, { animated: true });
+        };
 
-      if (totalInputs > 0) {
-        const startOffset = -(totalInputs - 1) / 2;
-        routes.forEach((route) => {
-          const offsetIndex = startOffset + inputIndex;
-          const inputX = centerX + offsetIndex * INPUT_SPREAD;
-          attachInput(`Route ${route.method.toUpperCase()} ${route.path}`, inputX);
-          inputIndex += 1;
-        });
+        if (totalInputs > 0) {
+          const startOffset = -(totalInputs - 1) / 2;
+          routes.forEach((route) => {
+            const offsetIndex = startOffset + inputIndex;
+            const inputX = centerX + offsetIndex * INPUT_SPREAD;
+            attachInput(`Route ${route.method.toUpperCase()} ${route.path}`, inputX);
+            inputIndex += 1;
+          });
 
-        jobs.forEach((job) => {
-          const offsetIndex = startOffset + inputIndex;
-          const inputX = centerX + offsetIndex * INPUT_SPREAD;
-          const jobLabel = [`Job ${job.name}`, formatSchedule(job)].join('\n');
-          const style = {
-            padding: 10,
-            borderRadius: 12,
-            background: job.enabled === false ? 'var(--mantine-color-dark-7)' : 'var(--mantine-color-dark-6)',
-            border: job.enabled === false ? '1px dashed var(--mantine-color-red-7)' : undefined,
-          };
-          attachInput(jobLabel, inputX, style);
-          inputIndex += 1;
-        });
-      } else {
-        const directId = createNode('Direct', { x: centerX, y: INPUT_Y }, {
-          style: { padding: 10, borderRadius: 12, background: 'var(--mantine-color-dark-7)', border: '1px dashed var(--mantine-color-dark-3)' },
-          handles: { source: Position.Bottom, target: Position.Top },
-        });
-        createEdge(runnerId, directId, { animated: true, style: { strokeDasharray: '6 3' } });
-        createEdge(directId, flowNodeId, { animated: true, style: { strokeDasharray: '6 3' } });
+          jobs.forEach((job) => {
+            const offsetIndex = startOffset + inputIndex;
+            const inputX = centerX + offsetIndex * INPUT_SPREAD;
+            const jobLabel = [`Job ${job.name}`, formatSchedule(job)].join('\n');
+            const style = {
+              padding: 10,
+              borderRadius: 12,
+              background: job.enabled === false ? 'var(--mantine-color-gray-7)' : 'var(--mantine-color-teal-8)',
+              color: 'var(--mantine-color-gray-0)',
+              border: job.enabled === false ? '1px dashed var(--mantine-color-red-5)' : '1px solid var(--mantine-color-teal-4)',
+            };
+            attachInput(jobLabel, inputX, style);
+            inputIndex += 1;
+          });
+        } else {
+          const directId = createNode('Direct', { x: centerX, y: INPUT_Y }, {
+            style: {
+              padding: 10,
+              borderRadius: 12,
+              background: 'var(--mantine-color-gray-8)',
+              color: 'var(--mantine-color-gray-0)',
+              border: '1px dashed var(--mantine-color-gray-4)',
+            },
+            handles: { source: Position.Bottom, target: Position.Top },
+          });
+          createEdge(runnerId, directId, { animated: true, style: { strokeDasharray: '6 3' } });
+          createEdge(directId, flowNodeId, { animated: true, style: { strokeDasharray: '6 3' } });
+        }
       }
 
       const result = layoutSequence(flow.steps, centerX, flowStepStartY, [flowNodeId]);
       maxFlowDepth = Math.max(maxFlowDepth, result.nextY);
     });
 
-    const closureY = maxFlowDepth + Y_UNIT;
-    const closureFlowCenters = new Map<string, number[]>();
-    flowClosureUsage.forEach((closures, flowName) => {
-      const center = flowCenters.get(flowName);
-      if (center === undefined) return;
-      closures.forEach((closureName) => {
-        const list = closureFlowCenters.get(closureName);
-        if (list) list.push(center);
-        else closureFlowCenters.set(closureName, [center]);
+    if (showClosures && data.closures.length > 0) {
+      const closureY = maxFlowDepth + Y_UNIT;
+      const closureFlowCenters = new Map<string, number[]>();
+      flowClosureUsage.forEach((closures, flowName) => {
+        const center = flowCenters.get(flowName);
+        if (center === undefined) return;
+        closures.forEach((closureName) => {
+          const list = closureFlowCenters.get(closureName);
+          if (list) list.push(center);
+          else closureFlowCenters.set(closureName, [center]);
+        });
       });
-    });
 
-    const closureNodeIds = new Map<string, string>();
-    const seenEdges = new Set<string>();
+      const closureNodeIds = new Map<string, string>();
+      const seenEdges = new Set<string>();
 
-    data.closures.forEach((closure, index) => {
-      const key = closure.name ?? `__unnamed_${closure.type}_${index}`;
-      const centers = closure.name ? closureFlowCenters.get(closure.name) : undefined;
-      const fallbackCenter = totalWidth * ((index + 1) / (data.closures.length + 1));
-      const centerValue = centers && centers.length
-        ? centers.reduce((sum, value) => sum + value, 0) / centers.length
-        : fallbackCenter;
-      const closureX = centerValue - centerShift;
-      const closureNodeId = createNode(formatClosureLabel(closure), { x: closureX, y: closureY }, {
-        style: { padding: 12, borderRadius: 12, background: 'var(--mantine-color-dark-4)' },
-        handles: { target: Position.Top },
+      data.closures.forEach((closure, index) => {
+        const key = closure.name ?? `__unnamed_${closure.type}_${index}`;
+        const centers = closure.name ? closureFlowCenters.get(closure.name) : undefined;
+        const fallbackCenter = totalWidth * ((index + 1) / (data.closures.length + 1));
+        const centerValue = centers && centers.length
+          ? centers.reduce((sum, value) => sum + value, 0) / centers.length
+          : fallbackCenter;
+        const closureX = centerValue - centerShift;
+        const closureNodeId = createNode(formatClosureLabel(closure), { x: closureX, y: closureY }, {
+          style: {
+            padding: 12,
+            borderRadius: 12,
+            background: 'var(--mantine-color-orange-8)',
+            color: 'var(--mantine-color-gray-0)',
+            boxShadow: '0 0 0 1px var(--mantine-color-orange-5) inset',
+          },
+          handles: { target: Position.Top },
+        });
+        closureNodeIds.set(key, closureNodeId);
       });
-      closureNodeIds.set(key, closureNodeId);
-    });
 
-    flowClosureUsage.forEach((closures, flowName) => {
-      const flowNodeId = flowNodeIds.get(flowName);
-      if (!flowNodeId) return;
-      closures.forEach((closureName) => {
-        const closureNodeId = closureNodeIds.get(closureName);
-        if (!closureNodeId) return;
-        const edgeKey = `${flowNodeId}->${closureNodeId}`;
-        if (seenEdges.has(edgeKey)) return;
-        seenEdges.add(edgeKey);
-        createEdge(flowNodeId, closureNodeId, { animated: false, style: { strokeDasharray: '6 3' } });
+      flowClosureUsage.forEach((closures, flowName) => {
+        const flowNodeId = flowNodeIds.get(flowName);
+        if (!flowNodeId) return;
+        closures.forEach((closureName) => {
+          const closureNodeId = closureNodeIds.get(closureName);
+          if (!closureNodeId) return;
+          const edgeKey = `${flowNodeId}->${closureNodeId}`;
+          if (seenEdges.has(edgeKey)) return;
+          seenEdges.add(edgeKey);
+          createEdge(flowNodeId, closureNodeId, { animated: false, style: { strokeDasharray: '6 3' } });
+        });
       });
-    });
+    }
 
     return { nodes, edges };
-  }, [data]);
+  }, [data, showClosures, showRunnerContext]);
 
   return (
     <div style={{ height: 520 }}>
@@ -444,7 +602,7 @@ export default function RunnerVisualizer({ data }: RunnerVisualizerProps) {
       >
         <MiniMap pannable zoomable />
         <Controls />
-        <Background gap={16} color="#444" />
+        <Background gap={16} color="#2a2d34" />
       </ReactFlow>
     </div>
   );

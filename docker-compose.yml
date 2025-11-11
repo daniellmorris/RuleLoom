@@ -8,6 +8,10 @@ services:
       - NODE_ENV=production
     volumes:
       - ./docker/orchestrator.yaml:/app/config/orchestrator.yaml:ro
+    develop:
+      watch:
+        - path: .
+          action: rebuild
   prometheus:
     image: prom/prometheus:latest
     command:

@@ -9,6 +9,7 @@ import type {
   FlowInvokeStep,
   ClosureDefinition,
 } from '../types/flow';
+import InvokeNode from './InvokeNode';
 
 export interface RunnerVisualizerProps {
   data: {
@@ -222,6 +223,7 @@ function formatClosureLabel(closure: ClosureDefinition): string {
 }
 
 export default function RunnerVisualizer({ data, showClosures = true, showRunnerContext = true }: RunnerVisualizerProps) {
+  const nodeTypes = useMemo(() => ({ invoke: InvokeNode }), []);
   const { nodes, edges } = useMemo(() => {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
@@ -400,7 +402,11 @@ export default function RunnerVisualizer({ data, showClosures = true, showRunner
           currentY = Math.max(deepestY, currentY + 2 * Y_UNIT);
         } else {
           const invokeY = currentY;
-          const invokeId = createNode(formatInvoke(step), { x: centerX, y: invokeY }, {
+          const functionalParams = extractFunctionalParams(step);
+          const invokeLabel = formatInvoke(step);
+          const invokeId = createNode(invokeLabel, { x: centerX, y: invokeY }, {
+            type: 'invoke',
+            data: { label: invokeLabel, showParamHandle: functionalParams.length > 0 },
             style: {
               padding: 14,
               borderRadius: 16,
@@ -415,12 +421,11 @@ export default function RunnerVisualizer({ data, showClosures = true, showRunner
           currentEntries = [invokeId];
           currentY += Y_UNIT;
 
-          const functionalParams = extractFunctionalParams(step);
           if (functionalParams.length > 0) {
             let offsetUnits = 1;
             functionalParams.forEach((descriptor) => {
               const paramCenter = centerX + offsetUnits * X_UNIT;
-              const labelId = createNode(descriptor.key, { x: paramCenter, y: invokeY + Y_UNIT / 2 }, {
+              const labelId = createNode(`${descriptor.key} (${descriptor.steps.length} step${descriptor.steps.length === 1 ? '' : 's'})`, { x: paramCenter, y: invokeY }, {
                 style: {
                   padding: 10,
                   borderRadius: 12,
@@ -429,8 +434,13 @@ export default function RunnerVisualizer({ data, showClosures = true, showRunner
                   border: '1px dashed var(--mantine-color-yellow-6)',
                   fontWeight: 600,
                 },
+                handles: { target: Position.Left, source: Position.Bottom },
               });
-              createEdge(invokeId, labelId, { animated: false, style: { strokeDasharray: '4 4', stroke: 'var(--mantine-color-yellow-8)' } });
+              createEdge(invokeId, labelId, {
+                animated: false,
+                style: { strokeDasharray: '4 4', stroke: 'var(--mantine-color-yellow-8)' },
+                sourceHandle: 'param',
+              });
               const nested = layoutSequence(descriptor.steps, paramCenter, invokeY + Y_UNIT, [labelId]);
               maxWidth = Math.max(maxWidth, offsetUnits + descriptor.width);
               maxFlowDepth = Math.max(maxFlowDepth, nested.nextY);
@@ -590,6 +600,7 @@ export default function RunnerVisualizer({ data, showClosures = true, showRunner
   return (
     <div style={{ height: 520 }}>
       <ReactFlow
+        nodeTypes={nodeTypes}
         nodes={nodes}
         edges={edges}
         fitView

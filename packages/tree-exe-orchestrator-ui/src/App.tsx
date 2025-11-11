@@ -26,53 +26,11 @@ import { notifications } from '@mantine/notifications';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconPlus, IconRefresh, IconTrash, IconEdit } from '@tabler/icons-react';
 import RunnerVisualizer from './components/RunnerVisualizer';
+import ClosureInspector from './components/ClosureInspector';
+import FlowInspector from './components/FlowInspector';
+import type { FlowDefinition, ClosureDefinition } from './types/flow';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
-
-type FlowConditionClause = {
-  closure: string;
-  parameters?: Record<string, unknown>;
-  negate?: boolean;
-};
-
-type FlowCondition = FlowConditionClause | FlowConditionClause[];
-
-interface FlowInvokeStep {
-  type: 'invoke';
-  closure: string;
-  parameters?: Record<string, unknown>;
-  assign?: string;
-  mergeResult?: boolean;
-  when?: FlowCondition;
-}
-
-interface FlowBranchCase {
-  when: FlowCondition;
-  steps: FlowStep[];
-}
-
-interface FlowBranchStep {
-  type: 'branch';
-  cases: FlowBranchCase[];
-  otherwise?: FlowStep[];
-}
-
-type FlowStep = FlowInvokeStep | FlowBranchStep;
-
-interface FlowDefinition {
-  name: string;
-  description?: string;
-  steps: FlowStep[];
-}
-
-interface ClosureDefinition {
-  type: string;
-  name?: string;
-  description?: string;
-  template?: string;
-  module?: string;
-  preset?: string;
-}
 
 interface RunnerSummary {
   id: string;
@@ -134,6 +92,7 @@ export default function App() {
   const [editBasePath, setEditBasePath] = useState('');
   const [editMode, setEditMode] = useState<'path' | 'inline'>('inline');
   const [editConfigPath, setEditConfigPath] = useState('');
+  const [visualMode, setVisualMode] = useState<'flow' | 'closures'>('flow');
   const queryClient = useQueryClient();
 
   const { data: runners, isLoading: runnersLoading } = useRunners();
@@ -256,6 +215,10 @@ export default function App() {
       setEditMode('inline');
     }
   }, [runnerDetail]);
+
+  useEffect(() => {
+    setVisualMode('flow');
+  }, [selectedRunnerId]);
 
   useEffect(() => {
     if (runnerConfigQuery.data) {
@@ -458,11 +421,34 @@ export default function App() {
                 </Tabs.Panel>
 
                 <Tabs.Panel value="visual">
-                  {visualizerData ? (
-                    <RunnerVisualizer data={visualizerData} />
-                  ) : (
-                    <Text c="dimmed">No visual data available.</Text>
-                  )}
+                  <Stack my="md" gap="md">
+                    <Group justify="space-between" align="center" wrap="wrap">
+                      <SegmentedControl
+                        value={visualMode}
+                        onChange={(value) => setVisualMode(value as 'flow' | 'closures')}
+                        data={[
+                          { label: 'Main flows', value: 'flow' },
+                          { label: 'Config closures', value: 'closures' },
+                        ]}
+                      />
+                      <Text size="sm" c="dimmed">
+                        {visualMode === 'flow'
+                          ? 'Visualizes runner, routes, jobs, and flow steps only.'
+                          : 'Browse closures defined in the runner configuration.'}
+                      </Text>
+                    </Group>
+                    {visualMode === 'flow' ? (
+                      visualizerData ? (
+                        <FlowInspector data={visualizerData} />
+                      ) : (
+                        <Text c="dimmed">No flow data available.</Text>
+                      )
+                    ) : runnerDetail.closures.length > 0 ? (
+                      <ClosureInspector closures={runnerDetail.closures} />
+                    ) : (
+                      <Text c="dimmed">No closures defined in configuration.</Text>
+                    )}
+                  </Stack>
                 </Tabs.Panel>
               </Tabs>
             </Stack>

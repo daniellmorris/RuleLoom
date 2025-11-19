@@ -3,16 +3,18 @@ import express from 'express';
 import morgan from 'morgan';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createLogger } from 'rule-loom-lib';
+import { createLogger, type RuleLoomLogger } from 'rule-loom-lib';
 import { loadOrchestratorConfig, type OrchestratorConfig } from './config.js';
 import { RunnerRegistry } from './registry.js';
 import { createOrchestratorApi } from './api/app.js';
+import { RunnerStore, type RunnerPersistenceRecord } from './persistence/runnerStore.js';
 
 export interface OrchestratorInstance {
   app: express.Express;
   config: OrchestratorConfig;
   logger: ReturnType<typeof createLogger>;
   registry: RunnerRegistry;
+  runnerStore: RunnerStore;
   listen: (port?: number) => Promise<http.Server>;
   close: () => Promise<void>;
 }
@@ -30,6 +32,9 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
   app.use(morgan('combined'));
 
   const registry = new RunnerRegistry(logger);
+  const runnerStore = new RunnerStore();
+  const persisted = await restorePersistedRunners(runnerStore, registry, logger);
+  await seedConfiguredRunners(config, runnerStore, registry, logger, persisted);
   const metricsRegistry = registry.getMetricsRegistry();
 
   app.get('/metrics', (_req, res) => {
@@ -37,15 +42,7 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
     res.send(metricsRegistry.render());
   });
 
-  for (const entry of config.runners) {
-    await registry.addRunner({
-      id: entry.name,
-      configPath: entry.config,
-      basePath: entry.basePath,
-    });
-  }
-
-  const apiRouter = await createOrchestratorApi(registry);
+  const apiRouter = await createOrchestratorApi(registry, runnerStore);
   app.use('/api', apiRouter);
 
   const uiDistPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../rule-loom-orchestrator-ui/dist');
@@ -93,6 +90,7 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
       server = undefined;
     }
     await registry.closeAll();
+    await runnerStore.disconnect().catch(() => undefined);
   };
 
   return {
@@ -100,6 +98,7 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
     config,
     logger,
     registry,
+    runnerStore,
     listen,
     close,
   };
@@ -113,3 +112,74 @@ export async function startOrchestrator(options: StartOptions): Promise<{ instan
 
 export { RunnerRegistry } from './registry.js';
 export { createOrchestratorApi } from './api/app.js';
+
+async function restorePersistedRunners(
+  store: RunnerStore,
+  registry: RunnerRegistry,
+  logger: RuleLoomLogger,
+): Promise<RunnerPersistenceRecord[]> {
+  const records = await store.list();
+  for (const record of records) {
+    try {
+      await registry.addRunner({
+        id: record.id,
+        configPath: record.configPath ?? undefined,
+        configContent: record.configContent ?? undefined,
+        basePath: record.basePath,
+      });
+    } catch (error) {
+      logger.error?.(`Failed to restore runner "${record.id}":`, error);
+    }
+  }
+  return records;
+}
+
+async function seedConfiguredRunners(
+  config: OrchestratorConfig,
+  store: RunnerStore,
+  registry: RunnerRegistry,
+  logger: RuleLoomLogger,
+  existingRecords: RunnerPersistenceRecord[],
+): Promise<void> {
+  if (!config.runners?.length) {
+    return;
+  }
+
+  const existingIds = new Set(existingRecords.map((record) => record.id));
+  const existingPaths = new Set(
+    existingRecords
+      .map((record) => (record.configPath ? path.normalize(record.configPath) : undefined))
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  for (const entry of config.runners) {
+    const normalizedPath = path.normalize(entry.config);
+    if ((entry.name && existingIds.has(entry.name)) || existingPaths.has(normalizedPath)) {
+      continue;
+    }
+    try {
+      const runtimeRecord = await registry.addRunner({
+        id: entry.name,
+        configPath: normalizedPath,
+        basePath: entry.basePath,
+      });
+      const inlineContent =
+        runtimeRecord.configSource === 'inline' ? (await registry.getRunnerConfig(runtimeRecord.id)).content : null;
+      await store.create({
+        id: runtimeRecord.id,
+        basePath: runtimeRecord.basePath,
+        configPath: runtimeRecord.configSource === 'path' ? runtimeRecord.configPath : null,
+        configContent: inlineContent,
+      });
+      existingIds.add(runtimeRecord.id);
+      if (runtimeRecord.configSource === 'path') {
+        existingPaths.add(path.normalize(runtimeRecord.configPath));
+      }
+    } catch (error) {
+      logger.error?.(
+        `Failed to bootstrap runner "${entry.name ?? entry.config}"`,
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    }
+  }
+}

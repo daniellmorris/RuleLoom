@@ -11,6 +11,7 @@ RuleLoom is a configuration-first execution platform for composing rules, closur
 - **Inline lambdas and closure references** – nest step arrays directly in parameters and call closures (or step bundles) inline with `$call`.
 - **Scheduled flows** – run jobs on cron/intervals using Bree-backed scheduler.
 - **OpenAPI orchestrator API** – create/destroy runners, inspect routes, and view scheduler state via REST.
+- **SQLite-backed persistence** – orchestrator runner configs live in a Prisma-managed SQLite database so additions through the API survive restarts.
 
 ## Repository Layout
 
@@ -32,6 +33,7 @@ RuleLoom is a configuration-first execution platform for composing rules, closur
 
 ```bash
 npm install
+npx prisma migrate deploy --schema prisma/schema.prisma
 npm run build --workspace rule-loom-orchestrator-ui
 npm run build
 ```
@@ -49,6 +51,17 @@ Run the orchestrator with the bundled example:
 ```bash
 npx ruleloom-orchestrator --config packages/rule-loom-orchestrator/config/example.orchestrator.yaml --port 4100
 ```
+
+## Database & Persistence
+
+- Runner definitions managed through the orchestrator API are stored in SQLite. By default, the database file lives at `.ruleloom/orchestrator.db`; override the location with `RULE_LOOM_DATABASE_URL` (e.g., `RULE_LOOM_DATABASE_URL="file:/var/data/ruleloom.db"`).
+- Apply schema changes using Prisma migrations:
+
+```bash
+npx prisma migrate deploy --schema prisma/schema.prisma
+```
+
+- Local development and tests automatically create the database directory if it does not exist. For production/container environments, ensure the target path is writable so orchestrator state survives restarts.
 
 ## Testing
 

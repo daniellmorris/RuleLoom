@@ -2,7 +2,8 @@
 
 FROM node:20-bullseye-slim AS base
 ENV ROLLUP_SKIP_NODEJS_NATIVE=true \
-    npm_config_ignore_optional=true
+    npm_config_ignore_optional=true \
+    RULE_LOOM_DATABASE_URL="file:/app/.ruleloom/orchestrator.db"
 WORKDIR /app
 
 COPY package*.json ./
@@ -22,13 +23,17 @@ RUN ARCH=$(uname -m) \
 
 COPY . .
 
+RUN mkdir -p .ruleloom
+RUN npx prisma migrate deploy --schema prisma/schema.prisma
+
 RUN npm run build --workspace rule-loom-orchestrator-ui
 RUN npm run build --workspaces
 RUN npm run build --workspace rule-loom-orchestrator
 
 FROM node:20-bullseye-slim AS runner
 ENV ROLLUP_SKIP_NODEJS_NATIVE=true \
-    npm_config_ignore_optional=true
+    npm_config_ignore_optional=true \
+    RULE_LOOM_DATABASE_URL="file:/app/.ruleloom/orchestrator.db"
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=base /app /app

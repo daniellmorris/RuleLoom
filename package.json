@@ -14,7 +14,9 @@
     "test:integration": "vitest run --config vitest.config.ts"
   },
   "devDependencies": {
+    "@prisma/client": "^5.22.0",
     "@types/supertest": "^2.0.16",
+    "prisma": "^5.22.0",
     "supertest": "^6.3.4",
     "ts-node": "^10.9.2",
     "vitest": "^2.0.5"

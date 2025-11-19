@@ -10,10 +10,15 @@ TreeExe is organised as a set of focused packages layered on top of each other:
                 ▲                       ▲
                 │                       │
 ┌───────────────────────────┐   ┌───────────────────────────┐
-│      tree-exe-runner      │   │       External Config     │
-│  (loads YAML, hosts HTTP) │   │  (YAML files referencing  │
+│     tree-exe-inputs       │   │       External Config     │
+│ (HTTP/Scheduler adapters) │   │  (YAML files referencing  │
 └──────────────▲────────────┘   │        closures/flows)    │
                │                └───────────────────────────┘
+┌──────────────┴────────────┐
+│      tree-exe-runner      │
+│ (loads YAML, wires inputs)│
+└──────────────▲────────────┘
+               │
 ┌──────────────┴────────────┐
 │       tree-exe-engine      │
 │  (closure execution core)  │
@@ -42,11 +47,16 @@ Shared utilities (currently a structured logger) that provide consistent interfa
 ### tree-exe-core
 Supplies reusable closures (assign/respond/log/comparisons/iterators) that follow engine conventions. Closures can declare `functionalParams` when they need raw step arrays (e.g., `core.for-each`).
 
+### tree-exe-inputs
+- Encapsulates concrete input adapters (Express HTTP server, Bree scheduler, future AMQP/MQTT bridges).
+- Each adapter exports factories so higher layers can opt-in without pulling heavy dependencies directly.
+- Emits lifecycle events (e.g., scheduler job state transitions) consumed by the orchestrator for metrics.
+
 ### tree-exe-runner
-- Parses YAML configs with Zod, builds closure lists (core/module/flow), and creates an Express app.
-- Injects the HTTP request into `state.request` and passes route metadata through `runtime`.
+- Parses YAML configs with Zod, builds closure lists (core/module/flow), and instantiates the selected inputs from `tree-exe-inputs`.
+- HTTP adapters inject the request into `state.request` and pass route metadata through `runtime`.
 - Provides CLI/programmatic APIs for running a single configuration.
-- Starts a Bree-backed scheduler when `scheduler.jobs` are defined, executing flows on intervals or cron schedules.
+- Starts scheduler inputs when declared, emitting events for observability.
 
 ### tree-exe-orchestrator
 - Loads multiple runner configs, mounts their Express apps under configurable base paths.

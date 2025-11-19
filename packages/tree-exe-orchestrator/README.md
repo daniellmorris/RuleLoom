@@ -18,14 +18,12 @@ npx treeexe-orchestrator --config orchestrator.yaml --port 4100
 Options:
 
 - `--config, -c` – path to the orchestrator YAML (defaults to `orchestrator.yaml`).
-- `--port, -p` – override the configured port.
+- `--port, -p` – port to listen on (defaults to `$PORT` env var or `8080`).
 
 ## Configuration Structure
 
 ```yaml
 version: 1
-server:
-  port: 4000
 runners:
   - name: echo
     config: ../tree-exe-runner/config/example.http.yaml

@@ -16,10 +16,6 @@ const orchestratorConfigSchema = z.object({
       level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).optional(),
     })
     .optional(),
-  server: z.object({
-    port: z.number().int().min(1).max(65535).default(8080),
-    basePath: z.string().optional(),
-  }),
   runners: z.array(runnerEntrySchema).optional().default([]),
 });
 

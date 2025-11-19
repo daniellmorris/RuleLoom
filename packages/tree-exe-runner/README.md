@@ -1,6 +1,6 @@
 # tree-exe-runner
 
-`tree-exe-runner` loads a YAML configuration, registers closures/flows with the engine, and exposes them through an Express HTTP server. It ships both a CLI (`treeexe-runner`) and a programmatic API.
+`tree-exe-runner` loads a YAML configuration, registers closures/flows with the engine, and wires them up to the declared inputs (HTTP routes, scheduler jobs, etc.). It ships both a CLI (`treeexe-runner`) and a programmatic API.
 
 ## Features
 
@@ -19,7 +19,7 @@ npx treeexe-runner --config path/to/config.yaml --port 4000
 Options:
 
 - `--config, -c` – path to the YAML config (defaults to `config.yaml`).
-- `--port, -p` – override the port declared in the config.
+- `--port, -p` – port to listen on (defaults to `3000` when omitted).
 
 ## Library Usage
 
@@ -42,13 +42,17 @@ High-level structure:
 version: 1
 logger:
   level: info
-server:
-  http:
-    port: 3030
+inputs:
+  - type: http
     routes:
       - method: post
         path: /echo
         flow: echo-request
+  - type: scheduler
+    jobs:
+      - name: heartbeat
+        flow: heartbeat
+        interval: "1m"
 closures:
   - type: core             # import TreeExe Core bundle
   - type: module           # optional custom closures
@@ -72,13 +76,14 @@ See [Configuration How-To](../../docs/CONFIGURATION.md) for the full schema, exa
 ### Scheduler Example
 
 ```yaml
-scheduler:
-  jobs:
-    - name: heartbeat
-      flow: heartbeat-flow
-      interval: "1m"
-      runtime:
-        source: scheduler
+inputs:
+  - type: scheduler
+    jobs:
+      - name: heartbeat
+        flow: heartbeat-flow
+        interval: "1m"
+        runtime:
+          source: scheduler
 ```
 
 Each job executes the named flow using the runner’s engine; results are recorded on `runner.scheduler.jobStates`.

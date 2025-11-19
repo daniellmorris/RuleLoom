@@ -1,10 +1,10 @@
-import express, { type Express, type Request, type Response, type NextFunction } from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import createError from 'http-errors';
 import morgan from 'morgan';
 import _ from 'lodash';
 import type { TreeExeEngine, ExecutionRuntime } from 'tree-exe-engine';
-import type { RunnerConfig, HttpRouteConfig } from './config.js';
 import type { TreeExeLogger } from 'tree-exe-lib';
+import type { HttpInputConfig, HttpRouteConfig, HttpInputApp } from './types.js';
 
 function buildInitialState(req: Request) {
   return {
@@ -46,9 +46,9 @@ function applyResponse(res: Response, result: { state: Record<string, unknown>; 
 
 function routeHandler(
   engine: TreeExeEngine,
-  config: RunnerConfig,
   route: HttpRouteConfig,
   logger: TreeExeLogger,
+  metadata?: Record<string, unknown>,
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -56,7 +56,7 @@ function routeHandler(
       const runtime: ExecutionRuntime = {
         logger,
         route,
-        configMetadata: config.metadata,
+        configMetadata: metadata,
         requestId: req.headers['x-request-id'] ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       };
 
@@ -68,21 +68,23 @@ function routeHandler(
   };
 }
 
-export function createRunnerApp(
-  engine: TreeExeEngine,
-  config: RunnerConfig,
-  logger: TreeExeLogger,
-): Express {
+export interface CreateHttpInputOptions {
+  logger: TreeExeLogger;
+  metadata?: Record<string, unknown>;
+}
+
+export function createHttpInputApp(engine: TreeExeEngine, input: HttpInputConfig, options: CreateHttpInputOptions): HttpInputApp {
   const app = express();
-  app.use(express.json({ limit: config.server.http.bodyLimit }));
-  app.use(express.urlencoded({ extended: true, limit: config.server.http.bodyLimit }));
+  const limit = input.bodyLimit ?? '1mb';
+  app.use(express.json({ limit }));
+  app.use(express.urlencoded({ extended: true, limit }));
   app.use(morgan('combined'));
 
-  for (const route of config.server.http.routes) {
-    const method = route.method?.toLowerCase() ?? 'post';
-    const handler = routeHandler(engine, config, route, logger);
+  for (const route of input.routes) {
+    const method = (route.method ?? 'post').toLowerCase();
+    const handler = routeHandler(engine, route, options.logger, options.metadata);
     (app as any)[method](route.path, handler);
-    logger.info(`Registered route [${method.toUpperCase()}] ${route.path} -> flow "${route.flow}"`);
+    options.logger.info(`Registered route [${method.toUpperCase()}] ${route.path} -> flow "${route.flow}"`);
   }
 
   app.use((req, res, next) => {
@@ -90,7 +92,7 @@ export function createRunnerApp(
   });
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    logger.error('Unhandled error during request', err);
+    options.logger.error('Unhandled error during request', err);
     if (res.headersSent) {
       return;
     }
@@ -103,5 +105,18 @@ export function createRunnerApp(
     });
   });
 
+  return app;
+}
+
+export function createPlaceholderHttpApp(logger?: TreeExeLogger): HttpInputApp {
+  const app = express();
+  app.use((_req, res) => {
+    logger?.warn?.('Request received but no HTTP inputs are configured.');
+    res.status(404).json({
+      error: {
+        message: 'No HTTP inputs configured for this runner.',
+      },
+    });
+  });
   return app;
 }

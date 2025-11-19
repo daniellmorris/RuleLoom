@@ -1,7 +1,7 @@
 version: 1
-server:
-  http:
-    port: 3030
+inputs:
+  - type: http
+    basePath: /
     bodyLimit: 1mb
     routes:
       - method: post

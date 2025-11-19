@@ -1,9 +1,11 @@
 import type { Request, Response } from 'express';
 import createHttpError from 'http-errors';
+import { getHttpInput, getSchedulerInput } from 'tree-exe-runner';
 import { RunnerRegistry } from '../../registry.js';
 
 function serializeRoutes(record: ReturnType<RunnerRegistry['get']>): Array<{ method: string; path: string; flow: string }> {
-  const routes = record?.instance.config.server.http.routes ?? [];
+  const httpInput = record ? getHttpInput(record.instance.config) : undefined;
+  const routes = httpInput?.routes ?? [];
   return routes.map((route) => ({
     method: route.method ?? 'post',
     path: route.path,
@@ -69,7 +71,8 @@ function serializeClosures(
 }
 
 function serializeJobs(record: ReturnType<RunnerRegistry['get']>) {
-  const jobs = record?.instance.config.scheduler?.jobs ?? [];
+  const schedulerConfig = record ? getSchedulerInput(record.instance.config) : undefined;
+  const jobs = schedulerConfig?.jobs ?? [];
   return jobs.map((job) => ({
     name: job.name,
     flow: job.flow,

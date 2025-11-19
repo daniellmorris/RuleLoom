@@ -1,21 +1,14 @@
 version: 1
-server:
-  http:
-    port: 3031
+inputs:
+  - type: http
     routes:
       - method: post
         path: /format
         flow: format-order
 closures:
   - type: core
-  - type: flow
-    name: build-response
-    steps:
-      - closure: core.respond
-        parameters:
-          status: 200
-          body:
-            message: "${state.formatted}"
+  - type: module
+    module: ../modules/call-inline-closures.js
 flows:
   - name: format-order
     steps:
@@ -23,17 +16,16 @@ flows:
         parameters:
           target: order
           value: "${request.body}"
-      - closure: core.assign
+      - closure: format-total
         parameters:
-          target: formatted
-          value:
-            $call:
-              name: core.assign
-              parameters:
-                target: temp.message
-                value: "Order ${state.order.id} total ${state.order.total}"
-      - closure: core.assign
+          total: "${state.order.total}"
+      - closure: core.respond
         parameters:
-          target: formatted
-          value: "${state.temp.message}"
-      - closure: build-response
+          status: 200
+          body:
+            message:
+              $call:
+                name: format-message
+                parameters:
+                  id: "${state.order.id}"
+                  total: "${state.order.total}"

@@ -1,13 +1,19 @@
 version: 1
 logger:
   level: warn
-server:
-  http:
-    port: 3035
+inputs:
+  - type: http
     routes:
       - method: get
         path: /status
         flow: status
+  - type: scheduler
+    jobs:
+      - name: heartbeat
+        flow: heartbeat-flow
+        interval: "1s"
+        runtime:
+          info: "from scheduler"
 closures:
   - type: core
 flows:
@@ -33,10 +39,3 @@ flows:
           status: 200
           body:
             message: "heartbeat"
-scheduler:
-  jobs:
-    - name: heartbeat
-      flow: heartbeat-flow
-      interval: "1s"
-      runtime:
-        info: "from scheduler"

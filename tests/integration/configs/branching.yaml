@@ -1,9 +1,8 @@
 version: 1
 logger:
   level: info
-server:
-  http:
-    port: 3030
+inputs:
+  - type: http
     routes:
       - method: post
         path: /orders

@@ -8,10 +8,9 @@ This guide walks through the YAML schema understood by `tree-exe-runner`. It is 
 version: 1                # optional; defaults to 1
 logger:                   # optional
   level: info | debug | ...
-server:
-  http:
-    port: 3030            # default 3030 if omitted
-    basePath: /           # optional prefix for all routes
+inputs:                   # optional; defaults to []
+  - type: http            # HTTP input (Express app)
+    basePath: /           # optional prefix for orchestrator mounting
     bodyLimit: 1mb        # optional (string or number) for JSON/body parsers
     routes:
       - method: get | post | put | patch | delete (defaults to post)
@@ -22,6 +21,13 @@ server:
           headers:
             x-static: value
           body: {}
+  - type: scheduler       # Bree-backed scheduler jobs
+    jobs:
+      - name: heartbeat
+        flow: flow-name
+        interval: "1m"
+  - type: mqtt | amqp     # reserved for future transports
+    options: {}           # arbitrary settings for custom adapters
 closures:                 # optional; defaults to []
   - type: core | template | module | flow | core
 flows:                    # required; ≥1 flow definition
@@ -29,6 +35,26 @@ flows:                    # required; ≥1 flow definition
     description: optional
     steps: [...]          # see step definitions below
 ```
+
+Inputs describe how events enter the runner. Today the HTTP input (Express server) and scheduler input (Bree jobs) are implemented in `tree-exe-inputs`; future transports like AMQP/MQTT can be added without changing the runner core. Omit the HTTP input if you only need background jobs.
+
+### `type: http`
+
+- `basePath` – optional hint for the orchestrator when mounting runners (defaults to `/`).
+- `bodyLimit` – forwarded to Express body parsers (string like `1mb` or numeric byte value).
+- `routes` – array of route descriptors:
+  - `method` – HTTP verb (defaults to `post`).
+  - `path` – Express path pattern.
+  - `flow` – flow name to execute.
+  - `respondWith` – optional fallback response if the flow does not set `state.response`.
+
+### `type: scheduler`
+
+Described in detail below; groups Bree job declarations.
+
+### `type: mqtt` / `type: amqp`
+
+Placeholders for upcoming transports. They currently accept an arbitrary `options` object so tooling can capture intent even before the adapter exists.
 
 ## Closure Entries
 
@@ -191,18 +217,19 @@ The engine skips interpolation on `steps` because the closure declares it via `f
 
 ## Scheduler Jobs
 
-Runner configs can declare scheduled jobs via Bree:
+Declare scheduled jobs by adding a `type: scheduler` entry to `inputs`:
 
 ```yaml
-scheduler:
-  jobs:
-    - name: heartbeat
-      flow: heartbeat-flow
-      interval: "1m"
-      initialState:
-        counter: 0
-      runtime:
-        source: scheduler
+inputs:
+  - type: scheduler
+    jobs:
+      - name: heartbeat
+        flow: heartbeat-flow
+        interval: "1m"
+        initialState:
+          counter: 0
+        runtime:
+          source: scheduler
 ```
 
 Job fields:
@@ -244,4 +271,4 @@ flows:
 
 A minimal yet expressive configuration combining these features is provided at `packages/tree-exe-runner/config/example.http.yaml`. The test suite under `tests/engine.spec.ts` contains further examples you can mirror when generating configs programmatically.
 
-Feel free to extend the schema (e.g., new closure presets or server executors) by updating `packages/tree-exe-runner/src/config.ts` and documenting the change in this guide.
+Feel free to extend the schema (e.g., new closure presets or input adapters) by updating `packages/tree-exe-runner/src/config.ts` and documenting the change in this guide.

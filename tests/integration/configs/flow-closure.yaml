@@ -1,36 +1,31 @@
 version: 1
-server:
-  http:
-    port: 3033
+inputs:
+  - type: http
     routes:
       - method: post
         path: /flow
-        flow: main
+        flow: process-user
 closures:
   - type: core
   - type: flow
-    name: enrich
+    name: enrich-user
     steps:
       - closure: core.assign
         parameters:
-          target: enriched
-          value:
-            id: "${state.order.id}"
-            total: "${state.order.total}"
-            status: processed
-  - type: flow
-    name: respond-enriched
+          target: metadata.status
+          value: processed
+flows:
+  - name: process-user
     steps:
+      - closure: core.assign
+        parameters:
+          target: user
+          value: "${request.body}"
+      - closure: enrich-user
       - closure: core.respond
         parameters:
           status: 200
-          body: "${state.enriched}"
-flows:
-  - name: main
-    steps:
-      - closure: core.assign
-        parameters:
-          target: order
-          value: "${request.body}"
-      - closure: enrich
-      - closure: respond-enriched
+          body:
+            id: "${state.user.id}"
+            total: "${state.user.total}"
+            status: "${state.metadata.status}"

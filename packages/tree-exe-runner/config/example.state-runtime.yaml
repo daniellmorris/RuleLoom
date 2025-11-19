@@ -1,7 +1,6 @@
 version: 1
-server:
-  http:
-    port: 3031
+inputs:
+  - type: http
     routes:
       - method: post
         path: /state-runtime-demo

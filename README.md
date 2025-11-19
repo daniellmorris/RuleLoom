@@ -19,6 +19,7 @@ TreeExe is a configuration-first execution platform for composing rules, closure
 | [`tree-exe-lib`](packages/tree-exe-lib/README.md) | Shared utilities (loggers, future helpers) consumed by other packages. |
 | [`tree-exe-engine`](packages/tree-exe-engine/README.md) | Core execution engine that processes flows, closures, branching, and `$call` directives. |
 | [`tree-exe-core`](packages/tree-exe-core/README.md) | Reusable closure bundle (assign/respond/log/comparisons/iterators, etc.). |
+| [`tree-exe-inputs`](packages/tree-exe-inputs/README.md) | Transport adapters (HTTP server, scheduler, future AMQP/MQTT) used by the runner/orchestrator. |
 | [`tree-exe-runner`](packages/tree-exe-runner/README.md) | CLI + library for serving a single YAML config over HTTP. |
 | [`tree-exe-orchestrator`](packages/tree-exe-orchestrator/README.md) | Aggregates multiple runner configs behind one Express app. |
 
@@ -40,7 +41,7 @@ Run the sample HTTP runner:
 ```bash
 npm run dev              # ts-node entry for tree-exe-runner
 # in another terminal
-curl -X POST http://localhost:3030/echo -d '{"userId":"abc","items":["A","B"]}' -H 'Content-Type: application/json'
+curl -X POST http://localhost:3000/echo -d '{"userId":"abc","items":["A","B"]}' -H 'Content-Type: application/json'
 ```
 
 Run the orchestrator with the bundled example:

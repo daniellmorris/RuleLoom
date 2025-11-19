@@ -9,8 +9,6 @@
   "exclude": ["dist", "node_modules"],
   "references": [
     { "path": "../tree-exe-lib" },
-    { "path": "../tree-exe-core" },
-    { "path": "../tree-exe-engine" },
-    { "path": "../tree-exe-inputs" }
+    { "path": "../tree-exe-engine" }
   ]
 }

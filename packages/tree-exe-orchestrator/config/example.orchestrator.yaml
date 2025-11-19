@@ -1,6 +1,4 @@
 version: 1
-server:
-  port: 4000
 runners:
   - name: echo
     config: ../tree-exe-runner/config/example.http.yaml

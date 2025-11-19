@@ -70,7 +70,9 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
     if (server) {
       throw new Error('Orchestrator already listening');
     }
-    const resolvedPort = port ?? config.server.port;
+    const envPortValue = process.env.PORT ? Number(process.env.PORT) : undefined;
+    const defaultPort = typeof envPortValue === 'number' && Number.isFinite(envPortValue) && envPortValue > 0 ? envPortValue : 8080;
+    const resolvedPort = port ?? defaultPort;
     server = await new Promise<http.Server>((resolve) => {
       const srv = app.listen(resolvedPort, () => {
         logger.info(`TreeExe Orchestrator listening on port ${resolvedPort}`);

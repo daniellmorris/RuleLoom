@@ -4,7 +4,7 @@ import createHttpError from 'http-errors';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { createRunner, type RunnerInstance } from 'tree-exe-runner';
+import { createRunner, getHttpInput, type RunnerInstance } from 'tree-exe-runner';
 import type { TreeExeLogger } from 'tree-exe-lib';
 import { Counter, Histogram, MetricsRegistry } from './metrics.js';
 
@@ -79,7 +79,8 @@ export class RunnerRegistry {
       }
       throw error;
     }
-    const basePath = sanitizeBasePath(options.basePath, instance.config.server.http.basePath);
+    const httpInput = getHttpInput(instance.config);
+    const basePath = sanitizeBasePath(options.basePath, httpInput?.basePath);
 
     if (this.findByBasePath(basePath)) {
       await instance.close().catch(() => undefined);

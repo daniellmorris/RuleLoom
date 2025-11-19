@@ -5,6 +5,15 @@ import yaml from 'js-yaml';
 import { z } from 'zod';
 import type { FlowDefinition, FlowInvokeStep, FlowBranchStep } from 'tree-exe-engine';
 import type { LogLevel } from 'tree-exe-lib';
+import type {
+  HttpRouteConfig,
+  HttpInputConfig,
+  SchedulerInputConfig,
+  SchedulerJobConfig,
+  RunnerInputConfig,
+  AmqpInputConfig,
+  MqttInputConfig,
+} from 'tree-exe-inputs';
 
 const logLevelSchema = z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']) as z.ZodType<LogLevel>;
 
@@ -152,53 +161,79 @@ const schedulerJobSchema = z
   .refine((job) => job.interval !== undefined || job.cron !== undefined || job.timeout !== undefined, {
     message: 'Scheduler job requires interval, cron, or timeout',
     path: ['interval'],
-  });
+  }) satisfies z.ZodType<SchedulerJobConfig>;
 
-const schedulerSchema = z.object({
-  jobs: z.array(schedulerJobSchema).min(1),
-});
+const schedulerInputSchema = z
+  .object({
+    type: z.literal('scheduler'),
+    jobs: z.array(schedulerJobSchema).min(1),
+  }) satisfies z.ZodType<SchedulerInputConfig>;
 
-export type SchedulerJobConfig = z.infer<typeof schedulerJobSchema>;
-export type SchedulerConfig = z.infer<typeof schedulerSchema>;
+const mqttInputSchema = z
+  .object({
+    type: z.literal('mqtt'),
+    name: z.string().optional(),
+    options: z.record(z.any()).optional(),
+  })
+  .passthrough() satisfies z.ZodType<MqttInputConfig>;
 
-const httpRouteSchema = z.object({
-  id: z.string().optional(),
-  method: z.enum(['get', 'post', 'put', 'patch', 'delete']).default('post'),
-  path: z.string().min(1),
-  flow: z.string().min(1),
-  respondWith: z
-    .object({
-      status: z.number().int().optional(),
-      headers: z.record(z.string()).optional(),
-      body: z.any().optional(),
-    })
-    .optional(),
-});
+const amqpInputSchema = z
+  .object({
+    type: z.literal('amqp'),
+    name: z.string().optional(),
+    options: z.record(z.any()).optional(),
+  })
+  .passthrough() satisfies z.ZodType<AmqpInputConfig>;
 
-export type HttpRouteConfig = z.infer<typeof httpRouteSchema>;
+const httpRouteSchema = z
+  .object({
+    id: z.string().optional(),
+    method: z.enum(['get', 'post', 'put', 'patch', 'delete']).default('post'),
+    path: z.string().min(1),
+    flow: z.string().min(1),
+    respondWith: z
+      .object({
+        status: z.number().int().optional(),
+        headers: z.record(z.string()).optional(),
+        body: z.any().optional(),
+      })
+      .optional(),
+  }) satisfies z.ZodType<HttpRouteConfig>;
 
-const serverSchema = z.object({
-  http: z.object({
-    port: z.number().int().min(1).max(65535).default(3000),
-    basePath: z.string().optional(),
-    routes: z.array(httpRouteSchema).min(1),
+const httpInputSchema = z
+  .object({
+    type: z.literal('http'),
+    id: z.string().optional(),
+    basePath: z.string().optional().default('/'),
     bodyLimit: z.union([z.number(), z.string()]).optional().default('1mb'),
-  }),
-});
+    routes: z.array(httpRouteSchema).min(1),
+  }) satisfies z.ZodType<HttpInputConfig>;
 
-const runnerConfigSchema = z.object({
-  version: z.number().int().positive().optional().default(1),
-  logger: z
-    .object({
-      level: logLevelSchema.optional(),
-    })
-    .optional(),
-  metadata: z.record(z.any()).optional(),
-  server: serverSchema,
-  closures: z.array(closureSchema).optional().default([]),
-  flows: z.array(flowSchema).min(1),
-  scheduler: schedulerSchema.optional(),
-});
+const inputSchema = z.discriminatedUnion('type', [httpInputSchema, schedulerInputSchema, mqttInputSchema, amqpInputSchema]);
+
+const runnerConfigSchema = z
+  .object({
+    version: z.number().int().positive().optional().default(1),
+    logger: z
+      .object({
+        level: logLevelSchema.optional(),
+      })
+      .optional(),
+    metadata: z.record(z.any()).optional(),
+    inputs: z.array(inputSchema).optional().default([]),
+    closures: z.array(closureSchema).optional().default([]),
+    flows: z.array(flowSchema).min(1),
+  })
+  .superRefine((value, ctx) => {
+    const httpInputs = value.inputs.filter((input) => input.type === 'http');
+    if (httpInputs.length > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Only a single HTTP input is currently supported per runner.',
+        path: ['inputs'],
+      });
+    }
+  });
 
 export type RunnerConfig = z.infer<typeof runnerConfigSchema>;
 
@@ -206,6 +241,16 @@ export interface RunnerConfigWithMeta {
   config: RunnerConfig;
   configPath: string;
   configDir: string;
+}
+
+export function getHttpInput(config: RunnerConfig): HttpInputConfig | undefined {
+  const entry = config.inputs.find((input) => input.type === 'http');
+  return entry?.type === 'http' ? (entry as HttpInputConfig) : undefined;
+}
+
+export function getSchedulerInput(config: RunnerConfig): SchedulerInputConfig | undefined {
+  const entry = config.inputs.find((input) => input.type === 'scheduler');
+  return entry?.type === 'scheduler' ? (entry as SchedulerInputConfig) : undefined;
 }
 
 export async function loadRunnerConfig(configPath: string): Promise<RunnerConfigWithMeta> {

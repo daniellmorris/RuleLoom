@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
-import { createRunner } from '../../packages/tree-exe-runner/src/index.ts';
+import { createRunner } from '../../packages/rule-loom-runner/src/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

@@ -1,9 +1,9 @@
 import { strict as assert } from 'node:assert';
-import TreeExeEngine from 'tree-exe-engine';
-import { createCoreClosures } from 'tree-exe-core';
+import RuleLoomEngine from 'rule-loom-engine';
+import { createCoreClosures } from 'rule-loom-core';
 
 async function testBranchInference() {
-  const engine = new TreeExeEngine({
+  const engine = new RuleLoomEngine({
     closures: createCoreClosures(),
   });
 
@@ -106,7 +106,7 @@ async function testBranchInference() {
 }
 
 async function testFlowClosure() {
-  const engine = new TreeExeEngine({
+  const engine = new RuleLoomEngine({
     closures: createCoreClosures(),
   });
 
@@ -163,7 +163,7 @@ async function testFlowClosure() {
 }
 
 async function testForEachClosure() {
-  const engine = new TreeExeEngine({
+  const engine = new RuleLoomEngine({
     closures: createCoreClosures(),
   });
 
@@ -204,7 +204,7 @@ async function testForEachClosure() {
 }
 
 async function testClosureParameterReference() {
-  const engine = new TreeExeEngine({
+  const engine = new RuleLoomEngine({
     closures: createCoreClosures(),
   });
 

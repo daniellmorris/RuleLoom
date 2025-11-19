@@ -1,0 +1,5 @@
+version: 1
+runners:
+  - name: echo
+    config: ../rule-loom-runner/config/example.http.yaml
+    basePath: /echo

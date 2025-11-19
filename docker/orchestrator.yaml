@@ -1,5 +1,5 @@
 version: 1
 runners:
   - name: example
-    config: ../packages/tree-exe-runner/config/example.http.yaml
+    config: ../packages/rule-loom-runner/config/example.http.yaml
     basePath: /

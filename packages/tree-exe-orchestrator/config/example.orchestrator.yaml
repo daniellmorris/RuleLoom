@@ -1,5 +1,0 @@
-version: 1
-runners:
-  - name: echo
-    config: ../tree-exe-runner/config/example.http.yaml
-    basePath: /echo

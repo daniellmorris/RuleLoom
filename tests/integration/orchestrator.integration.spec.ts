@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import supertest from 'supertest';
 import { describe, it, expect } from 'vitest';
 
-import { createOrchestrator } from '../../packages/tree-exe-orchestrator/src/index.ts';
+import { createOrchestrator } from '../../packages/rule-loom-orchestrator/src/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,7 +19,7 @@ async function withOrchestrator(configFile: string, testFn: (app: import('expres
   }
 }
 
-describe('TreeExe Orchestrator', () => {
+describe('RuleLoom Orchestrator', () => {
   it('mounts multiple runner configs under different base paths', async () => {
     await withOrchestrator('orchestrator.yaml', async (app) => {
       const request = supertest(app);

@@ -62,4 +62,30 @@ describe('Orchestrator API', () => {
       expect(notFoundRes.status).toBe(404);
     });
   });
+
+  it('prioritizes specific base paths over root-mounted runners', async () => {
+    await withOrchestrator('orchestrator-empty.yaml', async (app) => {
+      const request = supertest(app);
+      const configPath = path.join(CONFIG_DIR, 'branching.yaml');
+
+      const rootRes = await request
+        .post('/api/runners')
+        .send({ configPath, basePath: '/' })
+        .set('Content-Type', 'application/json');
+      expect(rootRes.status).toBe(201);
+
+      const nestedRes = await request
+        .post('/api/runners')
+        .send({ configPath, basePath: '/dynamic' })
+        .set('Content-Type', 'application/json');
+      expect(nestedRes.status).toBe(201);
+
+      const routeRes = await request
+        .post('/dynamic/orders')
+        .send({ items: ['A', 'B'] })
+        .set('Content-Type', 'application/json');
+      expect(routeRes.status).toBe(200);
+      expect(routeRes.body.itemCount).toBe(2);
+    });
+  });
 });

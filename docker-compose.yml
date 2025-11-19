@@ -8,6 +8,7 @@ services:
       - NODE_ENV=production
     volumes:
       - ./docker/orchestrator.yaml:/app/config/orchestrator.yaml:ro
+      - ruleloom-db:/app/.ruleloom
     develop:
       watch:
         - path: .
@@ -20,5 +21,10 @@ services:
       - "9090:9090"
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
     depends_on:
       - orchestrator
+
+volumes:
+  ruleloom-db:
+  prometheus-data:

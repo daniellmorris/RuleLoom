@@ -5,19 +5,17 @@ import { buildClosures } from './closures.js';
 import { createLogger, type RuleLoomLogger } from 'rule-loom-lib';
 import {
   loadRunnerConfig,
-  getHttpInput,
-  getSchedulerInput,
   type RunnerConfig,
   type RunnerConfigWithMeta,
   type FlowConfig,
 } from './config.js';
 import {
-  createHttpInputApp,
   createPlaceholderHttpApp,
-  createSchedulerInput,
   type HttpInputApp,
   type RunnerScheduler,
+  type RunnerInputConfig,
 } from 'rule-loom-inputs';
+import { initializeInputs } from './inputPlugins.js';
 import { RunnerValidationError, validateRunnerConfig, type ValidationResult } from './validator.js';
 
 export interface RunnerInstance {
@@ -73,10 +71,15 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
   }
 
   const engine = await instantiateEngine(closures, config.flows, logger);
-  const httpInput = getHttpInput(config);
-  const app = httpInput
-    ? createHttpInputApp(engine, httpInput, { logger, metadata: config.metadata })
-    : createPlaceholderHttpApp(logger);
+  const events = new EventEmitter();
+  const { httpApp, scheduler, cleanup } = await initializeInputs(
+    config.inputs as RunnerInputConfig[],
+    engine,
+    logger,
+    config.metadata,
+    events,
+  );
+  const app = httpApp ?? createPlaceholderHttpApp(logger);
 
   let server: http.Server | undefined;
 
@@ -94,16 +97,6 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
     return server;
   };
 
-  const events = new EventEmitter();
-  const schedulerInput = getSchedulerInput(config);
-  const scheduler = schedulerInput
-    ? await createSchedulerInput(schedulerInput, {
-        engine,
-        logger,
-        events,
-      })
-    : undefined;
-
   const close = async () => {
     if (scheduler) {
       await scheduler.stop();
@@ -117,6 +110,7 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
       });
       server = undefined;
     }
+    await cleanup();
   };
 
   return {

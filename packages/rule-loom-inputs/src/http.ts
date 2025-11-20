@@ -2,9 +2,11 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import createError from 'http-errors';
 import morgan from 'morgan';
 import _ from 'lodash';
+import { z } from 'zod';
 import type { RuleLoomEngine, ExecutionRuntime } from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
-import type { HttpInputConfig, HttpRouteConfig, HttpInputApp } from './types.js';
+import type { HttpInputConfig, HttpRouteConfig, HttpInputApp, InputPlugin } from './types.js';
+import { registerInputPlugin } from './pluginRegistry.js';
 
 function buildInitialState(req: Request) {
   return {
@@ -72,6 +74,42 @@ export interface CreateHttpInputOptions {
   logger: RuleLoomLogger;
   metadata?: Record<string, unknown>;
 }
+
+export const httpInputSchema = z.object({
+  type: z.literal('http'),
+  id: z.string().optional(),
+  basePath: z.string().optional(),
+  bodyLimit: z.union([z.string(), z.number()]).optional(),
+  routes: z.array(
+    z.object({
+      id: z.string().optional(),
+      method: z.enum(['get', 'post', 'put', 'patch', 'delete']).optional(),
+      path: z.string().min(1),
+      flow: z.string().min(1),
+      respondWith: z
+        .object({
+          status: z.number().int().optional(),
+          headers: z.record(z.string()).optional(),
+          body: z.any().optional(),
+        })
+        .optional(),
+    }),
+  ).min(1),
+});
+
+registerInputPlugin<HttpInputConfig>({
+  type: 'http',
+  schema: httpInputSchema,
+  initialize: async (config: HttpInputConfig, { logger, engine, metadata }) => {
+    const httpInput = createHttpInputApp(engine, config, { logger, metadata });
+    return {
+      http: { app: httpInput, basePath: config.basePath ?? '/' },
+      cleanup: async () => {
+        httpInput.removeAllListeners();
+      },
+    };
+  },
+});
 
 export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions): HttpInputApp {
   const app = express();

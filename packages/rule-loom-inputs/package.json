@@ -15,6 +15,7 @@
     "express": "^4.19.2",
     "http-errors": "^2.0.0",
     "lodash": "^4.17.21",
+    "zod": "^3.23.8",
     "morgan": "^1.10.0",
     "rule-loom-engine": "file:../rule-loom-engine",
     "rule-loom-lib": "file:../rule-loom-lib"

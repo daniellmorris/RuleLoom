@@ -1,6 +1,6 @@
 # Integration Tests
 
-These tests exercise the major configuration features of TreeExe using the `tree-exe-runner` and `tree-exe-orchestrator` packages. Each feature is expressed as a YAML file under `tests/integration/configs` and verified with Vitest + Supertest.
+These tests exercise the major configuration features of RuleLoom using the `rule-loom-runner` and `rule-loom-orchestrator` packages. Each feature is expressed as a YAML file under `tests/integration/configs` and verified with Vitest + Supertest.
 
 ## Feature Matrix
 

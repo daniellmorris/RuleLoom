@@ -1,6 +1,6 @@
-# TreeExe Configuration How-To
+# RuleLoom Configuration How-To
 
-This guide walks through the YAML schema understood by `tree-exe-runner`. It is designed to be precise enough for AI tooling (or humans) to generate valid configs.
+This guide walks through the YAML schema understood by `rule-loom-runner`. It is designed to be precise enough for AI tooling (or humans) to generate valid configs.
 
 ## Top-Level Structure
 
@@ -36,7 +36,7 @@ flows:                    # required; ≥1 flow definition
     steps: [...]          # see step definitions below
 ```
 
-Inputs describe how events enter the runner. Today the HTTP input (Express server) and scheduler input (Bree jobs) are implemented in `tree-exe-inputs`; future transports like AMQP/MQTT can be added without changing the runner core. Omit the HTTP input if you only need background jobs.
+Inputs describe how events enter the runner. Today the HTTP input (Express server) and scheduler input (Bree jobs) are implemented in `rule-loom-inputs`; future transports like AMQP/MQTT can be added without changing the runner core. Omit the HTTP input if you only need background jobs.
 
 ### `type: http`
 
@@ -59,7 +59,7 @@ Placeholders for upcoming transports. They currently accept an arbitrary `option
 ## Closure Entries
 
 ### `type: core`
-Imports the default bundle from `tree-exe-core` (`core.assign`, `core.respond`, `core.log`, `core.truthy`, `core.equals`, `core.greater-than`, `core.less-than`, `core.includes`, `core.length`, `core.for-each`).
+Imports the default bundle from `rule-loom-core` (`core.assign`, `core.respond`, `core.log`, `core.truthy`, `core.equals`, `core.greater-than`, `core.less-than`, `core.includes`, `core.length`, `core.for-each`).
 
 ```yaml
 closures:
@@ -269,6 +269,6 @@ flows:
 
 ## Putting It All Together
 
-A minimal yet expressive configuration combining these features is provided at `packages/tree-exe-runner/config/example.http.yaml`. The test suite under `tests/engine.spec.ts` contains further examples you can mirror when generating configs programmatically.
+A minimal yet expressive configuration combining these features is provided at `packages/rule-loom-runner/config/example.http.yaml`. The test suite under `tests/engine.spec.ts` contains further examples you can mirror when generating configs programmatically.
 
-Feel free to extend the schema (e.g., new closure presets or input adapters) by updating `packages/tree-exe-runner/src/config.ts` and documenting the change in this guide.
+Feel free to extend the schema (e.g., new closure presets or input adapters) by updating `packages/rule-loom-runner/src/config.ts` and documenting the change in this guide.

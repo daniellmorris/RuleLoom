@@ -1,0 +1,35 @@
+{
+  "name": "rule-loom-runner",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "ruleloom-runner": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "config"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "dev": "node --loader ts-node/esm src/cli.ts"
+  },
+  "dependencies": {
+    "commander": "^11.1.0",
+    "js-yaml": "^4.1.0",
+    "lodash": "^4.17.21",
+    "rule-loom-core": "file:../rule-loom-core",
+    "rule-loom-lib": "file:../rule-loom-lib",
+    "rule-loom-engine": "file:../rule-loom-engine",
+    "rule-loom-inputs": "file:../rule-loom-inputs",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/lodash": "^4.14.202",
+    "@types/node": "^20.12.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.2"
+  }
+}

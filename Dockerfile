@@ -6,12 +6,12 @@ ENV ROLLUP_SKIP_NODEJS_NATIVE=true \
 WORKDIR /app
 
 COPY package*.json ./
-COPY packages/tree-exe-core/package*.json packages/tree-exe-core/
-COPY packages/tree-exe-engine/package*.json packages/tree-exe-engine/
-COPY packages/tree-exe-lib/package*.json packages/tree-exe-lib/
-COPY packages/tree-exe-runner/package*.json packages/tree-exe-runner/
-COPY packages/tree-exe-orchestrator/package*.json packages/tree-exe-orchestrator/
-COPY packages/tree-exe-orchestrator-ui/package*.json packages/tree-exe-orchestrator-ui/
+COPY packages/rule-loom-core/package*.json packages/rule-loom-core/
+COPY packages/rule-loom-engine/package*.json packages/rule-loom-engine/
+COPY packages/rule-loom-lib/package*.json packages/rule-loom-lib/
+COPY packages/rule-loom-runner/package*.json packages/rule-loom-runner/
+COPY packages/rule-loom-orchestrator/package*.json packages/rule-loom-orchestrator/
+COPY packages/rule-loom-orchestrator-ui/package*.json packages/rule-loom-orchestrator-ui/
 
 RUN npm install --omit=optional
 
@@ -22,9 +22,9 @@ RUN ARCH=$(uname -m) \
 
 COPY . .
 
-RUN npm run build --workspace tree-exe-orchestrator-ui
+RUN npm run build --workspace rule-loom-orchestrator-ui
 RUN npm run build --workspaces
-RUN npm run build --workspace tree-exe-orchestrator
+RUN npm run build --workspace rule-loom-orchestrator
 
 FROM node:20-bullseye-slim AS runner
 ENV ROLLUP_SKIP_NODEJS_NATIVE=true \
@@ -37,4 +37,4 @@ RUN npm prune --omit=dev
 COPY docker/orchestrator.yaml /app/config/orchestrator.yaml
 
 EXPOSE 4100
-CMD ["node", "packages/tree-exe-orchestrator/dist/cli.js", "--config", "/app/config/orchestrator.yaml", "--port", "4100"]
+CMD ["node", "packages/rule-loom-orchestrator/dist/cli.js", "--config", "/app/config/orchestrator.yaml", "--port", "4100"]

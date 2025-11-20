@@ -1,0 +1,22 @@
+{
+  "name": "rule-loom-core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21",
+    "rule-loom-engine": "file:../rule-loom-engine",
+    "rule-loom-lib": "file:../rule-loom-lib"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.14.202",
+    "typescript": "^5.4.2"
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "name": "tree-exe-monorepo",
+  "name": "rule-loom-monorepo",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,8 +8,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
-    "dev": "npm run dev --workspace tree-exe-runner",
-    "start": "npm run start --workspace tree-exe-runner",
+    "dev": "npm run dev --workspace rule-loom-runner",
+    "start": "npm run start --workspace rule-loom-runner",
     "test": "ts-node --project tsconfig.test.json tests/engine.spec.ts",
     "test:integration": "vitest run --config vitest.config.ts"
   },

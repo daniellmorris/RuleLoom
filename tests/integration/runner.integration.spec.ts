@@ -3,8 +3,8 @@ import { fileURLToPath } from 'node:url';
 import supertest from 'supertest';
 import { describe, it, expect } from 'vitest';
 
-import { createRunner } from '../../packages/tree-exe-runner/src/index.ts';
-import type { RunnerInstance } from '../../packages/tree-exe-runner/src/index.ts';
+import { createRunner } from '../../packages/rule-loom-runner/src/index.ts';
+import type { RunnerInstance } from '../../packages/rule-loom-runner/src/index.ts';
 import { FEATURES } from './features.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -21,7 +21,7 @@ async function withRunner<T>(configFile: string, testFn: (instance: RunnerInstan
   }
 }
 
-describe('TreeExe Runner configuration features', () => {
+describe('RuleLoom Runner configuration features', () => {
   it('Branching & Core Closures', async () => {
     await withRunner('branching.yaml', async (instance) => {
       const request = supertest(instance.app);

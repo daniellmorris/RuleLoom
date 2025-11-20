@@ -1,41 +1,41 @@
-# TreeExe Architecture
+# RuleLoom Architecture
 
-TreeExe is organised as a set of focused packages layered on top of each other:
+RuleLoom is organised as a set of focused packages layered on top of each other:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  tree-exe-orchestrator                  │
+│                  rule-loom-orchestrator                  │
 │        (mounts multiple runner instances per config)    │
 └─────────────────────────────────────────────────────────┘
                 ▲                       ▲
                 │                       │
 ┌───────────────────────────┐   ┌───────────────────────────┐
-│     tree-exe-inputs       │   │       External Config     │
+│     rule-loom-inputs       │   │       External Config     │
 │ (HTTP/Scheduler adapters) │   │  (YAML files referencing  │
 └──────────────▲────────────┘   │        closures/flows)    │
                │                └───────────────────────────┘
 ┌──────────────┴────────────┐
-│      tree-exe-runner      │
+│      rule-loom-runner      │
 │ (loads YAML, wires inputs)│
 └──────────────▲────────────┘
                │
 ┌──────────────┴────────────┐
-│       tree-exe-engine      │
+│       rule-loom-engine      │
 │  (closure execution core)  │
 └──────────────▲────────────┘
                │
 ┌──────────────┴────────────┐
-│  tree-exe-core / tree-exe- │
-│           lib              │
+│  rule-loom-core / rule-loom-lib  │
+│           (shared libs)        │
 └───────────────────────────┘
 ```
 
 ## Package Roles
 
-### tree-exe-lib
+### rule-loom-lib
 Shared utilities (currently a structured logger) that provide consistent interfaces for higher-level packages.
 
-### tree-exe-engine
+### rule-loom-engine
 - Registers closures (`ClosureDefinition`) and flows (`FlowDefinition`).
 - Executes steps sequentially, supporting `when` conditions, branching, and nested flow execution via `runSteps`.
 - Resolves parameter templates (`${state.foo}`, `${runtime.requestId}`), `$call` directives (closure or inline steps), and honours `functionalParams` metadata for closures that expect raw `FlowStep[]` values.
@@ -44,21 +44,21 @@ Shared utilities (currently a structured logger) that provide consistent interfa
   - `runtime`: read-only metadata (logger, request info, active engine).
   - `parameters`: per-step arguments after template resolution.
 
-### tree-exe-core
+### rule-loom-core
 Supplies reusable closures (assign/respond/log/comparisons/iterators) that follow engine conventions. Closures can declare `functionalParams` when they need raw step arrays (e.g., `core.for-each`).
 
-### tree-exe-inputs
+### rule-loom-inputs
 - Encapsulates concrete input adapters (Express HTTP server, Bree scheduler, future AMQP/MQTT bridges).
 - Each adapter exports factories so higher layers can opt-in without pulling heavy dependencies directly.
 - Emits lifecycle events (e.g., scheduler job state transitions) consumed by the orchestrator for metrics.
 
-### tree-exe-runner
-- Parses YAML configs with Zod, builds closure lists (core/module/flow), and instantiates the selected inputs from `tree-exe-inputs`.
+### rule-loom-runner
+- Parses YAML configs with Zod, builds closure lists (core/module/flow), and instantiates the selected inputs from `rule-loom-inputs`.
 - HTTP adapters inject the request into `state.request` and pass route metadata through `runtime`.
 - Provides CLI/programmatic APIs for running a single configuration.
 - Starts scheduler inputs when declared, emitting events for observability.
 
-### tree-exe-orchestrator
+### rule-loom-orchestrator
 - Loads multiple runner configs, mounts their Express apps under configurable base paths.
 - Exposes a combined health endpoint and shared logging.
 
@@ -84,7 +84,7 @@ Supplies reusable closures (assign/respond/log/comparisons/iterators) that follo
 
 ## Extensibility Guidelines
 
-- To add new reusable closures, export factories from `tree-exe-core` and register them in `createCoreClosures()`.
+- To add new reusable closures, export factories from `rule-loom-core` and register them in `createCoreClosures()`.
 - When creating custom closures in applications, declare `functionalParams` if the closure should handle raw step arrays (iterators, retries, transactions, etc.).
 - Enhance the engine’s resolution logic in `resolveDynamicValues`, `prepareParameters`, or `$call` handlers when introducing new parameter conventions.
-- Use the runner schema (`packages/tree-exe-runner/src/config.ts`) as the canonical place to describe YAML structure; any new closure metadata should be reflected there for validation.
+- Use the runner schema (`packages/rule-loom-runner/src/config.ts`) as the canonical place to describe YAML structure; any new closure metadata should be reflected there for validation.

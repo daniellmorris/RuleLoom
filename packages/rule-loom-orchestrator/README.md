@@ -8,6 +8,7 @@
 - Dynamic runner management API (`/api`) for create/list/delete operations.
 - Health probe at `/__ruleloom/health` plus per-runner health endpoints.
 - Scheduler awareness (surface configured jobs and last run state).
+- SQLite persistence via Prisma so API-created runners survive orchestrator restarts.
 
 ## CLI Usage
 
@@ -19,6 +20,18 @@ Options:
 
 - `--config, -c` – path to the orchestrator YAML (defaults to `orchestrator.yaml`).
 - `--port, -p` – port to listen on (defaults to `$PORT` env var or `8080`).
+
+## Persistence & Database
+
+- Runner metadata lives in a SQLite database managed through Prisma. By default the database file is `.ruleloom/orchestrator.db` relative to the current working directory.
+- Override the location with `RULE_LOOM_DATABASE_URL`, e.g. `RULE_LOOM_DATABASE_URL="file:/var/data/ruleloom.db"`.
+- Apply schema changes after pulling updates with:
+
+```bash
+npx prisma migrate deploy --schema prisma/schema.prisma
+```
+
+The orchestrator will automatically create the directory if it does not exist, but persisting the `.ruleloom/` folder (or your custom path) is required for stateful deployments.
 
 ## Configuration Structure
 
@@ -63,3 +76,4 @@ await close();
 - Depends on `rule-loom-runner` and `rule-loom-lib`; ensure both are built first (handled by workspace references).
 - Build with `npm run build --workspace rule-loom-orchestrator`.
 - Sample configuration lives at `config/example.orchestrator.yaml`.
+- Run `npx prisma migrate dev --schema prisma/schema.prisma` when you change the database schema locally.

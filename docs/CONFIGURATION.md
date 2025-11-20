@@ -2,6 +2,8 @@
 
 This guide walks through the YAML schema understood by `rule-loom-runner`. It is designed to be precise enough for AI tooling (or humans) to generate valid configs.
 
+> **Orchestrator persistence:** When these configs are loaded via `rule-loom-orchestrator`, the runner definitions are also stored in SQLite through Prisma. Set `RULE_LOOM_DATABASE_URL` to move the database file (defaults to `.ruleloom/orchestrator.db`) and run `npx prisma migrate deploy --schema prisma/schema.prisma` whenever the schema changes.
+
 ## Top-Level Structure
 
 ```yaml

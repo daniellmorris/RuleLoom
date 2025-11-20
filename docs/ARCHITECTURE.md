@@ -61,6 +61,7 @@ Supplies reusable closures (assign/respond/log/comparisons/iterators) that follo
 ### rule-loom-orchestrator
 - Loads multiple runner configs, mounts their Express apps under configurable base paths.
 - Exposes a combined health endpoint and shared logging.
+- Persists runner definitions in SQLite via Prisma so API mutations survive orchestrator restarts. Configure the storage location with the `RULE_LOOM_DATABASE_URL` environment variable.
 
 ## Execution Flow
 

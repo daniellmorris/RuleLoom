@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import createHttpError from 'http-errors';
 import { getHttpInput, getSchedulerInput } from 'rule-loom-runner';
-import { RunnerRegistry } from '../../registry.js';
+import { RunnerRegistry, type RunnerRecord } from '../../registry.js';
+import { RunnerStore } from '../../persistence/runnerStore.js';
 
 function serializeRoutes(record: ReturnType<RunnerRegistry['get']>): Array<{ method: string; path: string; flow: string }> {
   const httpInput = record ? getHttpInput(record.instance.config) : undefined;
@@ -127,7 +128,24 @@ export function getRunner(registry: RunnerRegistry) {
   };
 }
 
-export function createRunnerController(registry: RunnerRegistry) {
+function buildPersistencePayload(record: RunnerRecord, inlineContent?: string | null) {
+  return {
+    id: record.id,
+    basePath: record.basePath,
+    configPath: record.configSource === 'path' ? record.configPath : null,
+    configContent: record.configSource === 'inline' ? inlineContent ?? null : null,
+  };
+}
+
+async function readInlineConfig(registry: RunnerRegistry, record?: RunnerRecord): Promise<string | undefined> {
+  if (!record || record.configSource !== 'inline') {
+    return undefined;
+  }
+  const snapshot = await registry.getRunnerConfig(record.id);
+  return snapshot.content;
+}
+
+export function createRunnerController(registry: RunnerRegistry, store: RunnerStore) {
   return async (req: Request, res: Response) => {
     const { configPath, configContent, basePath, id } = req.body as {
       configPath?: string;
@@ -144,11 +162,19 @@ export function createRunnerController(registry: RunnerRegistry) {
       configContent,
       basePath: basePath?.trim(),
     });
+
+    try {
+      await store.create(buildPersistencePayload(record, configContent));
+    } catch (error) {
+      await registry.removeRunner(record.id).catch(() => undefined);
+      throw createHttpError(500, 'Failed to persist runner', { cause: error });
+    }
+
     res.status(201).json(summarize(record));
   };
 }
 
-export function updateRunnerController(registry: RunnerRegistry) {
+export function updateRunnerController(registry: RunnerRegistry, store: RunnerStore) {
   return async (req: Request, res: Response) => {
     const { configPath, configContent, basePath } = req.body as {
       configPath?: string;
@@ -158,18 +184,65 @@ export function updateRunnerController(registry: RunnerRegistry) {
     if (!configPath && !configContent && basePath === undefined) {
       throw createHttpError(400, 'configPath, configContent, or basePath is required');
     }
+    const existing = registry.get(req.params.id);
+    if (!existing) {
+      throw createHttpError(404, 'Runner not found');
+    }
+    const previousInline = await readInlineConfig(registry, existing);
+
     const record = await registry.updateRunner(req.params.id, {
       configPath: configPath?.trim(),
       configContent,
       basePath: basePath?.trim(),
     });
+
+    try {
+      const inlineContent =
+        record.configSource === 'inline'
+          ? configContent ?? (await readInlineConfig(registry, record)) ?? null
+          : null;
+      await store.update(record.id, buildPersistencePayload(record, inlineContent));
+    } catch (error) {
+      await registry.removeRunner(record.id).catch(() => undefined);
+      await registry
+        .addRunner({
+          id: existing.id,
+          configPath: existing.configSource === 'path' ? existing.configPath : undefined,
+          configContent: previousInline,
+          basePath: existing.basePath,
+        })
+        .catch(() => undefined);
+      throw createHttpError(500, 'Failed to persist runner update', { cause: error });
+    }
+
     res.json(summarize(record));
   };
 }
 
-export function deleteRunner(registry: RunnerRegistry) {
+export function deleteRunner(registry: RunnerRegistry, store: RunnerStore) {
   return async (req: Request, res: Response) => {
+    const existing = registry.get(req.params.id);
+    if (!existing) {
+      throw createHttpError(404, 'Runner not found');
+    }
+    const inlineContent = await readInlineConfig(registry, existing);
+
     await registry.removeRunner(req.params.id);
+
+    try {
+      await store.delete(req.params.id);
+    } catch (error) {
+      await registry
+        .addRunner({
+          id: existing.id,
+          configPath: existing.configSource === 'path' ? existing.configPath : undefined,
+          configContent: inlineContent,
+          basePath: existing.basePath,
+        })
+        .catch(() => undefined);
+      throw createHttpError(500, 'Failed to delete runner from persistence', { cause: error });
+    }
+
     res.status(204).end();
   };
 }

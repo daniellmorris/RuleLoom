@@ -1,4 +1,6 @@
 import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import supertest from 'supertest';
 import { describe, it, expect } from 'vitest';
@@ -9,13 +11,22 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CONFIG_DIR = path.resolve(__dirname, 'configs');
 
-async function withOrchestrator(configFile: string, testFn: (app: import('express').Express, close: () => Promise<void>) => Promise<void>) {
+async function withOrchestrator(
+  configFile: string,
+  testFn: (app: import('express').Express, close: () => Promise<void>) => Promise<void>,
+) {
   const configPath = path.join(CONFIG_DIR, configFile);
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ruleloom-db-'));
+  const dbPath = path.join(tempDir, 'orchestrator.db');
+  const previousUrl = process.env.RULE_LOOM_DATABASE_URL;
+  process.env.RULE_LOOM_DATABASE_URL = `file:${dbPath}`;
   const instance = await createOrchestrator(configPath);
   try {
     await testFn(instance.app, instance.close);
   } finally {
     await instance.close();
+    process.env.RULE_LOOM_DATABASE_URL = previousUrl;
+    await fs.rm(tempDir, { recursive: true, force: true });
   }
 }
 

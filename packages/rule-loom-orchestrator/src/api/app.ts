@@ -7,6 +7,7 @@ import swaggerUi from 'swagger-ui-express';
 import { middleware as openApiMiddleware } from 'express-openapi-validator';
 import SwaggerParser from '@apidevtools/swagger-parser';
 import { RunnerRegistry } from '../registry.js';
+import { RunnerStore } from '../persistence/runnerStore.js';
 import { createRouter } from './router.js';
 
 export interface OrchestratorApiOptions {
@@ -16,6 +17,7 @@ export interface OrchestratorApiOptions {
 
 export async function createOrchestratorApi(
   registry: RunnerRegistry,
+  store: RunnerStore,
   options: OrchestratorApiOptions = {},
 ): Promise<express.Router> {
   const router = express.Router();
@@ -37,7 +39,7 @@ export async function createOrchestratorApi(
     }),
   );
 
-  router.use(createRouter(registry));
+  router.use(createRouter(registry, store));
 
   router.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (err && err.status) {

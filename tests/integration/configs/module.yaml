@@ -6,7 +6,8 @@ inputs:
         path: /module
         flow: apply-discount
 closures:
-  - type: core
+  - type: bundle
+    preset: core
   - type: module
     module: ../modules/custom-closures.js
 flows:

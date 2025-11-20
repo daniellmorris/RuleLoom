@@ -8,7 +8,8 @@ inputs:
         path: /orders
         flow: process-order
 closures:
-  - type: core
+  - type: bundle
+    preset: core
 flows:
   - name: process-order
     steps:

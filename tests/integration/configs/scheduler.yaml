@@ -15,7 +15,8 @@ inputs:
         runtime:
           info: "from scheduler"
 closures:
-  - type: core
+  - type: bundle
+    preset: core
 flows:
   - name: status
     steps:

@@ -1,6 +1,6 @@
 import _ from 'lodash';
 import RuleLoomEngine, { resolveDynamicValues, type ClosureDefinition, type ClosureContext } from 'rule-loom-engine';
-import { createCoreClosures } from 'rule-loom-core';
+import { createBundleClosures } from 'rule-loom-core';
 import type { RuleLoomLogger } from 'rule-loom-lib';
 import type { ClosureConfig } from './config.js';
 import { importClosureModule } from './config.js';
@@ -129,8 +129,8 @@ export async function buildClosures(
     } else if (entry.type === 'module') {
       const moduleClosures = await buildModuleClosures(entry, baseDir, logger);
       closures.push(...moduleClosures);
-    } else if (entry.type === 'core') {
-      closures.push(...createCoreClosures());
+    } else if (entry.type === 'bundle') {
+      closures.push(...createBundleClosures(entry.preset, entry.options));
     } else if (entry.type === 'flow') {
       closures.push({
         name: entry.name,

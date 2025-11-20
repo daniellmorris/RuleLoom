@@ -6,7 +6,8 @@ inputs:
         path: /items
         flow: list-items
 closures:
-  - type: core
+  - type: bundle
+    preset: core
 flows:
   - name: list-items
     steps:

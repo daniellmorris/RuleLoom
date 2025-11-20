@@ -8,7 +8,8 @@ inputs:
         path: /echo
         flow: echo-request
 closures:
-  - type: core
+  - type: bundle
+    preset: core
   - type: flow
     name: capture-request
     steps:

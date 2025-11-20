@@ -31,7 +31,8 @@ inputs:                   # optional; defaults to []
   - type: mqtt | amqp     # reserved for future transports
     options: {}           # arbitrary settings for custom adapters
 closures:                 # optional; defaults to []
-  - type: core | template | module | flow | core
+  - type: bundle | template | module | flow
+    # e.g. preset: core
 flows:                    # required; ≥1 flow definition
   - name: flow-name
     description: optional
@@ -54,19 +55,47 @@ Inputs describe how events enter the runner. Today the HTTP input (Express serve
 
 Described in detail below; groups Bree job declarations.
 
+> **Example:** `examples/configs/home-assistant-toggle.yaml` combines the scheduler input with the built-in `type: bundle` preset `http` and an inline `type: flow` closure to toggle a Home Assistant switch every 15 minutes via REST.
+
 ### `type: mqtt` / `type: amqp`
 
 Placeholders for upcoming transports. They currently accept an arbitrary `options` object so tooling can capture intent even before the adapter exists.
 
 ## Closure Entries
 
-### `type: core`
-Imports the default bundle from `rule-loom-core` (`core.assign`, `core.respond`, `core.log`, `core.truthy`, `core.equals`, `core.greater-than`, `core.less-than`, `core.includes`, `core.length`, `core.for-each`).
+### `type: bundle`
+Registers one of the built-in closure bundles shipped with `rule-loom-core`. Specify a `preset` (for example `core` or `http`) and optional `options` that the bundle understands.
 
 ```yaml
 closures:
-  - type: core
+  - type: bundle
+    preset: core
 ```
+
+To add the HTTP client bundle:
+
+```yaml
+closures:
+  - type: bundle
+    preset: http
+    options:
+      baseUrl: https://homeassistant.local:8123
+      headers:
+        Authorization: "Bearer YOUR_LONG_LIVED_ACCESS_TOKEN"
+```
+
+The `http` preset registers the `http.request` closure, which you can invoke inside any flow:
+
+```yaml
+- closure: http.request
+  parameters:
+    method: POST
+    url: /api/services/switch/toggle
+    body:
+      entity_id: switch.lamp
+```
+
+Additional presets (e.g., `amqp`, `mqtt`) can be introduced without changing the schema—only the bundle registry in `rule-loom-core` needs to grow.
 
 ### `type: template`
 Creates a closure from predefined templates.

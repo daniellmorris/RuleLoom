@@ -40,8 +40,9 @@ export class RunnerStore {
 
   async findByConfigPath(configPath: string): Promise<RunnerPersistenceRecord | null> {
     await this.ensureSchema();
-    return this.prisma.runnerConfig.findUnique({
+    return this.prisma.runnerConfig.findFirst({
       where: { configPath },
+      orderBy: { createdAt: 'asc' },
     });
   }
 
@@ -94,7 +95,7 @@ export class RunnerStore {
       );
     `);
     await this.prisma.$executeRawUnsafe(`
-      CREATE UNIQUE INDEX IF NOT EXISTS "RunnerConfig_configPath_key" ON "RunnerConfig"("configPath");
+      DROP INDEX IF EXISTS "RunnerConfig_configPath_key";
     `);
     await this.prisma.$executeRawUnsafe(`
       CREATE UNIQUE INDEX IF NOT EXISTS "RunnerConfig_basePath_key" ON "RunnerConfig"("basePath");

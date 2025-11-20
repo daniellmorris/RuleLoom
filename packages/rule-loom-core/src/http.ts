@@ -186,6 +186,24 @@ export function createHttpClosures(options: HttpClosureOptions = {}): ClosureDef
           }
         }
       },
+      signature: {
+        description: closureDescription,
+        parameters: [
+          { name: 'method', type: 'string', description: 'HTTP method (GET/POST/etc.).' },
+          {
+            name: 'url',
+            type: 'string',
+            description: 'Absolute URL or path relative to baseUrl.',
+            required: !options.url,
+          },
+          { name: 'baseUrl', type: 'string', description: 'Override base URL for this invocation.' },
+          { name: 'headers', type: 'object', description: 'Additional request headers.' },
+          { name: 'body', type: 'any', description: 'JSON-serializable payload or raw string.' },
+          { name: 'timeoutMs', type: 'number', description: 'Request timeout in milliseconds.' },
+        ],
+        allowAdditionalParameters: false,
+        returns: { type: 'object', description: 'Response { status, headers, body }.' },
+      },
     },
   ];
 }

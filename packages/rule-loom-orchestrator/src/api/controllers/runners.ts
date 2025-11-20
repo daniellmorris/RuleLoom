@@ -1,6 +1,9 @@
 import type { Request, Response } from 'express';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import createHttpError from 'http-errors';
-import { getHttpInput, getSchedulerInput } from 'rule-loom-runner';
+import { getHttpInput, getSchedulerInput, RunnerValidationError, validateConfig } from 'rule-loom-runner';
 import { RunnerRegistry, type RunnerRecord } from '../../registry.js';
 import { RunnerStore } from '../../persistence/runnerStore.js';
 
@@ -158,12 +161,20 @@ export function createRunnerController(registry: RunnerRegistry, store: RunnerSt
     if (!configPath && !configContent) {
       throw createHttpError(400, 'configPath or configContent is required');
     }
-    const record = await registry.addRunner({
-      id,
-      configPath: configPath?.trim(),
-      configContent,
-      basePath: basePath?.trim(),
-    });
+    let record: RunnerRecord;
+    try {
+      record = await registry.addRunner({
+        id,
+        configPath: configPath?.trim(),
+        configContent,
+        basePath: basePath?.trim(),
+      });
+    } catch (error) {
+      if (error instanceof RunnerValidationError) {
+        throw createHttpError(400, error.message, { errors: error.result.issues });
+      }
+      throw error;
+    }
 
     try {
       await store.create(buildPersistencePayload(record, configContent));
@@ -192,11 +203,19 @@ export function updateRunnerController(registry: RunnerRegistry, store: RunnerSt
     }
     const previousInline = await readInlineConfig(registry, existing);
 
-    const record = await registry.updateRunner(req.params.id, {
-      configPath: configPath?.trim(),
-      configContent,
-      basePath: basePath?.trim(),
-    });
+    let record: RunnerRecord;
+    try {
+      record = await registry.updateRunner(req.params.id, {
+        configPath: configPath?.trim(),
+        configContent,
+        basePath: basePath?.trim(),
+      });
+    } catch (error) {
+      if (error instanceof RunnerValidationError) {
+        throw createHttpError(400, error.message, { errors: error.result.issues });
+      }
+      throw error;
+    }
 
     try {
       const inlineContent =
@@ -254,6 +273,39 @@ export function getRunnerConfigController(registry: RunnerRegistry) {
     const result = await registry.getRunnerConfig(req.params.id);
     res.json({ id: req.params.id, source: result.source, config: result.content });
   };
+}
+
+export function validateRunnerConfigController() {
+  return async (req: Request, res: Response) => {
+    const { configPath, configContent } = req.body as { configPath?: string; configContent?: string };
+    const artifact = await materializeConfigSource({ configPath: configPath?.trim(), configContent });
+    try {
+      const result = await validateConfig(artifact.path);
+      res.json(result);
+    } finally {
+      await artifact.cleanup();
+    }
+  };
+}
+
+async function materializeConfigSource(options: { configPath?: string | null; configContent?: string | null }) {
+  if (options.configContent) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ruleloom-validate-'));
+    const filePath = path.join(dir, 'runner.yaml');
+    await fs.writeFile(filePath, options.configContent, 'utf8');
+    return {
+      path: filePath,
+      cleanup: () => fs.rm(dir, { recursive: true, force: true }).catch(() => undefined),
+    };
+  }
+  if (options.configPath) {
+    const resolvedPath = path.isAbsolute(options.configPath) ? options.configPath : path.resolve(options.configPath);
+    return {
+      path: resolvedPath,
+      cleanup: () => Promise.resolve(),
+    };
+  }
+  throw createHttpError(400, 'configPath or configContent is required');
 }
 
 export function getRunnerRoutes(registry: RunnerRegistry) {

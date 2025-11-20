@@ -63,6 +63,8 @@ Placeholders for upcoming transports. They currently accept an arbitrary `option
 
 ## Closure Entries
 
+Every closure must declare a schema (aka signature) describing its parameters and outputs. Built-in bundles (`core`, `http`, etc.) include this metadata automatically. Custom modules should return closures with a `signature` property so the runner can validate flow steps before execution. Use `npm run validate -- --config path/to/config.yaml` (or `ruleloom-runner validate -c ...`) to lint a config offline; the orchestrator also exposes `POST /api/runners/validate` for the same check.
+
 ### `type: bundle`
 Registers one of the built-in closure bundles shipped with `rule-loom-core`. Specify a `preset` (for example `core` or `http`) and optional `options` that the bundle understands.
 

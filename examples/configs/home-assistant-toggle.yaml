@@ -7,27 +7,34 @@ inputs:
     jobs:
       - name: toggle-ha-switch
         flow: toggle-ha-switch
-        interval: "15m"
+        interval: "1s"
         runtime:
-          targetEntity: switch.plant_light
+          targetEntity: switch.third_reality_inc_3rsp019bz_2
 
 closures:
   - type: bundle
+    preset: core
+  - type: bundle
     preset: http
     options:
-      baseUrl: "https://homeassistant.local:8123"
+      baseUrl: "http://127.0.0.1:8123"
       headers:
-        Authorization: "Bearer YOUR_LONG_LIVED_ACCESS_TOKEN"
+        Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo"
   - type: flow
     name: ha.toggle-switch
     description: Toggle a Home Assistant switch via REST API.
     steps:
       - closure: http.request
+        assign: lastHaResponse
         parameters:
           method: POST
           url: "/api/services/${parameters.domain}/${parameters.service}"
           body:
             entity_id: "${parameters.entityId}"
+      - closure: core.log
+        parameters:
+          level: info
+          message: "HA toggle status ${state.lastHaResponse.status}: ${state.lastHaResponse.body}"
 
 flows:
   - name: toggle-ha-switch
@@ -36,4 +43,4 @@ flows:
         parameters:
           domain: switch
           service: toggle
-          entityId: "${runtime.scheduler.targetEntity}"
+          entityId: "${runtime.targetEntity}"

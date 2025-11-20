@@ -11,6 +11,7 @@ import {
   getRunnerHealth,
   updateRunnerController,
   getRunnerConfigController,
+  validateRunnerConfigController,
 } from './controllers/runners.js';
 
 export function createRouter(registry: RunnerRegistry, store: RunnerStore): express.Router {
@@ -18,6 +19,7 @@ export function createRouter(registry: RunnerRegistry, store: RunnerStore): expr
 
   router.get('/runners', listRunners(registry));
   router.post('/runners', createRunnerController(registry, store));
+  router.post('/runners/validate', validateRunnerConfigController());
   router.get('/runners/:id', getRunner(registry));
   router.put('/runners/:id', updateRunnerController(registry, store));
   router.delete('/runners/:id', deleteRunner(registry, store));

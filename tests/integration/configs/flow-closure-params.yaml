@@ -1,0 +1,24 @@
+version: 1
+inputs:
+  - type: http
+    routes:
+      - method: post
+        path: /flow-params
+        flow: invoke-flow-closure
+closures:
+  - type: bundle
+    preset: core
+  - type: flow
+    name: echo-message
+    steps:
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            echoed: "${parameters.message}"
+flows:
+  - name: invoke-flow-closure
+    steps:
+      - closure: echo-message
+        parameters:
+          message: "${request.body.message}"

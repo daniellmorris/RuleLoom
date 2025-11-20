@@ -28,6 +28,16 @@ export function coreAssignClosure(): ClosureDefinition {
 
       return _.get(state, target);
     },
+    signature: {
+      description: 'Assigns a value from parameters/state/runtime into state at the provided path.',
+      parameters: [
+        { name: 'target', type: 'string', required: true, description: 'Dot-notation path in state to write.' },
+        { name: 'value', type: 'any', description: 'Value or template expression to assign.' },
+        { name: 'merge', type: 'boolean', description: 'Merge plain objects instead of replacing the existing value.' },
+      ],
+      returns: { type: 'any', description: 'The value stored at the target path.' },
+      mutates: ['state'],
+    },
   };
 }
 
@@ -43,6 +53,16 @@ export function coreRespondClosure(): ClosureDefinition {
       const response = { status, headers, body };
       _.set(state, 'response', response);
       return response;
+    },
+    signature: {
+      description: 'Sets state.response so HTTP inputs send a response downstream.',
+      parameters: [
+        { name: 'status', type: 'number', description: 'HTTP status code.', allowDynamicValue: true },
+        { name: 'headers', type: 'object', description: 'Map of response headers.' },
+        { name: 'body', type: 'any', description: 'Response payload (object/string/etc.).' },
+      ],
+      returns: { type: 'object', description: 'Response descriptor containing status, headers, and body.' },
+      mutates: ['state.response'],
     },
   };
 }
@@ -60,6 +80,14 @@ export function coreLogClosure(): ClosureDefinition {
       logFn(message, { state: context.state, runtime: context.runtime });
       return message;
     },
+    signature: {
+      description: 'Logs a message using the configured logger.',
+      parameters: [
+        { name: 'level', type: 'string', description: 'Log level (trace/debug/info/warn/error/fatal).' },
+        { name: 'message', type: 'string', required: true, description: 'Message template to log.' },
+      ],
+      returns: { type: 'string', description: 'The message that was logged.' },
+    },
   };
 }
 
@@ -69,6 +97,11 @@ export function coreTruthyClosure(): ClosureDefinition {
     handler: async (_state, context) => {
       const value = context.parameters?.value;
       return Boolean(value);
+    },
+    signature: {
+      description: 'Returns true when the provided value is truthy.',
+      parameters: [{ name: 'value', type: 'any', required: true }],
+      returns: { type: 'boolean', description: 'Whether the value is truthy.' },
     },
   };
 }
@@ -81,6 +114,14 @@ export function coreEqualsClosure(): ClosureDefinition {
       const right = context.parameters?.right;
       return _.isEqual(left, right);
     },
+    signature: {
+      description: 'Performs a deep equality comparison between `left` and `right`.',
+      parameters: [
+        { name: 'left', type: 'any', required: true },
+        { name: 'right', type: 'any', required: true },
+      ],
+      returns: { type: 'boolean' },
+    },
   };
 }
 
@@ -92,6 +133,14 @@ export function coreGreaterThanClosure(): ClosureDefinition {
       const right = Number(context.parameters?.right);
       return left > right;
     },
+    signature: {
+      description: 'Compares whether `left` is greater than `right` after numeric coercion.',
+      parameters: [
+        { name: 'left', type: 'any', required: true },
+        { name: 'right', type: 'any', required: true },
+      ],
+      returns: { type: 'boolean' },
+    },
   };
 }
 
@@ -102,6 +151,14 @@ export function coreLessThanClosure(): ClosureDefinition {
       const left = Number(context.parameters?.left);
       const right = Number(context.parameters?.right);
       return left < right;
+    },
+    signature: {
+      description: 'Compares whether `left` is less than `right` after numeric coercion.',
+      parameters: [
+        { name: 'left', type: 'any', required: true },
+        { name: 'right', type: 'any', required: true },
+      ],
+      returns: { type: 'boolean' },
     },
   };
 }
@@ -123,6 +180,14 @@ export function coreIncludesClosure(): ClosureDefinition {
       }
       return false;
     },
+    signature: {
+      description: 'Checks if an item exists inside an array, string, or object values.',
+      parameters: [
+        { name: 'collection', type: 'any', required: true },
+        { name: 'value', type: 'any', required: true },
+      ],
+      returns: { type: 'boolean' },
+    },
   };
 }
 
@@ -139,6 +204,15 @@ export function coreLengthClosure(): ClosureDefinition {
         return Object.keys(value).length;
       }
       return 0;
+    },
+    signature: {
+      description: 'Calculates the length of an array/string/object.',
+      parameters: [
+        { name: 'target', type: 'string', description: 'State path to read. If omitted, use `value`.' },
+        { name: 'value', type: 'any', description: 'Literal collection to measure.' },
+      ],
+      allowAdditionalParameters: false,
+      returns: { type: 'number' },
     },
   };
 }
@@ -169,6 +243,15 @@ export function coreForEachClosure(): ClosureDefinition {
       delete state.currentItem;
       delete state.currentIndex;
       return state;
+    },
+    signature: {
+      description: 'Iterates over each entry in `collection` and executes nested steps.',
+      parameters: [
+        { name: 'collection', type: 'any', required: true, description: 'Array to iterate over.' },
+        { name: 'steps', type: 'flowSteps', required: true, description: 'Inline steps to execute for each item.' },
+      ],
+      returns: { type: 'any', description: 'The mutated state after iteration.' },
+      mutates: ['state.currentItem', 'state.currentIndex'],
     },
   };
 }

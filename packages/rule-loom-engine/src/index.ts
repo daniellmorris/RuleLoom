@@ -15,12 +15,38 @@ export type ClosureHandler = (
   context: ClosureContext,
 ) => Promise<unknown> | unknown;
 
+export type ClosureParameterType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'any' | 'flowSteps';
+
+export interface ClosureParameterDefinition {
+  name: string;
+  type: ClosureParameterType;
+  description?: string;
+  required?: boolean;
+  allowDynamicValue?: boolean;
+  defaultValue?: unknown;
+}
+
+export interface ClosureReturnDefinition {
+  type: ClosureParameterType | ClosureParameterType[];
+  description?: string;
+}
+
+export interface ClosureSignature {
+  description?: string;
+  parameters?: ClosureParameterDefinition[];
+  allowAdditionalParameters?: boolean;
+  returns?: ClosureReturnDefinition;
+  mutates?: string[];
+  notes?: string;
+}
+
 export interface ClosureDefinition {
   name: string;
   handler: ClosureHandler;
   description?: string;
   metadata?: Record<string, unknown>;
   functionalParams?: Array<{ name: string; mode?: 'single' | 'array' }>;
+  signature?: ClosureSignature;
 }
 
 export interface ConditionDefinition {
@@ -75,6 +101,7 @@ export interface ExecutionRuntime {
     error?: (...args: unknown[]) => void;
   };
   engine?: RuleLoomEngine;
+  parameters?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -146,11 +173,12 @@ export class RuleLoomEngine {
     steps: FlowStep[],
     state: Record<string, unknown>,
     runtime: ExecutionRuntime,
+    inheritedParameters?: Record<string, unknown>,
   ): Promise<unknown> {
     let result: unknown;
     for (const step of steps) {
       if (this.isBranchStep(step)) {
-        result = await this.executeBranch(step, state, runtime);
+        result = await this.executeBranch(step, state, runtime, inheritedParameters);
         continue;
       }
 
@@ -158,7 +186,7 @@ export class RuleLoomEngine {
         continue;
       }
 
-      result = await this.invokeStep(step, state, runtime);
+      result = await this.invokeStep(step, state, runtime, inheritedParameters);
     }
     return result;
   }
@@ -172,16 +200,17 @@ export class RuleLoomEngine {
     step: FlowBranchStep,
     state: Record<string, unknown>,
     runtime: ExecutionRuntime,
+    inheritedParameters?: Record<string, unknown>,
   ): Promise<unknown> {
     for (const branchCase of step.cases) {
       const shouldRun = await this.evaluateConditions(branchCase.when, state, runtime);
       if (shouldRun) {
-        return this.runSteps(branchCase.steps, state, runtime);
+        return this.runSteps(branchCase.steps, state, runtime, inheritedParameters);
       }
     }
 
     if (step.otherwise) {
-      return this.runSteps(step.otherwise, state, runtime);
+      return this.runSteps(step.otherwise, state, runtime, inheritedParameters);
     }
 
     return undefined;
@@ -236,13 +265,18 @@ export class RuleLoomEngine {
     step: FlowInvokeStep,
     state: Record<string, unknown>,
     runtime: ExecutionRuntime,
+    inheritedParameters?: Record<string, unknown>,
   ): Promise<unknown> {
     const closure = this.closures.get(step.closure);
     if (!closure) {
       throw new Error(`Closure "${step.closure}" is not registered.`);
     }
 
-    const resolvedParameters = await this.prepareParameters(closure, step.parameters, state, runtime);
+    const parameterSeed = inheritedParameters
+      ? { ...(inheritedParameters ?? {}), ...(step.parameters ?? {}) }
+      : step.parameters;
+
+    const resolvedParameters = await this.prepareParameters(closure, parameterSeed, state, runtime);
 
     const context: ClosureContext = {
       parameters: resolvedParameters,

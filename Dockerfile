@@ -25,6 +25,7 @@ COPY . .
 
 RUN mkdir -p .ruleloom
 RUN npx prisma migrate deploy --schema prisma/schema.prisma
+RUN npx prisma generate --schema prisma/schema.prisma
 
 RUN npm run build --workspace rule-loom-orchestrator-ui
 RUN npm run build --workspaces

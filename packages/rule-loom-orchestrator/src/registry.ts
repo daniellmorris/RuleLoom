@@ -250,52 +250,74 @@ export class RunnerRegistry {
   }
 
   createDispatcher(apiPrefix = '/api'): express.RequestHandler {
+    const dispatchToRecord = (
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction,
+      record: RunnerRecord,
+      originalUrl: string,
+    ): boolean => {
+      const basePath = record.basePath;
+
+      if (basePath !== '/' && !originalUrl.startsWith(basePath)) {
+        return false;
+      }
+      if (basePath === '/' && originalUrl.startsWith(apiPrefix)) {
+        return false;
+      }
+
+      if (basePath === '/' || originalUrl === basePath || originalUrl.startsWith(`${basePath}/`)) {
+        const stripped = basePath === '/' ? originalUrl : originalUrl.slice(basePath.length) || '/';
+        req.url = stripped;
+        const restore = () => {
+          req.url = originalUrl;
+        };
+        res.on('finish', restore);
+        res.on('close', restore);
+        const method = req.method ?? 'GET';
+        const start = process.hrtime.bigint();
+        let finished = false;
+        const finalize = () => {
+          if (finished) return;
+          finished = true;
+          const durationSeconds = Number(process.hrtime.bigint() - start) / 1_000_000_000;
+          this.httpRequestHistogram.observe(
+            { runner: record.id, method: method.toUpperCase(), status: String(res.statusCode) },
+            durationSeconds,
+          );
+          res.off('finish', finalize);
+          res.off('close', finalize);
+        };
+        res.on('finish', finalize);
+        res.on('close', finalize);
+        record.instance.app(req, res, (err?: any) => {
+          finalize();
+          restore();
+          res.off('finish', restore);
+          res.off('close', restore);
+          if (err) return next(err);
+          return next();
+        });
+        return true;
+      }
+
+      return false;
+    };
+
     return (req, res, next) => {
+      const originalUrl = req.url;
       for (const record of this.records.values()) {
-        const basePath = record.basePath;
-        const originalUrl = req.url;
-
-        if (basePath !== '/' && !originalUrl.startsWith(basePath)) {
+        if (record.basePath === '/') {
           continue;
         }
-        if (basePath === '/' && originalUrl.startsWith(apiPrefix)) {
-          continue;
-        }
-
-        if (basePath === '/' || originalUrl === basePath || originalUrl.startsWith(`${basePath}/`)) {
-          const stripped = basePath === '/' ? originalUrl : originalUrl.slice(basePath.length) || '/';
-          req.url = stripped;
-          const restore = () => {
-            req.url = originalUrl;
-          };
-          res.on('finish', restore);
-          res.on('close', restore);
-          const method = req.method ?? 'GET';
-          const start = process.hrtime.bigint();
-          let finished = false;
-          const finalize = () => {
-            if (finished) return;
-            finished = true;
-            const durationSeconds = Number(process.hrtime.bigint() - start) / 1_000_000_000;
-            this.httpRequestHistogram.observe(
-              { runner: record.id, method: method.toUpperCase(), status: String(res.statusCode) },
-              durationSeconds,
-            );
-            res.off('finish', finalize);
-            res.off('close', finalize);
-          };
-          res.on('finish', finalize);
-          res.on('close', finalize);
-          record.instance.app(req, res, (err?: any) => {
-            finalize();
-            restore();
-            res.off('finish', restore);
-            res.off('close', restore);
-            if (err) return next(err);
-            return next();
-          });
+        if (dispatchToRecord(req, res, next, record, originalUrl)) {
           return;
         }
+      }
+
+      const rootRecord = this.findByBasePath('/');
+      if (rootRecord && dispatchToRecord(req, res, next, rootRecord, originalUrl)) {
+        return;
       }
 
       next();

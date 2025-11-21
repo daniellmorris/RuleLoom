@@ -161,3 +161,4 @@ export type { RunnerConfig, RunnerConfigWithMeta } from './config.js';
 export type { RunnerScheduler, SchedulerJobConfig, SchedulerInputConfig, HttpInputConfig } from 'rule-loom-inputs';
 export { RunnerValidationError } from './validator.js';
 export type { ValidationIssue, ValidationResult } from './validator.js';
+export type { PluginRegistrationContext, RuleLoomPlugin } from './pluginLoader.js';

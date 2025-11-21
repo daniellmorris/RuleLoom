@@ -80,6 +80,11 @@ To build and run the orchestrator (serving the production UI and REST API) insid
 
 This uses `docker-compose.yml` together with `docker/orchestrator.yaml` (which you can edit to point at your own runner configs). Once started, visit <http://localhost:4100> for the UI and <http://localhost:4100/api/docs> for the API explorer.
 
+## Examples
+
+- JavaScript plugin: `examples/plugins/example-plugin` with `examples/plugin-runner.yml`.
+- TypeScript plugin: `examples/plugins/example-plugin-ts` (build then run with `examples/plugin-runner-ts.yml`).
+
 ## Development Notes
 
 - TypeScript project references (see `tsconfig.base.json`) ensure packages build in dependency order (`lib` → `engine` → `core` → `runner` → `orchestrator`).

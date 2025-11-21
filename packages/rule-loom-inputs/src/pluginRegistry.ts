@@ -3,6 +3,10 @@ import type { BaseInputConfig, InputPlugin } from './types.js';
 
 const plugins: InputPlugin<BaseInputConfig>[] = [];
 
+export function resetInputPlugins() {
+  plugins.length = 0;
+}
+
 export function registerInputPlugin<Config extends BaseInputConfig>(plugin: InputPlugin<Config>) {
   if (plugins.some((existing) => existing.type === plugin.type)) {
     throw new Error(`Input plugin with type "${plugin.type}" already registered`);

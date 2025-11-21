@@ -4,7 +4,8 @@ import RuleLoomEngine, { type ClosureDefinition, type FlowDefinition } from 'rul
 import { buildClosures } from './closures.js';
 import { createLogger, type RuleLoomLogger } from 'rule-loom-lib';
 import {
-  loadRunnerConfig,
+  readRunnerConfigFile,
+  parseRunnerConfig,
   type RunnerConfig,
   type RunnerConfigWithMeta,
   type FlowConfig,
@@ -17,6 +18,9 @@ import {
 } from 'rule-loom-inputs';
 import { initializeInputs } from './inputPlugins.js';
 import { RunnerValidationError, validateRunnerConfig, type ValidationResult } from './validator.js';
+import { parsePluginSpecs } from './pluginSpecs.js';
+import { loadRuleLoomPlugins } from './pluginLoader.js';
+import { getRegisteredClosures } from './closureRegistry.js';
 
 export interface RunnerInstance {
   engine: RuleLoomEngine;
@@ -47,18 +51,26 @@ async function instantiateEngine(
   closures: ClosureDefinition[],
   flows: FlowConfig[],
   _logger: RuleLoomLogger,
+  pluginClosures: ClosureDefinition[] = [],
 ): Promise<RuleLoomEngine> {
   const engine = new RuleLoomEngine();
-  engine.registerClosures(closures);
+  const allClosures = [...pluginClosures, ...closures];
+  engine.registerClosures(allClosures);
   engine.registerFlows(normalizeFlows(flows));
   return engine;
 }
 
 export async function createRunner(configPath: string): Promise<RunnerInstance> {
-  const { config, configDir, configPath: absolutePath } = await loadRunnerConfig(configPath);
+  const { rawConfig, configDir, configPath: absolutePath } = await readRunnerConfigFile(configPath);
+  const preliminaryLogger = createLogger((rawConfig as any)?.logger?.level ?? 'info');
+  const pluginSpecs = parsePluginSpecs((rawConfig as any)?.plugins ?? []);
+  await loadRuleLoomPlugins(pluginSpecs, { logger: preliminaryLogger, configDir });
+
+  const config = parseRunnerConfig(rawConfig);
   const logger = createLogger(config.logger?.level ?? 'info');
   const closures = await buildClosures(config.closures ?? [], configDir, logger);
-  const validation = validateRunnerConfig(config, closures);
+  const pluginClosures = getRegisteredClosures();
+  const validation = validateRunnerConfig(config, [...pluginClosures, ...closures]);
   if (!validation.valid) {
     for (const issue of validation.issues) {
       logger.error?.(
@@ -70,7 +82,7 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
     throw new RunnerValidationError(validation);
   }
 
-  const engine = await instantiateEngine(closures, config.flows, logger);
+  const engine = await instantiateEngine(closures, config.flows, logger, pluginClosures);
   const events = new EventEmitter();
   const { httpApp, scheduler, cleanup } = await initializeInputs(
     config.inputs as RunnerInputConfig[],
@@ -133,10 +145,15 @@ export async function startRunner(options: StartOptions): Promise<{ instance: Ru
 }
 
 export async function validateConfig(configPath: string): Promise<ValidationResult> {
-  const { config, configDir } = await loadRunnerConfig(configPath);
+  const { rawConfig, configDir } = await readRunnerConfigFile(configPath);
+  const preliminaryLogger = createLogger((rawConfig as any)?.logger?.level ?? 'info');
+  const pluginSpecs = parsePluginSpecs((rawConfig as any)?.plugins ?? []);
+  await loadRuleLoomPlugins(pluginSpecs, { logger: preliminaryLogger, configDir });
+  const config = parseRunnerConfig(rawConfig);
   const logger = createLogger(config.logger?.level ?? 'info');
   const closures = await buildClosures(config.closures ?? [], configDir, logger);
-  return validateRunnerConfig(config, closures);
+  const pluginClosures = getRegisteredClosures();
+  return validateRunnerConfig(config, [...pluginClosures, ...closures]);
 }
 
 export { getHttpInput, getSchedulerInput } from './config.js';

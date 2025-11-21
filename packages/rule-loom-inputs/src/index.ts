@@ -1,6 +1,6 @@
 export { createHttpInputApp, createPlaceholderHttpApp } from './http.js';
 export { createSchedulerInput } from './scheduler.js';
-export { registerInputPlugin, getInputPlugins, getInputSchema } from './pluginRegistry.js';
+export { registerInputPlugin, getInputPlugins, getInputSchema, resetInputPlugins } from './pluginRegistry.js';
 export type {
   HttpInputConfig,
   HttpInputApp,

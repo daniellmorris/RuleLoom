@@ -411,7 +411,6 @@ export default function App() {
                             <Stack gap={0} align="flex-end">
                               {closure.template && <Badge color="blue">template: {closure.template}</Badge>}
                               {closure.module && <Badge color="cyan">module: {closure.module}</Badge>}
-                              {closure.preset && <Badge color="grape">preset: {closure.preset}</Badge>}
                             </Stack>
                           </Group>
                         </Box>

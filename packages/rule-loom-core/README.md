@@ -1,6 +1,6 @@
 # rule-loom-core
 
-`rule-loom-core` ships a growing catalog of closures you can drop into any RuleLoom flow. Import `createCoreClosures()` (or `createBundleClosures('core')`) and pass the resulting array into the engine, or reference the `core` preset via `type: bundle` inside a runner config.
+`rule-loom-core` ships a growing catalog of closures you can drop into any RuleLoom flow. Import `createCoreClosures()` directly or rely on the built-in `corePlugin` (auto-loaded by the runner) to register `core.*` and `http.request` for you—no bundle declarations needed.
 
 ## Available Closures
 
@@ -43,24 +43,6 @@ engine.registerFlow({
     },
   ],
 });
-```
-
-## Usage from YAML
-
-Declare a `type: bundle` entry for the `core` preset inside the `closures` array:
-
-```yaml
-closures:
-  - type: bundle
-    preset: core
-  - type: flow
-    name: respond-success
-    steps:
-      - closure: core.respond
-        parameters:
-          status: 200
-          body:
-            ok: true
 ```
 
 ## Development

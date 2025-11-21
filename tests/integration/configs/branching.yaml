@@ -7,9 +7,6 @@ inputs:
       - method: post
         path: /orders
         flow: process-order
-closures:
-  - type: bundle
-    preset: core
 flows:
   - name: process-order
     steps:

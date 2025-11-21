@@ -1,6 +1,6 @@
 # RuleLoom Monorepo
 
-RuleLoom is a configuration-first execution platform for composing rules, closures, and service flows in TypeScript and YAML. This monorepo contains the core engine, reusable closure bundles, and tooling that turns YAML configs into running HTTP services or orchestrated multi-flow applications.
+RuleLoom is a configuration-first execution platform for composing rules, closures, and service flows in TypeScript and YAML. This monorepo contains the core engine, reusable closure library, and tooling that turns YAML configs into running HTTP services or orchestrated multi-flow applications.
 
 ## Highlights
 
@@ -8,7 +8,7 @@ RuleLoom is a configuration-first execution platform for composing rules, closur
 - **Config-first authoring** – write YAML to define inputs, flows, inline steps, and `$call` expressions without touching TypeScript.
 - **Core closure library** – `rule-loom-core` ships practical building blocks (`core.assign`, `core.respond`, `core.for-each`, comparisons, includes, length, …).
 - **CLI runner + orchestrator** – run a single configuration via `ruleloom-runner`, or mount multiple configs behind one Express server with `ruleloom-orchestrator`.
-- **Inline lambdas and closure references** – nest step arrays directly in parameters and call closures (or step bundles) inline with `$call`.
+- **Inline lambdas and closure references** – nest step arrays directly in parameters and call closures inline with `$call`.
 - **Scheduled flows** – run jobs on cron/intervals using Bree-backed scheduler.
 - **OpenAPI orchestrator API** – create/destroy runners, inspect routes, and view scheduler state via REST.
 - **SQLite-backed persistence** – orchestrator runner configs live in a Prisma-managed SQLite database so additions through the API survive restarts.
@@ -19,7 +19,7 @@ RuleLoom is a configuration-first execution platform for composing rules, closur
 | --- | --- |
 | [`rule-loom-lib`](packages/rule-loom-lib/README.md) | Shared utilities (loggers, future helpers) consumed by other packages. |
 | [`rule-loom-engine`](packages/rule-loom-engine/README.md) | Core execution engine that processes flows, closures, branching, and `$call` directives. |
-| [`rule-loom-core`](packages/rule-loom-core/README.md) | Reusable closure bundle (assign/respond/log/comparisons/iterators, etc.). |
+| [`rule-loom-core`](packages/rule-loom-core/README.md) | Reusable closure library + built-in plugin (assign/respond/log/comparisons/iterators/http, etc.). |
 | [`rule-loom-inputs`](packages/rule-loom-inputs/README.md) | Transport adapters (HTTP server, scheduler, future AMQP/MQTT) used by the runner/orchestrator. |
 | [`rule-loom-runner`](packages/rule-loom-runner/README.md) | CLI + library for serving a single YAML config over HTTP. |
 | [`rule-loom-orchestrator`](packages/rule-loom-orchestrator/README.md) | Aggregates multiple runner configs behind one Express app. |

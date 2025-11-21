@@ -6,8 +6,6 @@ inputs:
         path: /flow
         flow: process-user
 closures:
-  - type: bundle
-    preset: core
   - type: flow
     name: enrich-user
     steps:

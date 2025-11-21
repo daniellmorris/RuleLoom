@@ -12,14 +12,6 @@ inputs:
           targetEntity: switch.third_reality_inc_3rsp019bz_2
 
 closures:
-  - type: bundle
-    preset: core
-  - type: bundle
-    preset: http
-    options:
-      baseUrl: "http://127.0.0.1:8123"
-      headers:
-        Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo"
   - type: flow
     name: ha.toggle-switch
     description: Toggle a Home Assistant switch via REST API.
@@ -28,7 +20,10 @@ closures:
         assign: lastHaResponse
         parameters:
           method: POST
+          baseUrl: "http://127.0.0.1:8123"
           url: "/api/services/${parameters.domain}/${parameters.service}"
+          headers:
+            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo"
           body:
             entity_id: "${parameters.entityId}"
       - closure: core.log

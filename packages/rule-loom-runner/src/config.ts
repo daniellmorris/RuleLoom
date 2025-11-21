@@ -12,24 +12,16 @@ import type {
 } from 'rule-loom-inputs';
 import { getInputSchema } from 'rule-loom-inputs';
 import { logLevelSchema, flowSchema, templateClosureSchema, moduleClosureSchema, flowClosureSchema } from './schemas.js';
-import { listBundlePresets } from 'rule-loom-core';
 import { pluginSpecSchema } from './pluginSpecs.js';
 
 export type FlowConfig = z.infer<typeof flowSchema>;
 
-const bundleClosureSchema = z.object({
-  type: z.literal('bundle'),
-  preset: z.string().min(1),
-  options: z.record(z.any()).optional(),
-});
-
-const closureSchema = z.union([templateClosureSchema, moduleClosureSchema, flowClosureSchema, bundleClosureSchema]);
+const closureSchema = z.union([templateClosureSchema, moduleClosureSchema, flowClosureSchema]);
 
 export type ClosureConfig = z.infer<typeof closureSchema>;
 
 export function createRunnerConfigSchema() {
   const inputSchema = getInputSchema();
-  const knownBundles = new Set(listBundlePresets());
 
   return z
     .object({
@@ -54,18 +46,6 @@ export function createRunnerConfigSchema() {
           path: ['inputs'],
         });
       }
-
-      value.closures
-        .filter((c): c is Extract<ClosureConfig, { type: 'bundle' }> => c.type === 'bundle')
-        .forEach((bundle, index) => {
-          if (!knownBundles.has(bundle.preset)) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `Bundle preset "${bundle.preset}" is not registered.`,
-              path: ['closures', index, 'preset'],
-            });
-          }
-        });
     });
 }
 

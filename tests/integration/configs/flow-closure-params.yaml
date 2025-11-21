@@ -6,8 +6,6 @@ inputs:
         path: /flow-params
         flow: invoke-flow-closure
 closures:
-  - type: bundle
-    preset: core
   - type: flow
     name: echo-message
     steps:

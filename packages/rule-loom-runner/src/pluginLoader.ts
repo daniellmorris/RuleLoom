@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 import os from 'node:os';
 import type { RuleLoomLogger } from 'rule-loom-lib';
 import { registerInputPlugin } from 'rule-loom-inputs';
-import { registerBundlePreset } from 'rule-loom-core';
+import { corePlugin } from 'rule-loom-core';
 import type { ClosureDefinition } from 'rule-loom-engine';
 import { registerClosure } from './closureRegistry.js';
 import type { PluginSpec } from './pluginSpecs.js';
@@ -25,7 +25,6 @@ export interface RuleLoomPlugin {
 
 export interface PluginRegistrationContext {
   registerInputPlugin: typeof registerInputPlugin;
-  registerBundle: typeof registerBundlePreset;
   registerClosure: (closure: ClosureDefinition) => void;
   logger: RuleLoomLogger;
 }
@@ -39,9 +38,20 @@ export interface PluginLoaderOptions {
 const DEFAULT_CACHE_DIR = path.join(os.homedir(), '.rule-loom', 'plugins');
 
 export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLoaderOptions) {
-  if (!specs.length) return;
   const cacheDir = options.cacheDir ?? DEFAULT_CACHE_DIR;
   await fs.mkdir(cacheDir, { recursive: true }).catch(() => undefined);
+
+  // Always load built-in core plugin first so core/http closures are available without config entries.
+  if (!loadedPlugins.has('builtin:core-plugin')) {
+    await corePlugin.register({
+      registerInputPlugin,
+      registerClosure,
+      logger: options.logger,
+    } as PluginRegistrationContext);
+    loadedPlugins.add('builtin:core-plugin');
+  }
+
+  if (!specs.length) return;
 
   for (const spec of specs) {
     const modulePath = await resolvePluginModule(spec, { ...options, cacheDir });
@@ -59,7 +69,6 @@ export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLo
     options.logger.info?.(`Registering plugin ${name ?? 'unknown'}${plugin.version ? `@${plugin.version}` : ''}`);
     await plugin.register({
       registerInputPlugin,
-      registerBundle: registerBundlePreset,
       registerClosure,
       logger: options.logger,
     });

@@ -6,8 +6,6 @@ inputs:
         path: /format
         flow: format-order
 closures:
-  - type: bundle
-    preset: core
   - type: module
     module: ../modules/call-inline-closures.js
 flows:

@@ -4,9 +4,6 @@ logger:
 plugins:
   - source: file
     path: ./plugins/example-plugin/plugin.js
-closures:
-  - type: bundle
-    preset: hello
 inputs:
   - type: echo
     message: "boot message"

@@ -338,11 +338,6 @@ components:
           type: string
         module:
           type: string
-        preset:
-          type: string
-        options:
-          type: object
-          additionalProperties: true
       required: [type]
     ValidationIssue:
       type: object

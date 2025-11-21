@@ -5,9 +5,6 @@ plugins:
   - source: file
     # Build the TS plugin first: npm run build --prefix examples/plugins/example-plugin-ts
     path: ./plugins/example-plugin-ts/dist/plugin.js
-closures:
-  - type: bundle
-    preset: hello
 inputs:
   - type: echo
     message: "boot message"

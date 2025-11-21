@@ -14,9 +14,6 @@ inputs:
         interval: "1s"
         runtime:
           info: "from scheduler"
-closures:
-  - type: bundle
-    preset: core
 flows:
   - name: status
     steps:

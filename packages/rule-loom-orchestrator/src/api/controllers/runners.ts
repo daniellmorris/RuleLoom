@@ -36,8 +36,6 @@ function serializeClosures(
   description?: string;
   template?: string;
   module?: string;
-  preset?: string;
-  options?: Record<string, unknown>;
   steps?: unknown[];
 }> {
   const closures = record?.instance.config.closures ?? [];
@@ -57,13 +55,6 @@ function serializeClosures(
       return {
         ...base,
         module: closure.module as string | undefined,
-      };
-    }
-    if (closure.type === 'bundle') {
-      return {
-        ...base,
-        preset: closure.preset as string | undefined,
-        options: closure.options as Record<string, unknown> | undefined,
       };
     }
     if (closure.type === 'flow') {

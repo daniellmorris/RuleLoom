@@ -1,0 +1,25 @@
+version: 1
+logger:
+  level: info
+plugins:
+  - source: file
+    path: ./plugins/example-plugin/plugin.js
+closures:
+  - type: bundle
+    preset: hello
+inputs:
+  - type: echo
+    message: "boot message"
+  - type: init
+    flow: hello-flow
+flows:
+  - name: hello-flow
+    description: Demo flow using plugin bundle + closure
+    steps:
+      - closure: hello.uppercase
+        parameters:
+          value: "hello from plugin"
+      - closure: hello.add
+        parameters:
+          a: 2
+          b: 3

@@ -1,0 +1,9 @@
+{
+  "name": "@example/rule-loom-plugin",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "plugin.js",
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}

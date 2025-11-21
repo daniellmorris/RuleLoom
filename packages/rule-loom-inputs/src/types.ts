@@ -64,12 +64,16 @@ export interface InitInputConfig {
   runtime?: Record<string, unknown>;
 }
 
+// Extension point for external plugins to augment input configs.
+export interface ExternalInputConfigs {}
+
 export type RunnerInputConfig =
   | HttpInputConfig
   | SchedulerInputConfig
   | MqttInputConfig
   | AmqpInputConfig
-  | InitInputConfig;
+  | InitInputConfig
+  | ExternalInputConfigs[keyof ExternalInputConfigs];
 
 export interface InputPluginContext {
   logger: RuleLoomLogger;

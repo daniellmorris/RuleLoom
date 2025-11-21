@@ -1,24 +1,9 @@
-import type { ClosureDefinition } from 'rule-loom-engine';
 import { createCoreClosures } from './closures.js';
 import { createHttpClosures, type HttpClosureOptions } from './http.js';
+import { registerBundlePreset, createBundleClosures, listBundlePresets } from './bundleRegistry.js';
 
-type BundleFactory = (options?: Record<string, unknown>) => ClosureDefinition[];
+// Register built-in bundle presets.
+registerBundlePreset('core', () => createCoreClosures());
+registerBundlePreset('http', (options) => createHttpClosures(options as HttpClosureOptions));
 
-const bundleFactories: Record<string, BundleFactory> = {
-  core: () => createCoreClosures(),
-  http: (options) => createHttpClosures(options as HttpClosureOptions),
-};
-
-export function listBundlePresets(): string[] {
-  return Object.keys(bundleFactories);
-}
-
-export function createBundleClosures(preset: string, options?: Record<string, unknown>): ClosureDefinition[] {
-  const factory = bundleFactories[preset];
-  if (!factory) {
-    const available = listBundlePresets();
-    const suggestion = available.length ? ` Available presets: ${available.join(', ')}` : '';
-    throw new Error(`Unknown closure bundle preset "${preset}".${suggestion}`);
-  }
-  return factory(options);
-}
+export { registerBundlePreset, createBundleClosures, listBundlePresets };

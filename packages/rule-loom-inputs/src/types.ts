@@ -1,6 +1,9 @@
 import type { Express } from 'express';
 import type Bree from 'bree';
+import type { EventEmitter } from 'node:events';
+import type RuleLoomEngine from 'rule-loom-engine';
 import type { ExecutionResult } from 'rule-loom-engine';
+import type { RuleLoomLogger } from 'rule-loom-lib';
 
 export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
@@ -54,7 +57,45 @@ export interface AmqpInputConfig {
   options?: Record<string, unknown>;
 }
 
-export type RunnerInputConfig = HttpInputConfig | SchedulerInputConfig | MqttInputConfig | AmqpInputConfig;
+export interface InitInputConfig {
+  type: 'init';
+  flow: string;
+  initialState?: Record<string, unknown>;
+  runtime?: Record<string, unknown>;
+}
+
+export type RunnerInputConfig =
+  | HttpInputConfig
+  | SchedulerInputConfig
+  | MqttInputConfig
+  | AmqpInputConfig
+  | InitInputConfig;
+
+export interface InputPluginContext {
+  logger: RuleLoomLogger;
+  engine: RuleLoomEngine;
+  metadata?: Record<string, unknown>;
+  events: EventEmitter;
+}
+
+export interface InputInitResult {
+  http?: {
+    app: HttpInputApp;
+    basePath?: string;
+  };
+  scheduler?: RunnerScheduler;
+  cleanup?: () => Promise<void> | void;
+}
+
+export interface BaseInputConfig {
+  type: string;
+}
+
+export interface InputPlugin<Config extends BaseInputConfig = RunnerInputConfig> {
+  type: string;
+  schema: import('zod').ZodType<Config>;
+  initialize: (config: Config, context: InputPluginContext) => Promise<InputInitResult | void> | InputInitResult | void;
+}
 
 export interface SchedulerJobState {
   runs: number;

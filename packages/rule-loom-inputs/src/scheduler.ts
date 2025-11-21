@@ -1,15 +1,51 @@
 import type { EventEmitter } from 'node:events';
 import Bree from 'bree';
 import _ from 'lodash';
+import { z } from 'zod';
 import type { RuleLoomEngine, ExecutionResult } from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
 import type { SchedulerInputConfig, SchedulerJobConfig, RunnerScheduler, SchedulerJobState } from './types.js';
+import { registerInputPlugin } from './pluginRegistry.js';
 
 export interface SchedulerInputOptions {
   engine: RuleLoomEngine;
   logger: RuleLoomLogger;
   events: EventEmitter;
 }
+
+const schedulerJobSchema = z
+  .object({
+    name: z.string().min(1),
+    flow: z.string().min(1),
+    interval: z.union([z.number().positive(), z.string().min(1)]).optional(),
+    cron: z.string().min(1).optional(),
+    timeout: z.union([z.number().nonnegative(), z.string().min(1), z.boolean()]).optional(),
+    initialState: z.record(z.any()).optional(),
+    runtime: z.record(z.any()).optional(),
+    enabled: z.boolean().optional(),
+  })
+  .refine((job) => job.interval !== undefined || job.cron !== undefined || job.timeout !== undefined, {
+    message: 'Scheduler job requires interval, cron, or timeout',
+    path: ['interval'],
+  });
+
+export const schedulerInputSchema = z.object({
+  type: z.literal('scheduler'),
+  jobs: z.array(schedulerJobSchema).min(1),
+});
+
+registerInputPlugin<SchedulerInputConfig>({
+  type: 'scheduler',
+  schema: schedulerInputSchema,
+  initialize: async (config: SchedulerInputConfig, context) => {
+    const scheduler = await createSchedulerInput(config, {
+      engine: context.engine,
+      logger: context.logger,
+      events: context.events,
+    });
+    return scheduler ? { scheduler } : undefined;
+  },
+});
 
 function buildJobCode(jobName: string) {
   return `(() => {

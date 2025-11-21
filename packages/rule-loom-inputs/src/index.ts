@@ -1,5 +1,6 @@
 export { createHttpInputApp, createPlaceholderHttpApp } from './http.js';
 export { createSchedulerInput } from './scheduler.js';
+export { registerInputPlugin, getInputPlugins, getInputSchema } from './pluginRegistry.js';
 export type {
   HttpInputConfig,
   HttpInputApp,
@@ -12,4 +13,7 @@ export type {
   RunnerInputConfig,
   MqttInputConfig,
   AmqpInputConfig,
+  InitInputConfig,
+  InputPluginContext,
 } from './types.js';
+import './init.js';

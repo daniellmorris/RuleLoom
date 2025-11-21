@@ -13,6 +13,7 @@ import type {
 import { getInputSchema } from 'rule-loom-core/inputs';
 import { logLevelSchema, flowSchema, templateClosureSchema, moduleClosureSchema, flowClosureSchema } from './schemas.js';
 import { pluginSpecSchema } from './pluginSpecs.js';
+import { applySecrets, resolveSecrets, type SecretsConfig, type SecretMap } from './secrets.js';
 
 export type FlowConfig = z.infer<typeof flowSchema>;
 
@@ -28,6 +29,29 @@ export function parseClosureConfigs(raw: unknown): ClosureConfig[] {
 export function createRunnerConfigSchema() {
   const inputSchema = getInputSchema();
 
+  const secretsSchema = z
+    .object({
+      inline: z.record(z.string()).optional(),
+      env: z.record(z.string()).optional(),
+      files: z
+        .array(
+          z.object({
+            key: z.string().min(1),
+            path: z.string().min(1),
+            encoding: z.string().optional(),
+          }),
+        )
+        .optional(),
+      dotenv: z
+        .object({
+          path: z.string().optional(),
+          encoding: z.string().optional(),
+          required: z.boolean().optional(),
+        })
+        .optional(),
+    })
+    .optional();
+
   return z
     .object({
       version: z.number().int().positive().optional().default(1),
@@ -40,6 +64,7 @@ export function createRunnerConfigSchema() {
       plugins: z.array(pluginSpecSchema).optional().default([]),
       inputs: z.array(inputSchema).optional().default([]),
       closures: z.array(closureSchema).optional().default([]),
+      secrets: secretsSchema,
       flows: z.array(flowSchema).min(1),
     })
     .superRefine((value, ctx) => {

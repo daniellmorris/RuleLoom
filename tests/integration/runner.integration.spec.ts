@@ -22,6 +22,11 @@ async function withRunner<T>(configFile: string, testFn: (instance: RunnerInstan
 }
 
 describe('RuleLoom Runner configuration features', () => {
+  it('rejects configs that fail validation', async () => {
+    const invalidPath = path.join(CONFIG_DIR, 'invalid-missing-param.yaml');
+    await expect(createRunner(invalidPath)).rejects.toThrow(/validation/i);
+  });
+
   it('Branching & Core Closures', async () => {
     await withRunner('branching.yaml', async (instance) => {
       const request = supertest(instance.app);
@@ -75,6 +80,18 @@ describe('RuleLoom Runner configuration features', () => {
         .set('Content-Type', 'application/json');
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ id: 'USER-1', total: 123, status: 'processed' });
+    });
+  });
+
+  it('Flow closure parameters interpolate', async () => {
+    await withRunner('flow-closure-params.yaml', async (instance) => {
+      const res = await supertest(instance.app)
+        .post('/flow-params')
+        .send({ message: 'hi-from-test' })
+        .set('Content-Type', 'application/json');
+
+      expect(res.status).toBe(200);
+      expect(res.body.echoed).toBe('hi-from-test');
     });
   });
 

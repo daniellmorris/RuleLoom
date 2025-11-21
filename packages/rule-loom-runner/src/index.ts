@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { EventEmitter } from 'node:events';
-import RuleLoomEngine, { type FlowDefinition } from 'rule-loom-engine';
+import RuleLoomEngine, { type ClosureDefinition, type FlowDefinition } from 'rule-loom-engine';
 import { buildClosures } from './closures.js';
 import { createLogger, type RuleLoomLogger } from 'rule-loom-lib';
 import {
@@ -9,7 +9,6 @@ import {
   getSchedulerInput,
   type RunnerConfig,
   type RunnerConfigWithMeta,
-  type ClosureConfig,
   type FlowConfig,
 } from './config.js';
 import {
@@ -19,6 +18,7 @@ import {
   type HttpInputApp,
   type RunnerScheduler,
 } from 'rule-loom-inputs';
+import { RunnerValidationError, validateRunnerConfig, type ValidationResult } from './validator.js';
 
 export interface RunnerInstance {
   engine: RuleLoomEngine;
@@ -46,12 +46,10 @@ function normalizeFlows(flows: FlowConfig[]): FlowDefinition[] {
 }
 
 async function instantiateEngine(
-  closureConfigs: ClosureConfig[],
+  closures: ClosureDefinition[],
   flows: FlowConfig[],
-  configDir: string,
-  logger: RuleLoomLogger,
+  _logger: RuleLoomLogger,
 ): Promise<RuleLoomEngine> {
-  const closures = await buildClosures(closureConfigs, configDir, logger);
   const engine = new RuleLoomEngine();
   engine.registerClosures(closures);
   engine.registerFlows(normalizeFlows(flows));
@@ -61,8 +59,20 @@ async function instantiateEngine(
 export async function createRunner(configPath: string): Promise<RunnerInstance> {
   const { config, configDir, configPath: absolutePath } = await loadRunnerConfig(configPath);
   const logger = createLogger(config.logger?.level ?? 'info');
+  const closures = await buildClosures(config.closures ?? [], configDir, logger);
+  const validation = validateRunnerConfig(config, closures);
+  if (!validation.valid) {
+    for (const issue of validation.issues) {
+      logger.error?.(
+        `Validation issue [${issue.level}] ${issue.message}${issue.path ? ` @ ${issue.path}` : ''}${
+          issue.flow ? ` (flow: ${issue.flow})` : ''
+        }`,
+      );
+    }
+    throw new RunnerValidationError(validation);
+  }
 
-  const engine = await instantiateEngine(config.closures ?? [], config.flows, configDir, logger);
+  const engine = await instantiateEngine(closures, config.flows, logger);
   const httpInput = getHttpInput(config);
   const app = httpInput
     ? createHttpInputApp(engine, httpInput, { logger, metadata: config.metadata })
@@ -128,6 +138,15 @@ export async function startRunner(options: StartOptions): Promise<{ instance: Ru
   return { instance, server };
 }
 
+export async function validateConfig(configPath: string): Promise<ValidationResult> {
+  const { config, configDir } = await loadRunnerConfig(configPath);
+  const logger = createLogger(config.logger?.level ?? 'info');
+  const closures = await buildClosures(config.closures ?? [], configDir, logger);
+  return validateRunnerConfig(config, closures);
+}
+
 export { getHttpInput, getSchedulerInput } from './config.js';
 export type { RunnerConfig, RunnerConfigWithMeta } from './config.js';
 export type { RunnerScheduler, SchedulerJobConfig, SchedulerInputConfig, HttpInputConfig } from 'rule-loom-inputs';
+export { RunnerValidationError } from './validator.js';
+export type { ValidationIssue, ValidationResult } from './validator.js';

@@ -34,6 +34,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RunnerDetail'
+  /runners/validate:
+    post:
+      summary: Validate a runner configuration without creating it
+      operationId: validateRunnerConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRunnerRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
   /runners/{id}:
     parameters:
       - $ref: '#/components/parameters/RunnerId'
@@ -327,6 +344,31 @@ components:
           type: object
           additionalProperties: true
       required: [type]
+    ValidationIssue:
+      type: object
+      properties:
+        level:
+          type: string
+          enum: [error, warning]
+        message:
+          type: string
+        flow:
+          type: string
+        closure:
+          type: string
+        path:
+          type: string
+      required: [level, message]
+    ValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationIssue'
+      required: [valid, issues]
     RunnerHealth:
       type: object
       properties:

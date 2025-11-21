@@ -1,0 +1,16 @@
+version: 1
+inputs:
+  - type: http
+    routes:
+      - method: post
+        path: /invalid
+        flow: invalid-flow
+closures:
+  - type: bundle
+    preset: core
+flows:
+  - name: invalid-flow
+    steps:
+      - closure: core.assign
+        parameters:
+          value: "${request.body}"

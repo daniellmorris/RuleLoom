@@ -88,4 +88,36 @@ describe('Orchestrator API', () => {
       expect(routeRes.body.itemCount).toBe(2);
     });
   });
+
+  it('validates configs via API before creation', async () => {
+    await withOrchestrator('orchestrator-empty.yaml', async (app) => {
+      const request = supertest(app);
+      const invalidConfig = `version: 1
+inputs:
+  - type: http
+    routes:
+      - method: post
+        path: /invalid
+        flow: invalid-flow
+closures:
+  - type: bundle
+    preset: core
+flows:
+  - name: invalid-flow
+    steps:
+      - closure: core.assign
+        parameters:
+          value: "should fail"
+`;
+
+      const validationRes = await request
+        .post('/api/runners/validate')
+        .send({ configContent: invalidConfig })
+        .set('Content-Type', 'application/json');
+
+      expect(validationRes.status).toBe(200);
+      expect(validationRes.body.valid).toBe(false);
+      expect(validationRes.body.issues.length).toBeGreaterThan(0);
+    });
+  });
 });

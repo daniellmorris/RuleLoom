@@ -9,6 +9,15 @@ export default function createCustomClosures() {
         state.discountedTotal = discounted;
         return discounted;
       },
+      signature: {
+        description: 'Applies a percentage discount to an amount.',
+        parameters: [
+          { name: 'amount', type: 'number', required: true },
+          { name: 'rate', type: 'number', description: 'Discount rate between 0-1.' },
+        ],
+        returns: { type: 'number' },
+        mutates: ['state.discountedTotal'],
+      },
     },
   ];
 }

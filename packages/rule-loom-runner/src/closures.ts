@@ -36,6 +36,13 @@ function buildSetStateClosure(entry: Extract<ClosureConfig, { type: 'template'; 
 
       return _.get(state, target);
     },
+    signature: {
+      description: entry.description ?? 'Assigns a static template value into state.',
+      parameters: [{ name: 'value', type: 'any', description: 'Optional override for the configured template value.' }],
+      allowAdditionalParameters: false,
+      returns: { type: 'any' },
+      mutates: ['state'],
+    },
   };
 }
 
@@ -67,6 +74,17 @@ function buildRespondClosure(entry: Extract<ClosureConfig, { type: 'template'; t
 
       _.set(state, 'response', response);
       return response;
+    },
+    signature: {
+      description: entry.description ?? 'Responds with a static payload and status.',
+      parameters: [
+        { name: 'status', type: 'number', description: 'HTTP status override.', allowDynamicValue: true },
+        { name: 'headers', type: 'object', description: 'Headers override map.' },
+        { name: 'body', type: 'any', description: 'Body override.' },
+      ],
+      allowAdditionalParameters: false,
+      returns: { type: 'object' },
+      mutates: ['state.response'],
     },
   };
 }
@@ -140,7 +158,11 @@ export async function buildClosures(
           if (!engine || !(engine instanceof RuleLoomEngine)) {
             throw new Error('Flow closures require execution within a RuleLoomEngine context.');
           }
-          return engine.runSteps(entry.steps, state, context.runtime);
+          return engine.runSteps(entry.steps, state, context.runtime, context.parameters ?? undefined);
+        },
+        signature: {
+          description: entry.description ?? `Flow closure ${entry.name}`,
+          allowAdditionalParameters: true,
         },
       });
     }

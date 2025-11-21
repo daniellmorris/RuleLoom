@@ -1,0 +1,26 @@
+version: 1
+logger:
+  level: info
+plugins:
+  - source: file
+    # Build the TS plugin first: npm run build --prefix examples/plugins/example-plugin-ts
+    path: ./plugins/example-plugin-ts/dist/plugin.js
+closures:
+  - type: bundle
+    preset: hello
+inputs:
+  - type: echo
+    message: "boot message"
+  - type: init
+    flow: hello-flow
+flows:
+  - name: hello-flow
+    description: Demo flow using plugin bundle + closure (TS build)
+    steps:
+      - closure: hello.uppercase
+        parameters:
+          value: "hello from TS plugin"
+      - closure: hello.add
+        parameters:
+          a: 2
+          b: 3

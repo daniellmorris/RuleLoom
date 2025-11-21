@@ -9,16 +9,21 @@ import type {
   SchedulerInputConfig,
   SchedulerJobConfig,
   RunnerInputConfig,
-} from 'rule-loom-inputs';
-import { getInputSchema } from 'rule-loom-inputs';
+} from 'rule-loom-core/inputs';
+import { getInputSchema } from 'rule-loom-core/inputs';
 import { logLevelSchema, flowSchema, templateClosureSchema, moduleClosureSchema, flowClosureSchema } from './schemas.js';
 import { pluginSpecSchema } from './pluginSpecs.js';
 
 export type FlowConfig = z.infer<typeof flowSchema>;
 
-const closureSchema = z.union([templateClosureSchema, moduleClosureSchema, flowClosureSchema]);
+export const closureSchema = z.union([templateClosureSchema, moduleClosureSchema, flowClosureSchema]);
 
 export type ClosureConfig = z.infer<typeof closureSchema>;
+
+export function parseClosureConfigs(raw: unknown): ClosureConfig[] {
+  if (raw === undefined || raw === null) return [];
+  return z.array(closureSchema).parse(raw);
+}
 
 export function createRunnerConfigSchema() {
   const inputSchema = getInputSchema();

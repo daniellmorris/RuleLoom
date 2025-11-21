@@ -18,7 +18,8 @@
       "rule-loom-engine": ["packages/rule-loom-engine/src/index.ts"],
       "rule-loom-core": ["packages/rule-loom-core/src/index.ts"],
       "rule-loom-runner": ["packages/rule-loom-runner/src/index.ts"],
-      "rule-loom-inputs": ["packages/rule-loom-inputs/src/index.ts"]
+      "rule-loom-inputs": ["packages/rule-loom-core/src/inputs/index.ts"],
+      "rule-loom-core/inputs": ["packages/rule-loom-core/src/inputs/index.ts"]
     }
   }
 }

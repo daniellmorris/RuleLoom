@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import supertest from 'supertest';
 import { describe, it, expect } from 'vitest';
+import { itHttp } from '../helpers/httpSkip.ts';
 
 import { createOrchestrator } from '../../packages/rule-loom-orchestrator/src/index.ts';
 
@@ -31,7 +32,7 @@ async function withOrchestrator(
 }
 
 describe('Orchestrator API', () => {
-  it('creates, lists, and removes runners via API', async () => {
+  itHttp('creates, lists, and removes runners via API', async () => {
     await withOrchestrator('orchestrator-empty.yaml', async (app) => {
       const request = supertest(app);
       const configPath = path.join(CONFIG_DIR, 'branching.yaml');
@@ -63,7 +64,7 @@ describe('Orchestrator API', () => {
     });
   });
 
-  it('prioritizes specific base paths over root-mounted runners', async () => {
+  itHttp('prioritizes specific base paths over root-mounted runners', async () => {
     await withOrchestrator('orchestrator-empty.yaml', async (app) => {
       const request = supertest(app);
       const configPath = path.join(CONFIG_DIR, 'branching.yaml');
@@ -89,7 +90,7 @@ describe('Orchestrator API', () => {
     });
   });
 
-  it('validates configs via API before creation', async () => {
+  itHttp('validates configs via API before creation', async () => {
     await withOrchestrator('orchestrator-empty.yaml', async (app) => {
       const request = supertest(app);
       const invalidConfig = `version: 1

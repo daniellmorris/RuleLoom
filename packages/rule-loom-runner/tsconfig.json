@@ -10,7 +10,6 @@
   "references": [
     { "path": "../rule-loom-lib" },
     { "path": "../rule-loom-core" },
-    { "path": "../rule-loom-engine" },
-    { "path": "../rule-loom-inputs" }
+    { "path": "../rule-loom-engine" }
   ]
 }

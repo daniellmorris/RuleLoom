@@ -32,11 +32,18 @@ export const githubPluginSpecSchema = z.object({
   name: z.string().optional(),
 });
 
+export const configPluginSpecSchema = z.object({
+  source: z.literal('config'),
+  path: z.string().min(1),
+  name: z.string().optional(),
+});
+
 export const pluginSpecSchema = z.union([
   filePluginSpecSchema,
   npmPluginSpecSchema,
   storePluginSpecSchema,
   githubPluginSpecSchema,
+  configPluginSpecSchema,
 ]);
 
 export type PluginSpec = z.infer<typeof pluginSpecSchema>;

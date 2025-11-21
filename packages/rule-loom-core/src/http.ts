@@ -109,7 +109,7 @@ export function createHttpClosures(options: HttpClosureOptions = {}): ClosureDef
     {
       name: closureName,
       description: closureDescription,
-      handler: async (_state, context) => {
+      handler: async (_state: any, context: any) => {
         const params = (context.parameters ?? {}) as Record<string, unknown>;
         const methodParam = coerceString(params.method);
         const baseUrl = coerceString(params.baseUrl) ?? options.baseUrl;

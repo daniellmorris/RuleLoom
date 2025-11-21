@@ -10,7 +10,7 @@ import { RunnerStore } from '../../persistence/runnerStore.js';
 function serializeRoutes(record: ReturnType<RunnerRegistry['get']>): Array<{ method: string; path: string; flow: string }> {
   const httpInput = record ? getHttpInput(record.instance.config) : undefined;
   const routes = httpInput?.routes ?? [];
-  return routes.map((route) => ({
+  return routes.map((route: any) => ({
     method: route.method ?? 'post',
     path: route.path,
     flow: route.flow,
@@ -21,7 +21,7 @@ function serializeFlows(
   record: ReturnType<RunnerRegistry['get']>,
 ): Array<{ name: string; description?: string; steps: unknown[] }> {
   const flows = record?.instance.config.flows ?? [];
-  return flows.map((flow) => ({
+  return flows.map((flow: any) => ({
     name: flow.name,
     description: flow.description,
     steps: flow.steps,
@@ -70,7 +70,7 @@ function serializeClosures(
 function serializeJobs(record: ReturnType<RunnerRegistry['get']>) {
   const schedulerConfig = record ? getSchedulerInput(record.instance.config) : undefined;
   const jobs = schedulerConfig?.jobs ?? [];
-  return jobs.map((job) => ({
+  return jobs.map((job: any) => ({
     name: job.name,
     flow: job.flow,
     interval: job.interval,
@@ -81,8 +81,9 @@ function serializeJobs(record: ReturnType<RunnerRegistry['get']>) {
 }
 
 function serializeJobStates(record: ReturnType<RunnerRegistry['get']>) {
-  const states = record?.instance.scheduler?.jobStates ?? new Map();
-  return Array.from(states.entries()).map(([name, state]) => ({
+  const states = record?.instance.scheduler?.jobStates ?? new Map<string, any>();
+  const entries = Array.from(states.entries()) as Array<[string, any]>;
+  return entries.map(([name, state]) => ({
     name,
     runs: state.runs,
     lastRun: state.lastRun?.toISOString(),
@@ -137,9 +138,9 @@ async function readInlineConfig(registry: RunnerRegistry, record?: RunnerRecord)
   if (!record || record.configSource !== 'inline') {
     return undefined;
   }
-  const snapshot = await registry.getRunnerConfig(record.id);
-  return snapshot.content;
-}
+    const snapshot = await registry.getRunnerConfig(record.id);
+    return snapshot.content;
+  }
 
 export function createRunnerController(registry: RunnerRegistry, store: RunnerStore) {
   return async (req: Request, res: Response) => {
@@ -160,7 +161,7 @@ export function createRunnerController(registry: RunnerRegistry, store: RunnerSt
         configContent,
         basePath: basePath?.trim(),
       });
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof RunnerValidationError) {
         throw createHttpError(400, error.message, { errors: error.result.issues });
       }
@@ -169,7 +170,7 @@ export function createRunnerController(registry: RunnerRegistry, store: RunnerSt
 
     try {
       await store.create(buildPersistencePayload(record, configContent));
-    } catch (error) {
+    } catch (error: unknown) {
       await registry.removeRunner(record.id).catch(() => undefined);
       throw createHttpError(500, 'Failed to persist runner', { cause: error });
     }

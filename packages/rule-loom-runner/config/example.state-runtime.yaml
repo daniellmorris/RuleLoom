@@ -6,7 +6,8 @@ inputs:
         path: /state-runtime-demo
         flow: demo-state-runtime
 closures:
-  - type: core
+  - type: bundle
+    preset: core
 flows:
   - name: demo-state-runtime
     steps:

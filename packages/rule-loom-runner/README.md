@@ -54,7 +54,8 @@ inputs:
         flow: heartbeat
         interval: "1m"
 closures:
-  - type: core             # import RuleLoom Core bundle
+  - type: bundle           # built-in bundles (preset: core/http/...)
+    preset: core
   - type: module           # optional custom closures
   - type: flow             # config-defined closure flows
 flows:

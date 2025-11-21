@@ -1,0 +1,39 @@
+version: 1
+logger:
+  level: info
+
+inputs:
+  - type: scheduler
+    jobs:
+      - name: toggle-ha-switch
+        flow: toggle-ha-switch
+        interval: "15m"
+        runtime:
+          targetEntity: switch.plant_light
+
+closures:
+  - type: bundle
+    preset: http
+    options:
+      baseUrl: "https://homeassistant.local:8123"
+      headers:
+        Authorization: "Bearer YOUR_LONG_LIVED_ACCESS_TOKEN"
+  - type: flow
+    name: ha.toggle-switch
+    description: Toggle a Home Assistant switch via REST API.
+    steps:
+      - closure: http.request
+        parameters:
+          method: POST
+          url: "/api/services/${parameters.domain}/${parameters.service}"
+          body:
+            entity_id: "${parameters.entityId}"
+
+flows:
+  - name: toggle-ha-switch
+    steps:
+      - closure: ha.toggle-switch
+        parameters:
+          domain: switch
+          service: toggle
+          entityId: "${runtime.scheduler.targetEntity}"

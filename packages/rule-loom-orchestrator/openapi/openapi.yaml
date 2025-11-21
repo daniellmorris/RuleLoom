@@ -323,6 +323,9 @@ components:
           type: string
         preset:
           type: string
+        options:
+          type: object
+          additionalProperties: true
       required: [type]
     RunnerHealth:
       type: object

@@ -41,5 +41,6 @@ export interface ClosureDefinition {
   template?: string;
   module?: string;
   preset?: string;
+  options?: Record<string, unknown>;
   steps?: FlowStep[];
 }

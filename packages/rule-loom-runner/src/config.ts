@@ -138,12 +138,13 @@ const flowClosureSchema = z.object({
   steps: z.array(flowStepSchema).min(1),
 });
 
-const coreClosureSchema = z.object({
-  type: z.literal('core'),
-  preset: z.enum(['default']).optional().default('default'),
+const bundleClosureSchema = z.object({
+  type: z.literal('bundle'),
+  preset: z.string().min(1),
+  options: z.record(z.any()).optional(),
 });
 
-const closureSchema = z.union([templateClosureSchema, moduleClosureSchema, flowClosureSchema, coreClosureSchema]);
+const closureSchema = z.union([templateClosureSchema, moduleClosureSchema, flowClosureSchema, bundleClosureSchema]);
 
 export type ClosureConfig = z.infer<typeof closureSchema>;
 

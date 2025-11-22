@@ -31,8 +31,7 @@ inputs:                   # optional; defaults to []
   - type: mqtt | amqp     # reserved for future transports
     options: {}           # arbitrary settings for custom adapters
 closures:                 # optional; defaults to []
-  - type: bundle | template | module | flow
-    # e.g. preset: core
+  - type: template | module | flow
 flows:                    # required; ≥1 flow definition
   - name: flow-name
     description: optional
@@ -55,7 +54,7 @@ Inputs describe how events enter the runner. Today the HTTP input (Express serve
 
 Described in detail below; groups Bree job declarations.
 
-> **Example:** `examples/configs/home-assistant-toggle.yaml` combines the scheduler input with the built-in `type: bundle` preset `http` and an inline `type: flow` closure to toggle a Home Assistant switch every 15 minutes via REST.
+> **Example:** `examples/configs/home-assistant-toggle.yaml` combines the scheduler input with the built-in `http.request` closure (now provided automatically by the core plugin) and an inline `type: flow` closure to toggle a Home Assistant switch every 15 minutes via REST.
 
 ### `type: mqtt` / `type: amqp`
 
@@ -63,41 +62,7 @@ Placeholders for upcoming transports. They currently accept an arbitrary `option
 
 ## Closure Entries
 
-Every closure must declare a schema (aka signature) describing its parameters and outputs. Built-in bundles (`core`, `http`, etc.) include this metadata automatically. Custom modules should return closures with a `signature` property so the runner can validate flow steps before execution. Use `npm run validate -- --config path/to/config.yaml` (or `ruleloom-runner validate -c ...`) to lint a config offline; the orchestrator also exposes `POST /api/runners/validate` for the same check.
-
-### `type: bundle`
-Registers one of the built-in closure bundles shipped with `rule-loom-core`. Specify a `preset` (for example `core` or `http`) and optional `options` that the bundle understands.
-
-```yaml
-closures:
-  - type: bundle
-    preset: core
-```
-
-To add the HTTP client bundle:
-
-```yaml
-closures:
-  - type: bundle
-    preset: http
-    options:
-      baseUrl: https://homeassistant.local:8123
-      headers:
-        Authorization: "Bearer YOUR_LONG_LIVED_ACCESS_TOKEN"
-```
-
-The `http` preset registers the `http.request` closure, which you can invoke inside any flow:
-
-```yaml
-- closure: http.request
-  parameters:
-    method: POST
-    url: /api/services/switch/toggle
-    body:
-      entity_id: switch.lamp
-```
-
-Additional presets (e.g., `amqp`, `mqtt`) can be introduced without changing the schema—only the bundle registry in `rule-loom-core` needs to grow.
+Every closure must declare a schema (aka signature) describing its parameters and outputs. The built-in core plugin now auto-registers the `core.*` utilities and `http.request`, so you don’t need to declare bundles in configs. Custom modules should return closures with a `signature` property so the runner can validate flow steps before execution. Use `npm run validate -- --config path/to/config.yaml` (or `ruleloom-runner validate -c ...`) to lint a config offline; the orchestrator also exposes `POST /api/runners/validate` for the same check.
 
 ### `type: template`
 Creates a closure from predefined templates.

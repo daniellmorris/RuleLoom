@@ -75,7 +75,6 @@ export default function ClosureInspector({ closures }: ClosureInspectorProps) {
                 <Badge color="violet">{selectedClosure.type}</Badge>
                 {selectedClosure.template && <Badge color="blue">template: {selectedClosure.template}</Badge>}
                 {selectedClosure.module && <Badge color="cyan">module: {selectedClosure.module}</Badge>}
-                {selectedClosure.preset && <Badge color="grape">preset: {selectedClosure.preset}</Badge>}
               </Group>
             </Group>
             {flowVisualizerData ? (

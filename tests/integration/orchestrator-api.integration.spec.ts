@@ -99,9 +99,6 @@ inputs:
       - method: post
         path: /invalid
         flow: invalid-flow
-closures:
-  - type: bundle
-    preset: core
 flows:
   - name: invalid-flow
     steps:

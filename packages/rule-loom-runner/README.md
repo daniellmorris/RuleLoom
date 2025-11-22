@@ -54,10 +54,9 @@ inputs:
         flow: heartbeat
         interval: "1m"
 closures:
-  - type: bundle           # built-in bundles (preset: core/http/...)
-    preset: core
   - type: module           # optional custom closures
   - type: flow             # config-defined closure flows
+  # Core/http closures are available automatically via the built-in plugin.
 flows:
   - name: echo-request
     steps:

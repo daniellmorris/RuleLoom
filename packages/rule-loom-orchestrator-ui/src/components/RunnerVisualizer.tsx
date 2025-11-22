@@ -217,7 +217,6 @@ function formatClosureLabel(closure: ClosureDefinition): string {
   lines.push(`type: ${closure.type}`);
   if (closure.template) lines.push(`template: ${closure.template}`);
   if (closure.module) lines.push(`module: ${closure.module}`);
-  if (closure.preset) lines.push(`preset: ${closure.preset}`);
   if (closure.description) lines.push(closure.description);
   return lines.join('\n');
 }

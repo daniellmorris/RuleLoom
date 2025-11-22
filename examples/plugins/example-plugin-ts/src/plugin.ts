@@ -4,7 +4,7 @@ import type { PluginRegistrationContext, RuleLoomPlugin } from 'rule-loom-runner
 const plugin: RuleLoomPlugin = {
   name: 'example-plugin-ts',
   version: '0.0.1',
-  async register({ registerInputPlugin, registerBundle, registerClosure, logger }: PluginRegistrationContext) {
+  async register({ registerInputPlugin, registerClosure, logger }: PluginRegistrationContext) {
     const echoInputSchema = z.object({
       type: z.literal('echo'),
       message: z.string().min(1),
@@ -21,20 +21,18 @@ const plugin: RuleLoomPlugin = {
       },
     });
 
-    registerBundle('hello', () => [
-      {
-        name: 'hello.uppercase',
-        handler: async (_state, context) => {
-          const value = context.parameters?.value ?? '';
-          return String(value).toUpperCase();
-        },
-        signature: {
-          description: 'Uppercases a string value.',
-          parameters: [{ name: 'value', type: 'string', required: true }],
-          returns: { type: 'string' },
-        },
+    registerClosure({
+      name: 'hello.uppercase',
+      handler: async (_state, context) => {
+        const value = context.parameters?.value ?? '';
+        return String(value).toUpperCase();
       },
-    ]);
+      signature: {
+        description: 'Uppercases a string value.',
+        parameters: [{ name: 'value', type: 'string', required: true }],
+        returns: { type: 'string' },
+      },
+    });
 
     registerClosure({
       name: 'hello.add',

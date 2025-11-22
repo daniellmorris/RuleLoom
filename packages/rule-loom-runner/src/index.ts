@@ -21,6 +21,7 @@ import { RunnerValidationError, validateRunnerConfig, type ValidationResult } fr
 import { parsePluginSpecs } from './pluginSpecs.js';
 import { loadRuleLoomPlugins } from './pluginLoader.js';
 import { getRegisteredClosures } from './closureRegistry.js';
+import { applySecrets, resolveSecrets } from './secrets.js';
 
 export interface RunnerInstance {
   engine: RuleLoomEngine;
@@ -63,11 +64,13 @@ async function instantiateEngine(
 
 export async function createRunner(configPath: string): Promise<RunnerInstance> {
   const { rawConfig, configDir, configPath: absolutePath } = await readRunnerConfigFile(configPath);
+  const secrets = await resolveSecrets((rawConfig as any).secrets, configDir);
+  const resolvedConfig = applySecrets(rawConfig, secrets);
   const preliminaryLogger = createLogger((rawConfig as any)?.logger?.level ?? 'info');
   const pluginSpecs = parsePluginSpecs((rawConfig as any)?.plugins ?? []);
   await loadRuleLoomPlugins(pluginSpecs, { logger: preliminaryLogger, configDir });
 
-  const config = parseRunnerConfig(rawConfig);
+  const config = parseRunnerConfig(resolvedConfig);
   const logger = createLogger(config.logger?.level ?? 'info');
   const closures = await buildClosures(config.closures ?? [], configDir, logger);
   const pluginClosures = getRegisteredClosures();
@@ -148,10 +151,12 @@ export async function startRunner(options: StartOptions): Promise<{ instance: Ru
 
 export async function validateConfig(configPath: string): Promise<ValidationResult> {
   const { rawConfig, configDir } = await readRunnerConfigFile(configPath);
+  const secrets = await resolveSecrets((rawConfig as any).secrets, configDir);
+  const resolvedConfig = applySecrets(rawConfig, secrets);
   const preliminaryLogger = createLogger((rawConfig as any)?.logger?.level ?? 'info');
   const pluginSpecs = parsePluginSpecs((rawConfig as any)?.plugins ?? []);
   await loadRuleLoomPlugins(pluginSpecs, { logger: preliminaryLogger, configDir });
-  const config = parseRunnerConfig(rawConfig);
+  const config = parseRunnerConfig(resolvedConfig);
   const logger = createLogger(config.logger?.level ?? 'info');
   const closures = await buildClosures(config.closures ?? [], configDir, logger);
   const pluginClosures = getRegisteredClosures();

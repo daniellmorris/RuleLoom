@@ -15,7 +15,7 @@ import {
   type HttpInputApp,
   type RunnerScheduler,
   type RunnerInputConfig,
-} from 'rule-loom-inputs';
+} from 'rule-loom-core/inputs';
 import { initializeInputs } from './inputPlugins.js';
 import { RunnerValidationError, validateRunnerConfig, type ValidationResult } from './validator.js';
 import { parsePluginSpecs } from './pluginSpecs.js';
@@ -28,7 +28,7 @@ export interface RunnerInstance {
   config: RunnerConfig;
   configPath: string;
   app: HttpInputApp;
-  listen: (port?: number) => Promise<http.Server>;
+  listen: (port?: number, host?: string) => Promise<http.Server>;
   close: () => Promise<void>;
   scheduler?: RunnerScheduler;
   events: EventEmitter;
@@ -37,6 +37,7 @@ export interface RunnerInstance {
 export interface StartOptions {
   configPath: string;
   portOverride?: number;
+  host?: string;
 }
 
 function normalizeFlows(flows: FlowConfig[]): FlowDefinition[] {
@@ -95,16 +96,17 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
 
   let server: http.Server | undefined;
 
-  const listen = async (port?: number) => {
-    const resolvedPort = port ?? 3000;
+  const listen = async (port?: number, host = '127.0.0.1') => {
+    const resolvedPort = port ?? Number(process.env.RULE_LOOM_PORT ?? 3000);
     if (server) {
       throw new Error('Runner is already listening.');
     }
-    server = await new Promise<http.Server>((resolve) => {
-      const srv = app.listen(resolvedPort, () => {
+    server = await new Promise<http.Server>((resolve, reject) => {
+      const srv = app.listen(resolvedPort, host, () => {
         logger.info(`RuleLoom Runner listening on port ${resolvedPort}`);
         resolve(srv);
       });
+      srv.on('error', reject);
     });
     return server;
   };
@@ -140,7 +142,7 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
 
 export async function startRunner(options: StartOptions): Promise<{ instance: RunnerInstance; server: http.Server }> {
   const instance = await createRunner(options.configPath);
-  const server = await instance.listen(options.portOverride);
+  const server = await instance.listen(options.portOverride, options.host);
   return { instance, server };
 }
 
@@ -158,7 +160,7 @@ export async function validateConfig(configPath: string): Promise<ValidationResu
 
 export { getHttpInput, getSchedulerInput } from './config.js';
 export type { RunnerConfig, RunnerConfigWithMeta } from './config.js';
-export type { RunnerScheduler, SchedulerJobConfig, SchedulerInputConfig, HttpInputConfig } from 'rule-loom-inputs';
+export type { RunnerScheduler, SchedulerJobConfig, SchedulerInputConfig, HttpInputConfig } from 'rule-loom-core/inputs';
 export { RunnerValidationError } from './validator.js';
 export type { ValidationIssue, ValidationResult } from './validator.js';
 export type { PluginRegistrationContext, RuleLoomPlugin } from './pluginLoader.js';

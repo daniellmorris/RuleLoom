@@ -4,6 +4,12 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./inputs": "./src/inputs/index.ts",
+    "./inputs/*": "./src/inputs/*.ts",
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist"
   ],

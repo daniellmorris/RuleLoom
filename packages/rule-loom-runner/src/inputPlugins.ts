@@ -1,7 +1,7 @@
 import type RuleLoomEngine from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
-import type { HttpInputApp, InputPluginContext, RunnerInputConfig, RunnerScheduler } from 'rule-loom-inputs';
-import { getInputPlugins } from 'rule-loom-inputs';
+import type { HttpInputApp, InputPluginContext, RunnerInputConfig, RunnerScheduler } from 'rule-loom-core/inputs';
+import { getInputPlugins } from 'rule-loom-core/inputs';
 import type { EventEmitter } from 'node:events';
 
 export interface InitializedInputs {

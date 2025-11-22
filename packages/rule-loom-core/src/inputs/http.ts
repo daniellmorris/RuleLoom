@@ -6,7 +6,6 @@ import { z } from 'zod';
 import type { RuleLoomEngine, ExecutionRuntime } from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
 import type { HttpInputConfig, HttpRouteConfig, HttpInputApp, InputPlugin } from './types.js';
-import { registerInputPlugin } from './pluginRegistry.js';
 
 function buildInitialState(req: Request) {
   return {
@@ -97,7 +96,7 @@ export const httpInputSchema = z.object({
   ).min(1),
 });
 
-registerInputPlugin<HttpInputConfig>({
+export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
   type: 'http',
   schema: httpInputSchema,
   initialize: async (config: HttpInputConfig, { logger, engine, metadata }) => {
@@ -109,7 +108,7 @@ registerInputPlugin<HttpInputConfig>({
       },
     };
   },
-});
+};
 
 export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions): HttpInputApp {
   const app = express();

@@ -6,7 +6,7 @@ import type { RuleLoomLogger } from 'rule-loom-lib';
 export function coreAssignClosure(): ClosureDefinition {
   return {
     name: 'core.assign',
-    handler: async (state, context) => {
+    handler: async (state: any, context: any) => {
       const params = context.parameters ?? {};
       const target = params.target as string | undefined;
       if (!target) {
@@ -44,7 +44,7 @@ export function coreAssignClosure(): ClosureDefinition {
 export function coreRespondClosure(): ClosureDefinition {
   return {
     name: 'core.respond',
-    handler: async (state, context) => {
+    handler: async (state: any, context: any) => {
       const params = context.parameters ?? {};
       const status = Number(params.status ?? 200);
       const headers = params.headers as Record<string, string> | undefined;
@@ -70,7 +70,7 @@ export function coreRespondClosure(): ClosureDefinition {
 export function coreLogClosure(): ClosureDefinition {
   return {
     name: 'core.log',
-    handler: async (_state, context) => {
+    handler: async (_state: any, context: any) => {
       const params = context.parameters ?? {};
       const level = (params.level as keyof RuleLoomLogger | undefined) ?? 'info';
       const message = params.message ?? 'RuleLoom log';
@@ -94,7 +94,7 @@ export function coreLogClosure(): ClosureDefinition {
 export function coreTruthyClosure(): ClosureDefinition {
   return {
     name: 'core.truthy',
-    handler: async (_state, context) => {
+    handler: async (_state: any, context: any) => {
       const value = context.parameters?.value;
       return Boolean(value);
     },
@@ -109,7 +109,7 @@ export function coreTruthyClosure(): ClosureDefinition {
 export function coreEqualsClosure(): ClosureDefinition {
   return {
     name: 'core.equals',
-    handler: async (_state, context) => {
+    handler: async (_state: any, context: any) => {
       const left = context.parameters?.left;
       const right = context.parameters?.right;
       return _.isEqual(left, right);
@@ -128,7 +128,7 @@ export function coreEqualsClosure(): ClosureDefinition {
 export function coreGreaterThanClosure(): ClosureDefinition {
   return {
     name: 'core.greater-than',
-    handler: async (_state, context) => {
+    handler: async (_state: any, context: any) => {
       const left = Number(context.parameters?.left);
       const right = Number(context.parameters?.right);
       return left > right;
@@ -147,7 +147,7 @@ export function coreGreaterThanClosure(): ClosureDefinition {
 export function coreLessThanClosure(): ClosureDefinition {
   return {
     name: 'core.less-than',
-    handler: async (_state, context) => {
+    handler: async (_state: any, context: any) => {
       const left = Number(context.parameters?.left);
       const right = Number(context.parameters?.right);
       return left < right;
@@ -194,7 +194,7 @@ export function coreIncludesClosure(): ClosureDefinition {
 export function coreLengthClosure(): ClosureDefinition {
   return {
     name: 'core.length',
-    handler: async (state, context) => {
+    handler: async (state: any, context: any) => {
       const targetPath = context.parameters?.target as string | undefined;
       const value = targetPath ? _.get(state, targetPath) : context.parameters?.value;
       if (Array.isArray(value) || typeof value === 'string') {
@@ -221,7 +221,7 @@ export function coreForEachClosure(): ClosureDefinition {
   return {
     name: 'core.for-each',
     functionalParams: [{ name: 'steps', mode: 'array' }],
-    handler: async (state, context) => {
+    handler: async (state: any, context: any) => {
       const items = context.parameters?.collection as unknown;
       const steps = context.parameters?.steps as FlowStep[] | undefined;
       if (!Array.isArray(items) || !steps || steps.length === 0) {

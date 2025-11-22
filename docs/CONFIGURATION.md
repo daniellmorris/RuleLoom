@@ -40,6 +40,16 @@ flows:                    # required; ≥1 flow definition
 
 Inputs describe how events enter the runner. Today the HTTP input (Express server) and scheduler input (Bree jobs) are implemented in `rule-loom-inputs`; future transports like AMQP/MQTT can be added without changing the runner core. Omit the HTTP input if you only need background jobs.
 
+Plugins load before validation so custom closures/inputs are available to the schema. You can also ship “safe” config-only plugins (no JS) by pointing a plugin at a YAML/JSON file that contains just a `closures:` array (or is itself an array of closures):
+
+```yaml
+plugins:
+  - source: config
+    path: ./plugins/sanitized-closures.yaml
+```
+
+The runner parses and registers those closures as if they were inline, without executing arbitrary code.
+
 ### `type: http`
 
 - `basePath` – optional hint for the orchestrator when mounting runners (defaults to `/`).

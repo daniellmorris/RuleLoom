@@ -2,17 +2,20 @@ import fs from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import https from 'node:https';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import os from 'node:os';
+import yaml from 'js-yaml';
 import type { RuleLoomLogger } from 'rule-loom-lib';
-import { registerInputPlugin } from 'rule-loom-inputs';
+import { registerInputPlugin, resetInputPlugins } from 'rule-loom-core/inputs';
 import { corePlugin } from 'rule-loom-core';
 import type { ClosureDefinition } from 'rule-loom-engine';
 import { registerClosure } from './closureRegistry.js';
 import type { PluginSpec } from './pluginSpecs.js';
+import { parseClosureConfigs } from './config.js';
+import { buildClosures } from './closures.js';
 
 const execFileAsync = promisify(execFile);
 const loadedPlugins = new Set<string>();
@@ -59,6 +62,18 @@ export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLo
       options.logger.debug?.(`Plugin at ${modulePath} already loaded; skipping.`);
       continue;
     }
+
+    if (spec.source === 'config') {
+      const sourcePath = fileURLToPath(new URL(modulePath));
+      const rawFile = await fs.readFile(sourcePath, 'utf8');
+      const parsed = (yaml.load(rawFile) ?? {}) as any;
+      const closureEntries = Array.isArray(parsed) ? parsed : parsed.closures ?? [];
+      const closureConfigs = parseClosureConfigs(closureEntries);
+      const closures = await buildClosures(closureConfigs, path.dirname(sourcePath), options.logger);
+      closures.forEach((c) => registerClosure(c));
+      loadedPlugins.add(modulePath);
+      continue;
+    }
     const pluginModule = await import(modulePath);
     const plugin: RuleLoomPlugin | undefined = pluginModule.default ?? pluginModule.plugin ?? pluginModule;
     if (!plugin || typeof plugin.register !== 'function') {
@@ -78,10 +93,12 @@ export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLo
 
 export function resetLoadedPlugins() {
   loadedPlugins.clear();
+  resetInputPlugins();
 }
 
 function specName(spec: PluginSpec): string | undefined {
   if (spec.source === 'file') return spec.name ?? path.basename(spec.path);
+  if (spec.source === 'config') return spec.name ?? path.basename(spec.path);
   if (spec.source === 'github') return spec.name ?? spec.repo;
   return spec.name;
 }
@@ -91,6 +108,12 @@ interface ResolveOptions extends PluginLoaderOptions {
 }
 
 async function resolvePluginModule(spec: PluginSpec, options: ResolveOptions): Promise<string> {
+  if (spec.source === 'config') {
+    const resolved = spec.path.startsWith('file:') ? spec.path.replace(/^file:/, '') : spec.path;
+    const absolute = path.isAbsolute(resolved) ? resolved : path.resolve(options.configDir, resolved);
+    return pathToFileURL(absolute).href;
+  }
+
   if (spec.source === 'file') {
     const p = spec.path.startsWith('file:') ? spec.path.replace(/^file:/, '') : spec.path;
     const resolved = path.isAbsolute(p) ? p : path.resolve(options.configDir, p);

@@ -8,5 +8,6 @@ export default defineConfig({
     hookTimeout: 30000,
     globals: true,
     reporters: 'default',
+    setupFiles: ['tests/setup/http-bind-check.ts', 'tests/setup/supertest-host.ts'],
   },
 });

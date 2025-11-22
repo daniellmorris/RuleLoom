@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import supertest from 'supertest';
 import { describe, it, expect } from 'vitest';
+import { itHttp } from '../helpers/httpSkip.ts';
 
 import { createRunner } from '../../packages/rule-loom-runner/src/index.ts';
 import type { RunnerInstance } from '../../packages/rule-loom-runner/src/index.ts';
@@ -27,7 +28,7 @@ describe('RuleLoom Runner configuration features', () => {
     await expect(createRunner(invalidPath)).rejects.toThrow(/validation/i);
   });
 
-  it('Branching & Core Closures', async () => {
+  itHttp('Branching & Core Closures', async () => {
     await withRunner('branching.yaml', async (instance) => {
       const request = supertest(instance.app);
       const positive = await request
@@ -45,7 +46,7 @@ describe('RuleLoom Runner configuration features', () => {
     });
   });
 
-  it('$call Inline Closure Execution', async () => {
+  itHttp('$call Inline Closure Execution', async () => {
     await withRunner('call-inline.yaml', async (instance) => {
       const res = await supertest(instance.app)
         .post('/format')
@@ -57,7 +58,7 @@ describe('RuleLoom Runner configuration features', () => {
     });
   });
 
-  it('Functional Parameters (core.for-each)', async () => {
+  itHttp('Functional Parameters (core.for-each)', async () => {
     await withRunner('functional.yaml', async (instance) => {
       const res = await supertest(instance.app)
         .post('/items')
@@ -72,7 +73,7 @@ describe('RuleLoom Runner configuration features', () => {
     });
   });
 
-  it('Flow Closures reuse', async () => {
+  itHttp('Flow Closures reuse', async () => {
     await withRunner('flow-closure.yaml', async (instance) => {
       const res = await supertest(instance.app)
         .post('/flow')
@@ -83,7 +84,7 @@ describe('RuleLoom Runner configuration features', () => {
     });
   });
 
-  it('Flow closure parameters interpolate', async () => {
+  itHttp('Flow closure parameters interpolate', async () => {
     await withRunner('flow-closure-params.yaml', async (instance) => {
       const res = await supertest(instance.app)
         .post('/flow-params')
@@ -95,7 +96,7 @@ describe('RuleLoom Runner configuration features', () => {
     });
   });
 
-  it('Module closures via $call', async () => {
+  itHttp('Module closures via $call', async () => {
     await withRunner('module.yaml', async (instance) => {
       const res = await supertest(instance.app)
         .post('/module')

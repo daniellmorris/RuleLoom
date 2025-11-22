@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import supertest from 'supertest';
 import { describe, it, expect } from 'vitest';
+import { itHttp } from '../helpers/httpSkip.ts';
 
 import { createOrchestrator } from '../../packages/rule-loom-orchestrator/src/index.ts';
 
@@ -31,7 +32,7 @@ async function withOrchestrator(
 }
 
 describe('RuleLoom Orchestrator', () => {
-  it('mounts multiple runner configs under different base paths', async () => {
+  itHttp('mounts multiple runner configs under different base paths', async () => {
     await withOrchestrator('orchestrator.yaml', async (app) => {
       const request = supertest(app);
 

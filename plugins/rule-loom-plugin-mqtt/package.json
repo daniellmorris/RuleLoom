@@ -1,0 +1,28 @@
+{
+  "name": "rule-loom-plugin-mqtt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "test": "vitest run",
+    "manifest": "npm -w rule-loom-runner run build --if-present && node ../../packages/rule-loom-runner/dist/cli.js manifest .",
+    "postbuild": "npm run manifest"
+  },
+  "dependencies": {
+    "mqtt": "^5.1.0",
+    "rule-loom-core": "file:../packages/rule-loom-core",
+    "rule-loom-lib": "file:../packages/rule-loom-lib",
+    "rule-loom-engine": "file:../packages/rule-loom-engine"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.5",
+    "typescript": "^5.4.2",
+    "rule-loom-runner": "file:../../packages/rule-loom-runner"
+  }
+}

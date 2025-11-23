@@ -90,7 +90,7 @@ async function createBree(input: SchedulerInputConfig, options: SchedulerInputOp
   const bree = new Bree({
     root: false,
     jobs: definitions,
-    workerMessageHandler: async (message) => {
+    workerMessageHandler: async (message: any) => {
       if (message?.type === 'run-flow') {
         const flowName = message.name as string;
         const jobConfig = input.jobs.find((job) => job.name === flowName);
@@ -109,14 +109,14 @@ async function createBree(input: SchedulerInputConfig, options: SchedulerInputOp
 async function startScheduler(bree: SchedulerInternal, logger: RuleLoomLogger): Promise<RunnerScheduler> {
   const jobStates = new Map<string, SchedulerJobState>();
 
-  bree.on('worker created', (name) => {
+  bree.on('worker created', (name: string) => {
     const state = jobStates.get(name) ?? { runs: 0 };
     state.runs += 1;
     state.lastRun = new Date();
     jobStates.set(name, state);
   });
 
-  bree.on('worker message', (name, message) => {
+  bree.on('worker message', (name: string, message: any) => {
     const state = jobStates.get(name) ?? { runs: 0 };
     if (message?.type === 'run-flow') return;
     if (message === 'done') return;
@@ -124,7 +124,7 @@ async function startScheduler(bree: SchedulerInternal, logger: RuleLoomLogger): 
     jobStates.set(name, state);
   });
 
-  bree.on('worker error', (name, error) => {
+  bree.on('worker error', (name: string, error: unknown) => {
     const state = jobStates.get(name) ?? { runs: 0 };
     state.lastError = error;
     jobStates.set(name, state);

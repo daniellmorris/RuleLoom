@@ -3,6 +3,7 @@ import { createWriteStream } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import https from 'node:https';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -61,6 +62,10 @@ export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLo
     if (loadedPlugins.has(modulePath)) {
       options.logger.debug?.(`Plugin at ${modulePath} already loaded; skipping.`);
       continue;
+    }
+
+    if (spec.source !== 'config') {
+      await requireManifest(modulePath);
     }
 
     if (spec.source === 'config') {
@@ -139,6 +144,57 @@ async function resolvePluginModule(spec: PluginSpec, options: ResolveOptions): P
   }
 
   return pathToFileURL(entryFile).href;
+}
+
+async function requireManifest(modulePath: string) {
+  const manifestPath = await locateManifest(modulePath);
+  const exists = manifestPath
+    ? await fs
+        .stat(manifestPath)
+        .then((s) => s.isFile())
+        .catch(() => false)
+    : false;
+
+  if (!exists) {
+    throw new Error(
+      `Missing ruleloom.manifest.yaml for plugin (${modulePath}). Generate one with "ruleloom-runner manifest <plugin-dir>".`,
+    );
+  }
+}
+
+async function locateManifest(resolvedModulePath: string): Promise<string | undefined> {
+  const require = createRequire(import.meta.url);
+
+  if (resolvedModulePath.startsWith('file:')) {
+    const fsPath = fileURLToPath(resolvedModulePath);
+    let current = path.extname(fsPath) ? path.dirname(fsPath) : fsPath;
+    while (true) {
+      const candidate = path.join(current, 'ruleloom.manifest.yaml');
+      // eslint-disable-next-line no-await-in-loop
+      const exists = await fs
+        .stat(candidate)
+        .then((s) => s.isFile())
+        .catch(() => false);
+      if (exists) return candidate;
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+    return undefined;
+  }
+
+  // Attempt to resolve relative to module name (npm/store/github).
+  try {
+    return require.resolve(path.join(resolvedModulePath, 'ruleloom.manifest.yaml'));
+  } catch (error) {
+    // ignore
+  }
+
+  try {
+    return require.resolve('ruleloom.manifest.yaml', { paths: [resolvedModulePath] });
+  } catch (error) {
+    return undefined;
+  }
 }
 
 async function downloadGithubRepo(spec: Extract<PluginSpec, { source: 'github' }>, targetDir: string, options: ResolveOptions) {

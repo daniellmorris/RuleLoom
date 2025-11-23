@@ -1,0 +1,5 @@
+version: 1
+name: '@example/rule-loom-plugin-ts'
+pluginVersion: 0.0.1
+entry: dist/plugin.js
+closures: []

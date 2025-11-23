@@ -1,0 +1,21 @@
+version: 1
+name: rule-loom-plugin-openai
+pluginVersion: 0.1.0
+entry: dist/index.js
+closures:
+  - name: openai.chatCompletion
+    description: Call OpenAI chat completions
+    signature:
+      parameters:
+        - name: apiKey
+          type: string
+          required: true
+        - name: model
+          type: string
+          required: true
+        - name: messages
+          type: array
+          required: true
+        - name: temperature
+          type: number
+          required: false

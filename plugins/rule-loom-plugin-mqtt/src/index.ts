@@ -1,0 +1,117 @@
+import { z } from 'zod';
+import type { PluginRegistrationContext } from 'rule-loom-runner/src/pluginLoader.js';
+
+type PublishParams = {
+  url: string;
+  username?: string;
+  password?: string;
+  topic: string;
+  payload: string;
+  qos?: 0 | 1 | 2;
+  retain?: boolean;
+};
+
+export const plugin = {
+  name: 'rule-loom-plugin-mqtt',
+  async register(ctx: PluginRegistrationContext) {
+    const subscriptionSchema = z.object({
+      topic: z.string().min(1),
+      flow: z.string().min(1),
+      qos: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+      json: z.boolean().optional(),
+    });
+
+    const mqttInputSchema = z.object({
+      type: z.literal('mqtt'),
+      url: z.string().min(1),
+      username: z.string().optional(),
+      password: z.string().optional(),
+      clientId: z.string().optional(),
+      subscriptions: z.array(subscriptionSchema).min(1),
+      options: z.record(z.any()).optional(),
+    });
+
+    type MqttInputConfig = z.infer<typeof mqttInputSchema>;
+
+    ctx.registerInputPlugin({
+      type: 'mqtt',
+      schema: mqttInputSchema,
+      initialize: async (config: MqttInputConfig, context: any) => {
+        const mqtt = await import('mqtt');
+        const client = mqtt.connect(config.url, {
+          username: config.username,
+          password: config.password,
+          clientId: config.clientId,
+          ...(config.options ?? {}),
+        });
+
+        await new Promise<void>((resolve, reject) => {
+          client.once('connect', () => resolve());
+          client.once('error', reject);
+        });
+
+        // Subscribe to configured topics
+        const subs = config.subscriptions.map((s) => ({ topic: s.topic, qos: s.qos ?? 0 }));
+        if (subs.length) {
+          await new Promise<void>((resolve, reject) => {
+            client.subscribe(subs as any, (err) => (err ? reject(err) : resolve()));
+          });
+        }
+
+        const onMessage = async (topic: string, payload: Buffer) => {
+          const sub = config.subscriptions.find((s) => s.topic === topic);
+          if (!sub) return;
+          try {
+            const body = sub.json ? JSON.parse(payload.toString('utf8')) : payload.toString('utf8');
+            await context.engine.execute(sub.flow, {}, { mqtt: { topic, payload: body } });
+          } catch (error) {
+            context.logger.error?.('MQTT input handler failed', { topic, error });
+          }
+        };
+
+        client.on('message', onMessage);
+
+        return {
+          cleanup: async () => {
+            client.off('message', onMessage);
+            await new Promise<void>((resolve) => client.end(true, () => resolve()));
+          },
+        };
+      },
+    });
+
+    ctx.registerClosure({
+      name: 'mqtt.publish',
+      description: 'Publish a message to an MQTT topic',
+      signature: {
+        parameters: [
+          { name: 'url', type: 'string', required: true },
+          { name: 'username', type: 'string', required: false },
+          { name: 'password', type: 'string', required: false },
+          { name: 'topic', type: 'string', required: true },
+          { name: 'payload', type: 'string', required: true },
+          { name: 'qos', type: 'number', required: false },
+          { name: 'retain', type: 'boolean', required: false },
+        ],
+      },
+      handler: async (_state, { parameters }) => {
+        const { url, username, password, topic, payload, qos = 0, retain = false } = parameters as PublishParams;
+        const mqtt = await import('mqtt');
+        const client = mqtt.connect(url, { username, password });
+        await new Promise<void>((resolve, reject) => {
+          client.on('connect', () => {
+            client.publish(topic, payload, { qos, retain }, (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+          client.on('error', reject);
+        });
+        client.end();
+        return { published: true, topic };
+      },
+    });
+  },
+};
+
+export default plugin;

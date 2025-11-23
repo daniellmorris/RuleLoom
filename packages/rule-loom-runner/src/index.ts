@@ -169,3 +169,4 @@ export type { RunnerScheduler, SchedulerJobConfig, SchedulerInputConfig, HttpInp
 export { RunnerValidationError } from './validator.js';
 export type { ValidationIssue, ValidationResult } from './validator.js';
 export type { PluginRegistrationContext, RuleLoomPlugin } from './pluginLoader.js';
+export { generateManifest, readManifest, type RuleLoomManifest } from './manifest.js';

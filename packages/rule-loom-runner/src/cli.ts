@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { RunnerValidationError, startRunner, validateConfig } from "./index.js";
+import { generateManifest } from "./manifest.js";
 
 const program = new Command();
 
@@ -57,6 +58,27 @@ program
         "Failed to validate RuleLoom configuration:",
         error as Error,
       );
+      process.exit(1);
+    }
+  });
+
+program
+  .command("manifest")
+  .description("Generate a ruleloom.manifest.yaml for a plugin package")
+  .argument("[pluginDir]", "Path to the plugin package", ".")
+  .option(
+    "-o, --out <path>",
+    "Output path for the manifest (defaults to <pluginDir>/ruleloom.manifest.yaml)",
+  )
+  .action(async (pluginDir, options) => {
+    try {
+      const { manifestPath } = await generateManifest({
+        pluginDir,
+        outputPath: options.out,
+      });
+      console.log(`Manifest written to ${manifestPath}`);
+    } catch (error: unknown) {
+      console.error("Failed to generate manifest:", error as Error);
       process.exit(1);
     }
   });

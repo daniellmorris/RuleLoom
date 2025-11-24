@@ -1,0 +1,85 @@
+version: 1
+name: rule-loom-plugin-mqtt
+pluginVersion: 0.1.0
+entry: dist/index.js
+closures:
+  - name: mqtt.publish
+    description: Publish a message to an MQTT topic
+    signature:
+      parameters:
+        - name: url
+          type: string
+          required: true
+        - name: username
+          type: string
+          required: false
+        - name: password
+          type: string
+          required: false
+        - name: topic
+          type: string
+          required: true
+        - name: payload
+          type: string
+          required: true
+        - name: qos
+          type: number
+          required: false
+        - name: retain
+          type: boolean
+          required: false
+inputs:
+  - type: mqtt
+    schema:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - mqtt
+        url:
+          type: string
+          minLength: 1
+        username:
+          type: string
+        password:
+          type: string
+        clientId:
+          type: string
+        subscriptions:
+          type: array
+          items:
+            type: object
+            properties:
+              topic:
+                type: string
+                minLength: 1
+              flow:
+                type: string
+                minLength: 1
+              qos:
+                anyOf:
+                  - type: number
+                    enum:
+                      - 0
+                  - type: number
+                    enum:
+                      - 1
+                  - type: number
+                    enum:
+                      - 2
+              json:
+                type: boolean
+            required:
+              - topic
+              - flow
+            additionalProperties: false
+          minItems: 1
+        options:
+          type: object
+          additionalProperties: {}
+      required:
+        - type
+        - url
+        - subscriptions
+      additionalProperties: false

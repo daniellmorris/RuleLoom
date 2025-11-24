@@ -1,0 +1,32 @@
+version: 1
+name: example-plugin
+pluginVersion: 0.0.1
+description: Example RuleLoom plugin used in integration tests
+entry: plugin.js
+inputs:
+  - type: echo
+    description: Echo input that logs a message when initialized
+closures:
+  - name: hello.uppercase
+    description: Uppercases a string value.
+    signature:
+      description: Uppercases a string value.
+      parameters:
+        - name: value
+          type: string
+          required: true
+      returns:
+        type: string
+  - name: hello.add
+    description: Adds two numbers.
+    signature:
+      description: Adds two numbers.
+      parameters:
+        - name: a
+          type: number
+          required: true
+        - name: b
+          type: number
+          required: true
+      returns:
+        type: number

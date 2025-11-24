@@ -1,0 +1,18 @@
+version: 1
+name: rule-loom-plugin-mysql
+pluginVersion: 0.1.0
+entry: dist/index.js
+closures:
+  - name: mysql.query
+    description: Execute a SQL query against MySQL
+    signature:
+      parameters:
+        - name: uri
+          type: string
+          required: true
+        - name: sql
+          type: string
+          required: true
+        - name: values
+          type: array
+          required: false

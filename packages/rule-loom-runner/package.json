@@ -29,6 +29,8 @@
     "@types/lodash": "^4.14.202",
     "@types/node": "^20.12.12",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.2"
+    "typescript": "^5.4.2",
+    "zod-to-json-schema": "^3.23.5",
+    "zod": "^3.23.8"
   }
 }

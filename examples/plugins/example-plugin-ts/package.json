@@ -7,13 +7,16 @@
   "types": "dist/plugin.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "manifest": "npm -w rule-loom-runner run build --if-present && node ../../../packages/rule-loom-runner/dist/cli.js manifest .",
+    "postbuild": "npm run manifest"
   },
   "dependencies": {
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "rule-loom-runner": "file:../../../packages/rule-loom-runner"
   },
   "peerDependencies": {
     "rule-loom-runner": "*"

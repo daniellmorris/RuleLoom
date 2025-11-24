@@ -28,6 +28,7 @@ import { IconPlus, IconRefresh, IconTrash, IconEdit } from '@tabler/icons-react'
 import RunnerVisualizer from './components/RunnerVisualizer';
 import ClosureInspector from './components/ClosureInspector';
 import FlowInspector from './components/FlowInspector';
+import FlowBuilder from './components/builder/FlowBuilder';
 import type { FlowDefinition, ClosureDefinition } from './types/flow';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
@@ -345,6 +346,7 @@ export default function App() {
                   <Tabs.Tab value="scheduler">Scheduler</Tabs.Tab>
                   <Tabs.Tab value="closures">Closures</Tabs.Tab>
                   <Tabs.Tab value="visual">Visualizer</Tabs.Tab>
+                  <Tabs.Tab value="builder">Builder (beta)</Tabs.Tab>
                 </Tabs.List>
 
                 <Tabs.Panel value="routes">
@@ -447,6 +449,16 @@ export default function App() {
                     ) : (
                       <Text c="dimmed">No closures defined in configuration.</Text>
                     )}
+                  </Stack>
+                </Tabs.Panel>
+
+                <Tabs.Panel value="builder">
+                  <Stack my="md">
+                    <FlowBuilder
+                      key={runnerDetail.id}
+                      flows={runnerDetail.flows}
+                      closures={runnerDetail.closures}
+                    />
                   </Stack>
                 </Tabs.Panel>
               </Tabs>

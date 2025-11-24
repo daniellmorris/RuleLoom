@@ -127,42 +127,60 @@ function createBlankFlow(seed: number): FlowBuilderFlowState {
   };
 }
 
+type FlowStateMap = Record<string, FlowBuilderFlowState>;
+
 function FlowBuilderCanvas({ flows, closures }: FlowBuilderProps) {
   const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
   const { project } = useReactFlow();
-  const [flowStates, setFlowStates] = useState<FlowBuilderFlowState[]>(() => {
-    if (flows.length) return flows.map(flowToState);
-    return [createBlankFlow(1)];
-  });
-  const [activeFlowId, setActiveFlowId] = useState<string>(flowStates[0]?.id ?? 'draft-1');
-  const [nodes, setNodes, onNodesChange] = useNodesState<BuilderNodeData>(flowStates[0]?.nodes ?? []);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(flowStates[0]?.edges ?? []);
+  const initialMap: FlowStateMap = useMemo(() => {
+    if (flows.length) return Object.fromEntries(flows.map((flow, idx) => [flow.name ?? `flow-${idx + 1}`, flowToState(flow, idx)]));
+    const blank = createBlankFlow(1);
+    return { [blank.id]: blank };
+  }, []);
+
+  const [flowStateMap, setFlowStateMap] = useState<FlowStateMap>(initialMap);
+  const initialActive = Object.keys(initialMap)[0] ?? 'draft-1';
+  const [activeFlowId, setActiveFlowId] = useState<string>(initialActive);
+
+  const activeFlow = flowStateMap[activeFlowId] ?? flowStateMap[initialActive];
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<BuilderNodeData>(activeFlow?.nodes ?? []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(activeFlow?.edges ?? []);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<string>('inspect');
 
-  useEffect(() => {
-    if (flows.length) {
-      const next = flows.map(flowToState);
-      setFlowStates(next);
-      setActiveFlowId(next[0]?.id ?? 'draft-1');
-    } else {
-      const blank = createBlankFlow(1);
-      setFlowStates([blank]);
-      setActiveFlowId(blank.id);
-    }
-  }, [flows]);
+  const flowsHash = useMemo(() => JSON.stringify(flows ?? []), [flows]);
 
   useEffect(() => {
-    const activeFlow = flowStates.find((flow) => flow.id === activeFlowId) ?? flowStates[0];
-    setNodes(activeFlow?.nodes ?? []);
-    setEdges(activeFlow?.edges ?? []);
+    setFlowStateMap((current) => {
+      if (!flows.length) {
+        const blank = createBlankFlow(1);
+        setActiveFlowId(blank.id);
+        return { [blank.id]: blank };
+      }
+      const nextEntries = flows.map((flow, idx) => {
+        const existing = current[flow.name ?? `flow-${idx + 1}`];
+        return [flow.name ?? `flow-${idx + 1}`, existing ?? flowToState(flow, idx)];
+      });
+      const nextMap = Object.fromEntries(nextEntries);
+      setActiveFlowId((currentId) => (nextMap[currentId] ? currentId : nextEntries[0]?.[0] ?? 'draft-1'));
+      return nextMap;
+    });
+  }, [flowsHash]);
+
+  useEffect(() => {
+    if (!activeFlow) return;
+    setNodes(activeFlow.nodes ?? []);
+    setEdges(activeFlow.edges ?? []);
     setSelectedNodeId(null);
-  }, [activeFlowId, flowStates, setNodes, setEdges]);
+  }, [activeFlowId, activeFlow, setNodes, setEdges]);
 
   useEffect(() => {
-    setFlowStates((current) =>
-      current.map((flow) => (flow.id === activeFlowId ? { ...flow, nodes, edges } : flow)),
-    );
+    if (!activeFlow) return;
+    setFlowStateMap((current) => ({
+      ...current,
+      [activeFlowId]: { ...activeFlow, nodes: [...nodes], edges: [...edges] },
+    }));
   }, [activeFlowId, nodes, edges]);
 
   const selectedNode = useMemo(
@@ -246,8 +264,6 @@ function FlowBuilderCanvas({ flows, closures }: FlowBuilderProps) {
     setEdges((current) => current.filter((edge) => edge.source !== id && edge.target !== id));
     setSelectedNodeId(null);
   }, []);
-
-  const activeFlow = flowStates.find((flow) => flow.id === activeFlowId);
 
   const handleCreateFlow = () => {
     setFlowStates((current) => {

@@ -6,6 +6,7 @@ services:
       - "4100:4100"
     environment:
       - NODE_ENV=production
+      - PORT=4100
     volumes:
       - ./docker/orchestrator.yaml:/app/config/orchestrator.yaml:ro
       - ruleloom-db:/app/.ruleloom

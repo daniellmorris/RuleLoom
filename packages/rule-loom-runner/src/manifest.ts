@@ -105,6 +105,8 @@ export async function generateManifest(options: GenerateOptions): Promise<{ mani
     closures: [],
   };
 
+  let generationWarning: string | undefined;
+
   const manifestPath = options.outputPath
     ? path.resolve(options.outputPath)
     : path.join(pluginDir, 'ruleloom.manifest.yaml');
@@ -117,19 +119,30 @@ export async function generateManifest(options: GenerateOptions): Promise<{ mani
   if (entryExists) {
     const closures: ClosureDefinition[] = [];
     const inputs: InputPlugin<BaseInputConfig>[] = [];
-    const plugin = await collectPluginExports(absolute);
+    try {
+      const plugin = await collectPluginExports(absolute);
 
-    const context: PluginRegistrationContext = {
-      registerClosure: (closure) => closures.push(closure),
-      registerInputPlugin: (plugin) => inputs.push(plugin as unknown as InputPlugin<BaseInputConfig>),
-      logger: createSilentLogger(),
-    } as PluginRegistrationContext;
+      const context: PluginRegistrationContext = {
+        registerClosure: (closure) => closures.push(closure),
+        registerInputPlugin: (plugin) => inputs.push(plugin as unknown as InputPlugin<BaseInputConfig>),
+        logger: createSilentLogger(),
+      } as PluginRegistrationContext;
 
-    await plugin.register?.(context);
-    manifest.closures = closures.map(sanitizeClosure);
-    if (inputs.length) {
-      manifest.inputs = inputs.map(sanitizeInputPlugin);
+      await plugin.register?.(context);
+      manifest.closures = closures.map(sanitizeClosure);
+      if (inputs.length) {
+        manifest.inputs = inputs.map(sanitizeInputPlugin);
+      }
+    } catch (error: unknown) {
+      generationWarning = (error as Error).message;
     }
+  }
+
+  if (generationWarning) {
+    manifest.metadata = {
+      ...(manifest.metadata ?? {}),
+      manifestGenerationWarning: generationWarning,
+    };
   }
 
   const yamlText = yaml.dump(manifest, { noRefs: true, lineWidth: 120 });

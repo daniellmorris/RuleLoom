@@ -1,11 +1,13 @@
 import React, { useMemo } from "react";
 import { useFlowStore } from "../state/flowStore";
 import { Node } from "../types";
+const PARAM_COLORS = ["#7dd3fc", "#fbbf24", "#a78bfa", "#34d399", "#f87171", "#38bdf8"];
 
 const Inspector: React.FC = () => {
   const selectedId = useFlowStore((s) => s.selection.nodeId);
   const selectedEdge = useFlowStore((s) => s.selection.edgeId);
   const flow = useFlowStore((s) => s.flows.find((f) => f.id === s.activeFlowId)!);
+  const closuresMeta = useFlowStore((s) => s.closuresMeta);
   const updateNode = useFlowStore((s) => s.updateNode);
   const connectParam = useFlowStore((s) => s.connectParam);
   const deleteEdge = useFlowStore((s) => s.deleteEdge);
@@ -58,10 +60,10 @@ const Inspector: React.FC = () => {
 
       {node.kind === "input" && <SchemaEditor node={node} />}
       {node.kind === "branch" && <BranchConfig node={node} />}
-      {node.kind === "closure" && <ClosureConfig node={node} />}
       {node.kind === "closure" && (
-        <ParamBindings
+        <ClosureConfig
           node={node}
+          meta={closuresMeta[node.data?.closureName ?? ""]}
           upstream={flow.nodes.filter((n) => n.kind === "closure" || n.kind === "branch")}
           edges={flow.edges}
           onBind={(param, from) => connectParam(node.id, param, from)}
@@ -156,8 +158,15 @@ const BranchConfig: React.FC<{ node: Node }> = ({ node }) => {
   );
 };
 
-const ClosureConfig: React.FC<{ node: Node }> = ({ node }) => {
+const ClosureConfig: React.FC<{
+  node: Node;
+  meta?: any;
+  upstream: Node[];
+  edges: any[];
+  onBind: (param: string, from: string | null) => void;
+}> = ({ node, meta, upstream, edges, onBind }) => {
   const updateNode = useFlowStore((s) => s.updateNode);
+  const paramsMeta = node.data?.parametersMeta ?? meta?.signature?.parameters ?? [];
   return (
     <div className="stack">
       <h3 style={{ margin: 0 }}>Closure</h3>
@@ -186,50 +195,82 @@ const ClosureConfig: React.FC<{ node: Node }> = ({ node }) => {
       <p style={{ color: "var(--muted)", fontSize: 12 }}>
         Use closureParameter connector for first node selection in a step list.
       </p>
+      <ParameterList node={node} upstream={upstream} edges={edges} meta={meta} onBind={onBind} updateNode={updateNode} />
     </div>
   );
 };
 
-const ParamBindings: React.FC<{
+const ParameterList: React.FC<{
   node: Node;
   upstream: Node[];
   edges: any[];
+  meta?: any;
   onBind: (param: string, from: string | null) => void;
-}> = ({ node, upstream, edges, onBind }) => {
-  const params = Object.keys(node.data?.params ?? {}).length ? Object.keys(node.data?.params ?? {}) : ["value"];
+  updateNode: (id: string, patch: Partial<Node>) => void;
+}> = ({ node, upstream, edges, meta, onBind, updateNode }) => {
+  const paramsMeta = (node.data?.parametersMeta ?? meta?.signature?.parameters ?? []) ?? [];
+  const params = paramsMeta.length > 0 ? paramsMeta.map((p: any) => p.name) : Object.keys(node.data?.params ?? {});
+  if (!params.length) return null;
   return (
     <div className="stack">
       <h3 style={{ margin: 0 }}>Parameters</h3>
-      {params.map((p) => {
+      {params.map((p, idx) => {
+        const metaEntry = paramsMeta.find((m: any) => m.name === p);
         const existing = edges.find((e) => e.kind === "param" && e.to === node.id && e.label === p);
+        const bound = Boolean(existing);
+        const callMode = Boolean((node.data as any)?.paramCalls?.[p]);
+        const color = PARAM_COLORS[idx % PARAM_COLORS.length];
         return (
-          <div key={p} className="stack" style={{ border: "1px solid var(--panel-border)", borderRadius: 10, padding: 8 }}>
+          <div key={p} className="stack" style={{ border: `1px solid ${color}`, borderRadius: 10, padding: 8 }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
               <span style={{ fontWeight: 600 }}>{p}</span>
-              {existing && <span className="badge">bound from {existing.from}</span>}
+              <span className="badge" style={{ borderColor: color, color }}>
+                {metaEntry?.type ?? "any"}
+              </span>
             </div>
-            <div className="row">
-              <select
-                className="input"
-                style={{ flex: 1 }}
-                value={existing?.from ?? ""}
-                onChange={(e) => onBind(p, e.target.value || null)}
-              >
-                <option value="">— static —</option>
-                {upstream
-                  .filter((n) => n.id !== node.id)
-                  .map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.label}
-                    </option>
-                  ))}
-              </select>
-            </div>
+            {metaEntry?.type === "flowSteps" ? (
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>
+                Connect a closureParameter edge for this nested flow.
+              </div>
+            ) : (
+              <div className="row" style={{ alignItems: "center", gap: 8 }}>
+                <input
+                  className="input"
+                  style={{ flex: 1 }}
+                  placeholder={metaEntry?.description ?? p}
+                  value={(node.data?.params as any)?.[p] ?? ""}
+                  onChange={(e) => {
+                    if (bound) return;
+                    updateNode(node.id, {
+                      data: { ...node.data, params: { ...(node.data?.params ?? {}), [p]: e.target.value } }
+                    });
+                  }}
+                  disabled={bound}
+                />
+                <label className="row" style={{ gap: 4, color: "var(--muted)", fontSize: 12 }}>
+                  <input
+                    type="checkbox"
+                  checked={callMode}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    const state = useFlowStore.getState();
+                    // clear any existing binding when toggling
+                    onBind(p, null);
+                    const paramCalls = { ...(node.data as any)?.paramCalls, [p]: checked };
+                    state.updateNode(node.id, { data: { ...node.data, paramCalls } });
+                  }}
+                />
+                  $call
+                </label>
+              </div>
+            )}
+            {metaEntry?.required && <span className="badge" style={{ color: "#fbbf24" }}>required</span>}
+            {metaEntry?.description && <div style={{ color: "var(--muted)", fontSize: 12 }}>{metaEntry.description}</div>}
           </div>
         );
       })}
       <p style={{ color: "var(--muted)", fontSize: 12 }}>
-        Bind a parameter to a closure output (replacement for $call). Leave empty for static config.
+        Check $call to bind this parameter to an upstream closure output; otherwise set a static value.
       </p>
     </div>
   );

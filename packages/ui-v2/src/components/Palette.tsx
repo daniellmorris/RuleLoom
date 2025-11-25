@@ -8,12 +8,30 @@ const Palette: React.FC = () => {
   const availableClosures = useFlowStore((s) => s.availableClosures);
   const availableInputs = useFlowStore((s) => s.availableInputs);
   const registerPlugin = useFlowStore((s) => s.registerPlugin);
+  const closuresMeta = useFlowStore((s) => s.closuresMeta);
 
   const handleAdd = (kind: NodeKind, label?: string) => {
     const x = 140 + Math.random() * 400;
     const y = 160 + Math.random() * 320;
     const template = createNodeTemplate(kind, x, y);
-    addNode({ ...template, label: label ?? template.label, data: { ...template.data, closureName: label ?? template.label } });
+    if (kind === "closure" && label) {
+      const meta = closuresMeta[label];
+      const paramsMeta = meta?.signature?.parameters ?? [];
+      const closureParameters = paramsMeta.filter((p: any) => p.type === "flowSteps").map((p: any) => p.name);
+      addNode({
+        ...template,
+        label,
+        data: {
+          ...template.data,
+          closureName: label,
+          parametersMeta: paramsMeta,
+          closureParameters,
+          params: {}
+        }
+      });
+    } else {
+      addNode({ ...template, label: label ?? template.label, data: { ...template.data, closureName: label ?? template.label } });
+    }
   };
 
   const loadPlugin = () => {

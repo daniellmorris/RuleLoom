@@ -1,6 +1,7 @@
 import { nanoid } from "../utils/id";
 import { Edge, Flow, Node, NodeKind } from "../types";
 import { create } from "zustand";
+import coreManifest from "../data/coreManifest.json";
 
 type Selection = { nodeId: string | null; edgeId: string | null };
 
@@ -9,6 +10,7 @@ interface FlowState {
   activeFlowId: string;
   availableClosures: string[];
   availableInputs: string[];
+  closuresMeta: Record<string, any>;
   selection: Selection;
   selectNode: (id: string | null) => void;
   selectEdge: (id: string | null) => void;
@@ -88,11 +90,18 @@ const initialFlow: Flow = {
   edges: baseEdges
 };
 
+const manifestClosuresArr = Array.isArray((coreManifest as any)?.closures) ? (coreManifest as any).closures : [];
+const manifestInputsArr = Array.isArray((coreManifest as any)?.inputs) ? (coreManifest as any).inputs : [];
+const manifestClosures = manifestClosuresArr.map((c: any) => c.name).filter(Boolean);
+const manifestInputs = manifestInputsArr.map((i: any) => i.type).filter(Boolean);
+const closuresMetaMap = Object.fromEntries(manifestClosuresArr.map((c: any) => [c.name, c]));
+
 export const useFlowStore = create<FlowState>((set) => ({
   flows: [initialFlow],
   activeFlowId: initialFlow.id,
-  availableClosures: ["core.log", "core.respond", "core.assign", "core.for-each", "core.truthy"],
-  availableInputs: ["http"],
+  availableClosures: manifestClosures,
+  availableInputs: manifestInputs,
+  closuresMeta: closuresMetaMap,
   selection: { nodeId: null, edgeId: null },
   registerPlugin: (manifest) =>
     set((state) => ({
@@ -162,13 +171,18 @@ export const useFlowStore = create<FlowState>((set) => ({
               if (connectingFromInput) {
                 // remove existing edges from inputs; we'll re-add
               }
-              const effectiveLabel = label ?? (kind === "control" ? "next" : undefined);
+              const effectiveLabel = label ?? (kind === "control" ? "next" : label);
               // enforce single outbound per connector (from+kind+label)
+              // inbound rule: control/branch allow only one inbound; param allows multiple labels, replaces same label
               let filtered = flow.edges.filter((e) => {
-                const sameOut = e.from === from && e.kind === kind && (kind === "branch" ? e.label === label : true);
+                const sameOut =
+                  e.from === from &&
+                  e.kind === kind &&
+                  (kind === "branch" || kind === "param" ? e.label === effectiveLabel : true);
+                // inbound conflict: only one inbound edge of any kind (control/branch/param) per target (inputs already guarded above)
                 const inboundConflict =
-                  (kind === "control" || kind === "branch") &&
-                  (e.kind === "control" || e.kind === "branch") &&
+                  (e.kind === "control" || e.kind === "branch" || e.kind === "param") &&
+                  (kind === "control" || kind === "branch" || kind === "param") &&
                   e.to === finalTo;
                 const blockBranchSameTarget = kind === "branch" && e.kind === "branch" && e.to === finalTo;
                 return !sameOut && !blockBranchSameTarget && !inboundConflict;

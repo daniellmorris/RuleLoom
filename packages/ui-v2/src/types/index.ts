@@ -16,6 +16,7 @@ export interface NodeData {
   params?: Record<string, unknown>;
   branchRules?: Array<{ label: string; condition: string }>;
   description?: string;
+  parametersMeta?: Array<{ name: string; type?: string; required?: boolean; description?: string }>;
 }
 
 export interface Node {

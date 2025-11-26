@@ -12,6 +12,7 @@ const CONNECTOR_COLORS = ["#7dd3fc", "#fbbf24", "#a78bfa", "#34d399", "#f87171",
 const Canvas: React.FC = () => {
   const flow = useFlowStore((s) => s.flows.find((f) => f.id === s.activeFlowId)!);
   const { nodes, edges } = flow;
+  const closuresMeta = useFlowStore((s) => s.closuresMeta);
   const selectNode = useFlowStore((s) => s.selectNode);
   const selection = useFlowStore((s) => s.selection.nodeId);
   const selectedEdge = useFlowStore((s) => s.selection.edgeId);
@@ -37,6 +38,7 @@ const Canvas: React.FC = () => {
     connectorId: string;
     x: number;
     y: number;
+    startsAtParam?: boolean;
   } | null>(null);
 
   const pointerToCanvas = (clientX: number, clientY: number) => {
@@ -73,6 +75,8 @@ const Canvas: React.FC = () => {
     draggingRef.current = null;
     panStartRef.current = null;
     setLinking(null);
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
   }, [onMouseMove]);
 
   const startDrag = (event: React.MouseEvent, node: Node) => {
@@ -82,6 +86,8 @@ const Canvas: React.FC = () => {
     offsetRef.current = { x: pt.x - node.x, y: pt.y - node.y };
     setDragging(node.id);
     draggingRef.current = node.id;
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
   };
 
   const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -96,30 +102,40 @@ const Canvas: React.FC = () => {
     addNode({ ...template, label: label ?? template.label, data: { ...template.data, closureName: label ?? template.label } });
   };
 
-const startLink = (event: React.MouseEvent, node: Node, connectorId: string, direction: string) => {
+const startLink = (
+  event: React.MouseEvent,
+  node: Node,
+  connectorId: string,
+  direction: string,
+  overrideKind?: Edge["kind"],
+  startsAtParam?: boolean
+) => {
   event.stopPropagation();
   event.preventDefault();
-  const kind: Edge["kind"] = direction === "dynamic" && node.kind === "branch" ? "branch" : "control";
-  const label = direction === "dynamic" ? connectorId : undefined;
+  const kind: Edge["kind"] =
+    overrideKind ?? (direction === "dynamic" && node.kind === "branch" ? "branch" : direction === "param" ? "param" : "control");
+  const label = kind === "param" ? connectorId : direction === "dynamic" ? connectorId : undefined;
   const pt = pointerToCanvas(event.clientX, event.clientY);
-  setLinking({ from: node.id, kind, label, connectorId, x: pt.x, y: pt.y });
+  setLinking({ from: node.id, kind, label, connectorId, x: pt.x, y: pt.y, startsAtParam });
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", onMouseUp);
 };
 
-  const completeLink = (event: React.MouseEvent, targetNode: Node) => {
-    if (!linking) return;
-    event.stopPropagation();
-    const from = linking.from;
-    const to = targetNode.id;
-    // prevent linking into inputs
-    if (targetNode.kind === "input") {
-      setLinking(null);
-      return;
-    }
-    if (from !== to) {
-      connect(from, to, linking.label, linking.kind);
-    }
+const completeLink = (event: React.MouseEvent, targetNode: Node) => {
+  if (!linking) return;
+  event.stopPropagation();
+  const to = targetNode.id;
+  const from = linking.from;
+  // prevent linking into inputs for control/branch/param
+  if (targetNode.kind === "input" && linking.kind !== "param") {
     setLinking(null);
-  };
+    return;
+  }
+  if (from !== to) {
+    connect(from, to, linking.label, linking.kind);
+  }
+  setLinking(null);
+};
 
   const startPan = (event: React.MouseEvent) => {
     if (event.button !== 0) return;
@@ -127,6 +143,8 @@ const startLink = (event: React.MouseEvent, node: Node, connectorId: string, dir
     if (target.closest("[data-node-id]")) return;
     event.preventDefault();
     panStartRef.current = { x: pan.x, y: pan.y, clientX: event.clientX, clientY: event.clientY };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
   };
 
   useEffect(() => {
@@ -217,7 +235,7 @@ const startLink = (event: React.MouseEvent, node: Node, connectorId: string, dir
             ))}
           </defs>
           {edges.map((edge) => (
-            <EdgeLine key={edge.id} edge={edge} nodes={nodes} onClick={() => selectEdge(edge.id)} selected={selectedEdge === edge.id} />
+            <EdgeLine key={edge.id} edge={edge} nodes={nodes} onClick={() => selectEdge(edge.id)} selected={selectedEdge === edge.id} closuresMeta={closuresMeta} />
           ))}
           {linking && (
             <EdgePreview
@@ -230,7 +248,7 @@ const startLink = (event: React.MouseEvent, node: Node, connectorId: string, dir
         </svg>
 
         {nodes.map((node) => {
-          const connectors = buildConnectors(node);
+          const connectors = buildConnectors(node, closuresMeta[node.data?.closureName ?? ""]);
           return (
           <div
             key={node.id}
@@ -249,7 +267,7 @@ const startLink = (event: React.MouseEvent, node: Node, connectorId: string, dir
               borderRadius: 14,
               border:
                 (node.kind === "input" && !edges.some((e) => (e.kind === "control" || e.kind === "branch") && e.from === node.id)) ||
-                (node.kind !== "input" && !edges.some((e) => (e.kind === "control" || e.kind === "branch") && e.to === node.id))
+                (node.kind !== "input" && !edges.some((e) => (e.kind === "control" || e.kind === "branch" || e.kind === "param") && e.to === node.id))
                   ? "2px solid #f87171"
                   : "1px solid var(--panel-border)",
               background: "rgba(255,255,255,0.03)",
@@ -261,16 +279,23 @@ const startLink = (event: React.MouseEvent, node: Node, connectorId: string, dir
             {connectors.map((c, idx) => {
               const top = 24 + idx * 18;
               const color = CONNECTOR_COLORS[idx % CONNECTOR_COLORS.length];
-              return (
-                <div
-                  key={c.id}
-                  data-connector-id={c.id}
-                  onMouseDown={(e) => startLink(e, node, c.id, c.direction)}
-                  style={{
-                    position: "absolute",
-                    left: NODE_WIDTH + 10,
-                    top,
-                    width: 12,
+              const isParamCall = (node.data as any)?.paramCalls?.[c.id];
+                return (
+                  <div
+                    key={c.id}
+                    data-connector-id={c.id}
+                    onMouseDown={(e) => startLink(e, node, c.id, isParamCall ? "param" : c.direction, isParamCall ? "param" : undefined, false)}
+                    onMouseUp={(e) => {
+                      if (!linking || linking.from === node.id) return;
+                      e.stopPropagation();
+                      connect(linking.from, node.id, c.id, "param");
+                      setLinking(null);
+                    }}
+                    style={{
+                      position: "absolute",
+                      left: NODE_WIDTH + 10,
+                      top,
+                      width: 12,
                     height: 12,
                     borderRadius: 6,
                     background: color,
@@ -281,12 +306,12 @@ const startLink = (event: React.MouseEvent, node: Node, connectorId: string, dir
                 />
               );
             })}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 6
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 6
               }}
             >
               <div
@@ -317,9 +342,10 @@ const startLink = (event: React.MouseEvent, node: Node, connectorId: string, dir
   );
 };
 
-const EdgeLine: React.FC<{ edge: Edge; nodes: Node[]; onClick?: () => void; selected?: boolean }> = ({
+const EdgeLine: React.FC<{ edge: Edge; nodes: Node[]; closuresMeta: Record<string, any>; onClick?: () => void; selected?: boolean }> = ({
   edge,
   nodes,
+  closuresMeta,
   onClick,
   selected
 }) => {
@@ -327,7 +353,7 @@ const EdgeLine: React.FC<{ edge: Edge; nodes: Node[]; onClick?: () => void; sele
   const to = nodes.find((n) => n.id === edge.to);
   if (!from || !to) return null;
 
-  const fromConnectors = buildConnectors(from);
+  const fromConnectors = buildConnectors(from, closuresMeta[from.data?.closureName ?? ""]);
   const idx = connectorIndex(fromConnectors, edge.label);
   const startPoint = connectorPoint(from, idx);
   const startX = startPoint.x;
@@ -377,7 +403,7 @@ const EdgePreview: React.FC<{ fromNode: Node; connectorId: string; x: number; y:
   x,
   y
 }) => {
-  const connectors = buildConnectors(fromNode);
+  const connectors = buildConnectors(fromNode, undefined);
   const idx = connectorIndex(connectors, connectorId);
   const start = connectorPoint(fromNode, idx);
   const startX = start.x;
@@ -396,18 +422,24 @@ const EdgePreview: React.FC<{ fromNode: Node; connectorId: string; x: number; y:
   );
 };
 
-function buildConnectors(node: Node): Connector[] {
+function buildConnectors(node: Node, meta?: any): Connector[] {
   if (node.kind === "branch") {
     const rules = node.data?.branchRules ?? [];
     const dynamic = rules.map((r) => ({ id: r.label, label: r.label, direction: "dynamic" as const }));
     return [{ id: "next", label: "next", direction: "next" as const }, ...dynamic];
   }
   if (node.kind === "closure") {
-    const params = (node.data as any)?.closureParameters ?? [];
-    const dyn = Array.isArray(params)
-      ? params.map((p: string) => ({ id: p, label: p, direction: "dynamic" as const }))
+    const flowParams =
+      (node.data as any)?.closureParameters ??
+      ((meta?.signature?.parameters ?? []).filter((p: any) => p.type === "flowSteps").map((p: any) => p.name) as string[]) ??
+      [];
+    const dyn = Array.isArray(flowParams)
+      ? flowParams.map((p: string) => ({ id: p, label: p, direction: "dynamic" as const }))
       : [{ id: "closureParameter", label: "closureParameter", direction: "dynamic" as const }];
-    return [{ id: "next", label: "next", direction: "next" as const }, ...dyn];
+    const paramCalls = Object.entries((node.data as any)?.paramCalls ?? {})
+      .filter(([, v]) => v)
+      .map(([name]) => ({ id: name, label: name, direction: "param" as const }));
+    return [{ id: "next", label: "next", direction: "next" as const }, ...dyn, ...paramCalls];
   }
   if (node.kind === "input") {
     return [{ id: "next", label: "next", direction: "next" as const }];

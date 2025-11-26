@@ -1,0 +1,178 @@
+version: 1
+name: rule-loom-core
+pluginVersion: 0.1.0
+entry: dist/index.js
+closures:
+  - name: core.assign
+    signature:
+      description: Assigns a value from parameters/state/runtime into state at the provided path.
+      parameters:
+        - name: target
+          type: string
+          required: true
+          description: Dot-notation path in state to write.
+        - name: value
+          type: any
+          description: Value or template expression to assign.
+        - name: merge
+          type: boolean
+          description: Merge plain objects instead of replacing the existing value.
+      returns:
+        type: any
+        description: The value stored at the target path.
+      mutates:
+        - state
+  - name: core.respond
+    signature:
+      description: Sets state.response so HTTP inputs send a response downstream.
+      parameters:
+        - name: status
+          type: number
+          description: HTTP status code.
+          allowDynamicValue: true
+        - name: headers
+          type: object
+          description: Map of response headers.
+        - name: body
+          type: any
+          description: Response payload (object/string/etc.).
+      returns:
+        type: object
+        description: Response descriptor containing status, headers, and body.
+      mutates:
+        - state.response
+  - name: core.log
+    signature:
+      description: Logs a message using the configured logger.
+      parameters:
+        - name: level
+          type: string
+          description: Log level (trace/debug/info/warn/error/fatal).
+        - name: message
+          type: string
+          required: true
+          description: Message template to log.
+      returns:
+        type: string
+        description: The message that was logged.
+  - name: core.truthy
+    signature:
+      description: Returns true when the provided value is truthy.
+      parameters:
+        - name: value
+          type: any
+          required: true
+      returns:
+        type: boolean
+        description: Whether the value is truthy.
+  - name: core.equals
+    signature:
+      description: Performs a deep equality comparison between `left` and `right`.
+      parameters:
+        - name: left
+          type: any
+          required: true
+        - name: right
+          type: any
+          required: true
+      returns:
+        type: boolean
+  - name: core.greater-than
+    signature:
+      description: Compares whether `left` is greater than `right` after numeric coercion.
+      parameters:
+        - name: left
+          type: any
+          required: true
+        - name: right
+          type: any
+          required: true
+      returns:
+        type: boolean
+  - name: core.less-than
+    signature:
+      description: Compares whether `left` is less than `right` after numeric coercion.
+      parameters:
+        - name: left
+          type: any
+          required: true
+        - name: right
+          type: any
+          required: true
+      returns:
+        type: boolean
+  - name: core.includes
+    signature:
+      description: Checks if an item exists inside an array, string, or object values.
+      parameters:
+        - name: collection
+          type: any
+          required: true
+        - name: value
+          type: any
+          required: true
+      returns:
+        type: boolean
+  - name: core.length
+    signature:
+      description: Calculates the length of an array/string/object.
+      parameters:
+        - name: target
+          type: string
+          description: State path to read. If omitted, use `value`.
+        - name: value
+          type: any
+          description: Literal collection to measure.
+      allowAdditionalParameters: false
+      returns:
+        type: number
+  - name: core.for-each
+    signature:
+      description: Iterates over each entry in `collection` and executes nested steps.
+      parameters:
+        - name: collection
+          type: any
+          required: true
+          description: Array to iterate over.
+        - name: steps
+          type: flowSteps
+          required: true
+          description: Inline steps to execute for each item.
+      returns:
+        type: any
+        description: The mutated state after iteration.
+      mutates:
+        - state.currentItem
+        - state.currentIndex
+  - name: http.request
+    description: Performs an HTTP request and returns status, headers, and body.
+    signature:
+      description: Performs an HTTP request and returns status, headers, and body.
+      parameters:
+        - name: method
+          type: string
+          description: HTTP method (GET/POST/etc.).
+        - name: url
+          type: string
+          description: Absolute URL or path relative to baseUrl.
+          required: true
+        - name: baseUrl
+          type: string
+          description: Override base URL for this invocation.
+        - name: headers
+          type: object
+          description: Additional request headers.
+        - name: body
+          type: any
+          description: JSON-serializable payload or raw string.
+        - name: timeoutMs
+          type: number
+          description: Request timeout in milliseconds.
+      allowAdditionalParameters: false
+      returns:
+        type: object
+        description: Response { status, headers, body }.
+inputs:
+  - type: http
+  - type: scheduler
+  - type: init

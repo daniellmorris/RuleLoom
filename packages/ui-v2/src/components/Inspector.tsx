@@ -8,6 +8,7 @@ const Inspector: React.FC = () => {
   const selectedEdge = useFlowStore((s) => s.selection.edgeId);
   const flow = useFlowStore((s) => s.flows.find((f) => f.id === s.activeFlowId)!);
   const closuresMeta = useFlowStore((s) => s.closuresMeta);
+  const inputsMeta = useFlowStore((s) => s.inputsMeta);
   const updateNode = useFlowStore((s) => s.updateNode);
   const connectParam = useFlowStore((s) => s.connectParam);
   const deleteEdge = useFlowStore((s) => s.deleteEdge);
@@ -59,6 +60,7 @@ const Inspector: React.FC = () => {
       </label>
 
       {node.kind === "input" && <SchemaEditor node={node} />}
+      {node.kind === "input" && <InputConfig node={node} meta={inputsMeta[node.label]} />}
       {node.kind === "branch" && <BranchConfig node={node} />}
       {node.kind === "closure" && (
         <ClosureConfig
@@ -69,6 +71,46 @@ const Inspector: React.FC = () => {
           onBind={(param, from) => connectParam(node.id, param, from)}
         />
       )}
+    </div>
+  );
+};
+
+const InputConfig: React.FC<{ node: Node; meta?: any }> = ({ node, meta }) => {
+  const updateNode = useFlowStore((s) => s.updateNode);
+  const schemaProps = (meta?.schema?.properties as Record<string, any>) ?? {};
+  const required = meta?.schema?.required ?? [];
+  const entries = Object.entries(schemaProps);
+  if (!entries.length) {
+    return (
+      <div className="stack">
+        <h3 style={{ margin: 0 }}>Input Config</h3>
+        <div style={{ color: "var(--muted)", fontSize: 12 }}>No schema provided.</div>
+      </div>
+    );
+  }
+  return (
+    <div className="stack">
+      <h3 style={{ margin: 0 }}>Input Config</h3>
+      {entries.map(([key, val]) => (
+        <div key={key} className="stack" style={{ border: "1px solid var(--panel-border)", borderRadius: 10, padding: 8 }}>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span style={{ fontWeight: 600 }}>{key}</span>
+            <span className="badge">{val.type ?? "any"}</span>
+          </div>
+          <input
+            className="input"
+            placeholder={val.description ?? key}
+            value={(node.data?.params as any)?.[key] ?? ""}
+            onChange={(e) =>
+              updateNode(node.id, {
+                data: { ...node.data, params: { ...(node.data?.params ?? {}), [key]: e.target.value } }
+              })
+            }
+          />
+          {required.includes(key) && <span className="badge" style={{ color: "#fbbf24" }}>required</span>}
+          {val.description && <div style={{ color: "var(--muted)", fontSize: 12 }}>{val.description}</div>}
+        </div>
+      ))}
     </div>
   );
 };

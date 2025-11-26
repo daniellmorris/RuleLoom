@@ -284,13 +284,205 @@
   ],
   "inputs": [
     {
-      "type": "http"
+      "type": "http",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "http"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "basePath": {
+            "type": "string"
+          },
+          "bodyLimit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string",
+                  "enum": [
+                    "get",
+                    "post",
+                    "put",
+                    "patch",
+                    "delete"
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "flow": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "respondWith": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "headers": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "body": {}
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "path",
+                "flow"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "type",
+          "routes"
+        ],
+        "additionalProperties": false
+      }
     },
     {
-      "type": "scheduler"
+      "type": "scheduler",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "scheduler"
+            ]
+          },
+          "jobs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "flow": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "interval": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": true,
+                      "minimum": 0
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  ]
+                },
+                "cron": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "timeout": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "initialState": {
+                  "type": "object",
+                  "additionalProperties": {}
+                },
+                "runtime": {
+                  "type": "object",
+                  "additionalProperties": {}
+                },
+                "enabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "flow"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "type",
+          "jobs"
+        ],
+        "additionalProperties": false
+      }
     },
     {
-      "type": "init"
+      "type": "init",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "init"
+            ]
+          },
+          "flow": {
+            "type": "string",
+            "minLength": 1
+          },
+          "initialState": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "runtime": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "type",
+          "flow"
+        ],
+        "additionalProperties": false
+      }
     }
   ]
 }

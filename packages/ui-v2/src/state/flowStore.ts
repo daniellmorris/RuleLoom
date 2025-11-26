@@ -11,6 +11,7 @@ interface FlowState {
   availableClosures: string[];
   availableInputs: string[];
   closuresMeta: Record<string, any>;
+  inputsMeta: Record<string, any>;
   selection: Selection;
   selectNode: (id: string | null) => void;
   selectEdge: (id: string | null) => void;
@@ -95,6 +96,7 @@ const manifestInputsArr = Array.isArray((coreManifest as any)?.inputs) ? (coreMa
 const manifestClosures = manifestClosuresArr.map((c: any) => c.name).filter(Boolean);
 const manifestInputs = manifestInputsArr.map((i: any) => i.type).filter(Boolean);
 const closuresMetaMap = Object.fromEntries(manifestClosuresArr.map((c: any) => [c.name, c]));
+const inputsMetaMap = Object.fromEntries(manifestInputsArr.map((i: any) => [i.type, i]));
 
 export const useFlowStore = create<FlowState>((set) => ({
   flows: [initialFlow],
@@ -102,6 +104,7 @@ export const useFlowStore = create<FlowState>((set) => ({
   availableClosures: manifestClosures,
   availableInputs: manifestInputs,
   closuresMeta: closuresMetaMap,
+  inputsMeta: inputsMetaMap,
   selection: { nodeId: null, edgeId: null },
   registerPlugin: (manifest) =>
     set((state) => ({

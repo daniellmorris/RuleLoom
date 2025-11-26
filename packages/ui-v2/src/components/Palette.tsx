@@ -9,6 +9,7 @@ const Palette: React.FC = () => {
   const availableInputs = useFlowStore((s) => s.availableInputs);
   const registerPlugin = useFlowStore((s) => s.registerPlugin);
   const closuresMeta = useFlowStore((s) => s.closuresMeta);
+  const inputsMeta = useFlowStore((s) => s.inputsMeta);
 
   const handleAdd = (kind: NodeKind, label?: string) => {
     const x = 140 + Math.random() * 400;
@@ -26,6 +27,17 @@ const Palette: React.FC = () => {
           closureName: label,
           parametersMeta: paramsMeta,
           closureParameters,
+          params: {}
+        }
+      });
+    } else if (kind === "input" && label) {
+      const meta = inputsMeta[label];
+      addNode({
+        ...template,
+        label,
+        data: {
+          ...template.data,
+          schema: meta?.schema ?? {},
           params: {}
         }
       });

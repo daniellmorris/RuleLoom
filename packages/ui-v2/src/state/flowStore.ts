@@ -188,7 +188,9 @@ export const useFlowStore = create<FlowState>((set) => ({
                 const sameOut =
                   e.from === from &&
                   e.kind === kind &&
-                  (kind === "branch" || kind === "param" ? e.label === effectiveLabel : true);
+                  (kind === "branch" || kind === "param" || (kind === "control" && effectiveLabel)
+                    ? e.label === effectiveLabel
+                    : true);
                 // inbound conflict: only one inbound edge of any kind (control/branch/param) per target (inputs already guarded above)
                 const inboundConflict =
                   (e.kind === "control" || e.kind === "branch" || e.kind === "param") &&

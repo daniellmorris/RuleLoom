@@ -1,6 +1,14 @@
 import yaml from "js-yaml";
 import { Edge, Flow, Node } from "../types";
 import { autoLayout } from "../state/flowStore";
+import coreManifest from "../data/coreManifest.json";
+
+const closureMetaMap: Record<string, any> = Object.fromEntries(
+  (coreManifest as any).closures?.map((c: any) => [c.name, c]) ?? []
+);
+const inputMetaMap: Record<string, any> = Object.fromEntries(
+  (coreManifest as any).inputs?.map((i: any) => [i.type, i]) ?? []
+);
 
 const isBranch = (node: Node) => node.kind === "branch";
 
@@ -14,7 +22,8 @@ function firstNext(edges: Edge[], from: string) {
 
 function nodeStep(node: Node) {
   if (node.kind === "closure") {
-    return { closure: node.data?.closureName ?? node.label, parameters: node.data?.params ?? {} };
+    const params = { ...(node.data?.params ?? {}) };
+    return { closure: node.data?.closureName ?? node.label, parameters: params };
   }
   return null;
 }
@@ -60,6 +69,25 @@ function traverse(node: Node, nodes: Node[], edges: Edge[], visited = new Set<st
         (step.parameters as any)[paramName] = `\${${fromNode.label}}`;
       }
     });
+    // flowSteps parameters (dynamic connectors on closure)
+    const flowParams =
+      (node.data as any)?.closureParameters ??
+      ((closureMetaMap[node.data?.closureName ?? ""]?.signature?.parameters ?? [])
+        .filter((p: any) => p.type === "flowSteps")
+        .map((p: any) => p.name) as string[]) ??
+      [];
+    flowParams.forEach((p: string) => {
+      const edge = edges.find((e) => e.from === node.id && e.label === p);
+      if (edge) {
+        const target = nodes.find((n) => n.id === edge.to);
+        if (target) {
+          (step.parameters as any)[p] = traverse(target, nodes, edges, new Set(visited));
+        }
+      }
+    });
+    if (Object.keys(step.parameters ?? {}).length === 0) {
+      delete (step as any).parameters;
+    }
   }
   const restEdge = firstNext(edges, node.id);
   const rest = restEdge ? traverse(nodes.find((n) => n.id === restEdge.to)!, nodes, edges, visited) : [];
@@ -71,6 +99,22 @@ export function validateFlow(flow: Flow): string[] {
   flow.nodes.forEach((n) => {
     const inbound = flow.edges.filter((e) => (e.kind === "control" || e.kind === "branch" || e.kind === "param") && e.to === n.id);
     const outbound = flow.edges.filter((e) => (e.kind === "control" || e.kind === "branch") && e.from === n.id);
+    // required params check
+    if (n.kind === "closure" && n.data?.parametersMeta) {
+      n.data.parametersMeta.forEach((p: any) => {
+        if (!p.required) return;
+        if (p.type === "flowSteps") {
+          const hasFlow = flow.edges.some((e) => e.from === n.id && e.label === p.name);
+          if (!hasFlow) errors.push(`Node ${n.label}: missing flowSteps for ${p.name}`);
+          return;
+        }
+        const hasEdge = flow.edges.some((e) => e.kind === "param" && e.to === n.id && e.label === p.name);
+        const hasValue = n.data?.params && Object.prototype.hasOwnProperty.call(n.data.params, p.name);
+        if (!hasEdge && !hasValue) {
+          errors.push(`Node ${n.label}: missing required parameter ${p.name}`);
+        }
+      });
+    }
     if (n.kind === "input") {
       if (!outbound.length) errors.push(`Input ${n.label} has no outgoing connection.`);
     } else {
@@ -84,21 +128,39 @@ export function exportFlowToYaml(flow: Flow): string {
   const entryNode = flow.nodes.find((n) => n.id === flow.entryId) ?? flow.nodes[0];
   const steps = traverse(entryNode, flow.nodes, flow.edges);
 
+  const inputs = (flow as any)._inputs ?? [
+    {
+      type: "http",
+      routes: [{ method: "post", path: `/${flow.name ?? "flow"}`, flow: flow.name }]
+    }
+  ];
+
+  const closuresFromMeta = (flow as any)._closures;
+  let closures;
+  if (closuresFromMeta) {
+    closures = closuresFromMeta;
+  } else {
+    const manifestClosureNames = new Set((coreManifest as any).closures?.map((c: any) => c.name));
+    const uniq = new Map<string, any>();
+    flow.nodes
+      .filter((n) => n.kind === "closure")
+      .forEach((n) => {
+        const name = n.data?.closureName ?? n.label;
+        if (manifestClosureNames.has(name)) return;
+        if (!uniq.has(name))
+          uniq.set(name, {
+            type: "flow",
+            name,
+            steps: n.data?.params?.steps ?? []
+          });
+      });
+    closures = Array.from(uniq.values());
+  }
+
   const config = {
     version: 1,
-    inputs: [
-      {
-        type: "http",
-        routes: [{ method: "post", path: `/${flow.name ?? "flow"}`, flow: flow.name }]
-      }
-    ],
-    closures: flow.nodes
-      .filter((n) => n.kind === "closure")
-      .map((n) => ({
-        type: "flow",
-        name: n.data?.closureName ?? n.label,
-        steps: n.data?.params?.steps ?? []
-      })),
+    inputs,
+    closures,
     flows: [
       {
         name: flow.name,
@@ -125,6 +187,11 @@ export function importFlowFromYaml(text: string): Flow {
 
   const addNode = (partial: Partial<Node> & { kind: Node["kind"]; label: string }) => {
     const id = `${partial.kind}-${nodes.length + 1}`;
+    const meta = partial.kind === "closure" ? closureMetaMap[partial.label] : partial.kind === "input" ? inputMetaMap[partial.label] : undefined;
+    const parametersMeta = meta?.signature?.parameters;
+    const closureParameters =
+      parametersMeta?.filter((p: any) => p.type === "flowSteps").map((p: any) => p.name) ??
+      (partial.kind === "closure" ? (partial as any).closureParameters : undefined);
     const node: Node = {
       id,
       x,
@@ -135,6 +202,12 @@ export function importFlowFromYaml(text: string): Flow {
       ],
       ...partial
     };
+    if (parametersMeta) {
+      node.data = { ...node.data, parametersMeta, closureParameters };
+    }
+    if (partial.kind === "input" && meta?.schema) {
+      node.data = { ...node.data, schema: meta.schema };
+    }
     nodes.push(node);
     return node;
   };
@@ -155,7 +228,8 @@ export function importFlowFromYaml(text: string): Flow {
     });
   });
 
-  const build = (steps: any[], parent?: Node) => {
+  const build = (steps: any[], parent?: Node): Node | undefined => {
+    let firstCreated: Node | undefined;
     for (const step of steps) {
       if (step.cases) {
         const branchNode = addNode({ kind: "branch", label: "Branch", connectors: [] });
@@ -189,23 +263,32 @@ export function importFlowFromYaml(text: string): Flow {
         } else {
           parent = branchNode;
         }
+        if (!firstCreated) firstCreated = branchNode;
       } else if (step.closure) {
         const name: string = step.closure;
-        const isCall = name.startsWith("$call") || closureNames.has(name);
-        const kind = isCall ? "call" : "plugin";
+        const isCall = name.startsWith("$call");
+        const kind = "closure";
         const node = addNode({
           kind,
-          label: isCall ? `$call: ${name}` : name,
+          label: isCall ? name.replace(/^\$call[:\s]*/, "") : name,
           data: isCall
-            ? { callTarget: name, params: step.parameters }
-            : { pluginId: name, params: step.parameters }
+            ? { callTarget: name.replace(/^\$call[:\s]*/, ""), params: step.parameters }
+            : { closureName: name, params: step.parameters }
         });
         if (parent) edges.push({ id: `e-${edges.length}`, from: parent.id, to: node.id, kind: "control" });
+        // handle flowSteps inside parameters
+        Object.entries(step.parameters ?? {}).forEach(([param, val]) => {
+          if (Array.isArray(val)) {
+            const subStart = build(val, node);
+            if (subStart) edges.push({ id: `e-${edges.length}`, from: node.id, to: subStart.id, kind: "control", label: param });
+          }
+        });
         parent = node;
+        if (!firstCreated) firstCreated = node;
       }
       x += 220;
     }
-    return parent;
+    return firstCreated;
   };
 
   // entry input node
@@ -228,11 +311,14 @@ export function importFlowFromYaml(text: string): Flow {
     edges.push({ id: "e-entry", from: inputNode.id, to: last.id, kind: "control" });
   }
 
-  return autoLayout({
+  const flow = autoLayout({
     id: "imported-flow",
     name: flowName,
     entryId: inputNode.id,
     nodes,
     edges
   });
+  (flow as any)._closures = closuresSpec;
+  (flow as any)._inputs = parsed?.inputs;
+  return flow;
 }

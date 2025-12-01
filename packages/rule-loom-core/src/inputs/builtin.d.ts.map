@@ -1,1 +1,0 @@
-{"version":3,"file":"builtin.d.ts","sourceRoot":"","sources":["builtin.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,WAAW,EAAE,eAAe,EAAE,MAAM,YAAY,CAAC;AAC/D,OAAO,EAAE,mBAAmB,EAAE,MAAM,qBAAqB,CAAC;AAK1D,eAAO,MAAM,mBAAmB,EAAE,WAAW,CAAC,eAAe,CAAC,EAI7D,CAAC;AAEF,wBAAgB,qBAAqB,CAAC,UAAU,GAAE,OAAO,mBAAyC,QAIjG;AAED,eAAe,qBAAqB,CAAC"}

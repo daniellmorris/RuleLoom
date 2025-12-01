@@ -2,6 +2,7 @@ import yaml from "js-yaml";
 import { Edge, Flow, Node } from "../types";
 import { autoLayout } from "../state/flowStore";
 import coreManifest from "../data/coreManifest.json";
+import { nanoid } from "../utils/id";
 
 const closureMetaMap: Record<string, any> = Object.fromEntries(
   (coreManifest as any).closures?.map((c: any) => [c.name, c]) ?? []
@@ -172,7 +173,7 @@ export function exportFlowToYaml(flow: Flow): string {
   return yaml.dump(config, { lineWidth: 120 });
 }
 
-export function importFlowFromYaml(text: string): Flow {
+export function importFlowFromYaml(text: string, pkgInputs?: any[]): Flow {
   const parsed = yaml.load(text) as any;
   const flowSpec = parsed?.flows?.[0];
   const flowName = flowSpec?.name ?? "Imported Flow";
@@ -291,30 +292,47 @@ export function importFlowFromYaml(text: string): Flow {
     return firstCreated;
   };
 
-  // entry input node
-  const inputNode: Node = {
-    id: "input-1",
-    kind: "input",
-    label: "Flow Input",
-    x: 60,
-    y: yBase,
-    connectors: [
-      { id: "next", label: "next", direction: "next" },
-      { id: "schema", label: "schema", direction: "dynamic" }
-    ],
-    data: { schema: parsed?.inputs?.[0]?.schema ?? {} }
-  };
-  nodes.push(inputNode);
+  // create input nodes from package inputs (or parsed inputs)
+  const inputs = pkgInputs ?? parsed?.inputs ?? [];
+  inputs.forEach((inp, idx) => {
+    const id = `input-${idx + 1}`;
+    nodes.push({
+      id,
+      kind: "input",
+      label: inp.type ?? `input-${idx + 1}`,
+      x: 60,
+      y: yBase + idx * 120,
+      connectors: [{ id: "next", label: "next", direction: "next" }],
+      data: { schema: inp.schema ?? {} }
+    });
+  });
 
-  const last = build(flowSpec?.steps ?? [], inputNode);
-  if (!edges.find((e) => e.from === inputNode.id) && last) {
-    edges.push({ id: "e-entry", from: inputNode.id, to: last.id, kind: "control" });
+  if (nodes.filter((n) => n.kind === "input").length === 0) {
+    nodes.push({
+      id: "input-1",
+      kind: "input",
+      label: "Flow Input",
+      x: 60,
+      y: yBase,
+      connectors: [{ id: "next", label: "next", direction: "next" }],
+      data: { schema: {} }
+    });
+  }
+
+  const last = build(flowSpec?.steps ?? [], undefined);
+  const entryInputs = nodes.filter((n) => n.kind === "input");
+  if (last) {
+    entryInputs.forEach((inp) => {
+      if (!edges.find((e) => e.from === inp.id)) {
+        edges.push({ id: nanoid(), from: inp.id, to: last.id, kind: "control", label: "next" });
+      }
+    });
   }
 
   const flow = autoLayout({
     id: "imported-flow",
     name: flowName,
-    entryId: inputNode.id,
+    entryId: entryInputs[0]?.id ?? nodes[0].id,
     nodes,
     edges
   });

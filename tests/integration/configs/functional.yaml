@@ -17,14 +17,15 @@ flows:
           target: processed
           value: []
       - closure: core.for-each
-        collection: "${state.payload.items}"
-        steps:
-          - closure: core.assign
-            parameters:
-              target: "processed.${state.currentIndex}"
-              value:
-                index: "${state.currentIndex}"
-                value: "${state.currentItem}"
+        parameters:
+          collection: "${state.payload.items}"
+          steps:
+            - closure: core.assign
+              parameters:
+                target: "processed.${state.currentIndex}"
+                value:
+                  index: "${state.currentIndex}"
+                  value: "${state.currentItem}"
       - closure: core.respond
         parameters:
           status: 200

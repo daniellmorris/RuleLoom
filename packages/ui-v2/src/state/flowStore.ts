@@ -16,6 +16,7 @@ interface FlowState {
   selectNode: (id: string | null) => void;
   selectEdge: (id: string | null) => void;
   setFlow: (flow: Flow) => void;
+  setFlows: (flows: Flow[]) => void;
   addFlow: (name: string) => void;
   setActiveFlow: (id: string) => void;
   setFlowName: (name: string) => void;
@@ -28,6 +29,7 @@ interface FlowState {
   deleteNode: (id: string) => void;
   layout: () => void;
   reset: () => void;
+  setCatalog: (closures: any[], inputs: any[]) => void;
 }
 
 const baseNodes: Node[] = [
@@ -118,6 +120,12 @@ export const useFlowStore = create<FlowState>((set) => ({
       const flows = exists ? state.flows.map((f) => (f.id === flow.id ? flow : f)) : [...state.flows, flow];
       return { flows, activeFlowId: flow.id, selection: { nodeId: null, edgeId: null } };
     }),
+  setFlows: (flows) =>
+    set((state) => ({
+      flows,
+      activeFlowId: flows.find((f) => f.id === state.activeFlowId)?.id ?? flows[0]?.id ?? null,
+      selection: { nodeId: null, edgeId: null }
+    })),
   addFlow: (name) =>
     set((state) => {
       const id = nanoid();
@@ -246,6 +254,13 @@ export const useFlowStore = create<FlowState>((set) => ({
   setFlowName: (name) =>
     set((state) => ({
       flows: state.flows.map((f) => (f.id === state.activeFlowId ? { ...f, name } : f))
+    })),
+  setCatalog: (closures, inputs) =>
+    set(() => ({
+      availableClosures: closures.map((c: any) => c.name).filter(Boolean),
+      availableInputs: inputs.map((i: any) => i.type).filter(Boolean),
+      closuresMeta: Object.fromEntries(closures.map((c: any) => [c.name, c])),
+      inputsMeta: Object.fromEntries(inputs.map((i: any) => [i.type, i]))
     })),
   layout: () =>
     set((state) => ({

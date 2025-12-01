@@ -1,33 +1,33 @@
 import React, { useState } from "react";
 import { useFlowStore } from "../state/flowStore";
+import { usePackageStore } from "../state/packageStore";
 import { exportFlowToYaml, importFlowFromYaml, validateFlow } from "../utils/yaml";
 
 const ImportExport: React.FC = () => {
   const flow = useFlowStore((s) => s.flow);
   const setFlowName = useFlowStore((s) => s.setFlowName);
   const setFlow = useFlowStore((s) => s.setFlow);
+  const pkgExport = usePackageStore((s) => s.exportPackage);
+  const pkgImport = usePackageStore((s) => s.importPackage);
   const [text, setText] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
-  const doExport = () => {
-    const errors = validateFlow(flow);
-    if (errors.length) {
-      setMessage(`Fix errors before export: ${errors[0]}`);
-      return;
+  const doPkgExport = () => {
+    try {
+      const y = pkgExport();
+      setText(y);
+      setMessage("Exported package YAML.");
+    } catch (err) {
+      setMessage(`Package export failed: ${(err as Error).message}`);
     }
-    const yaml = exportFlowToYaml(flow);
-    setText(yaml);
-    setMessage("Exported current flow to YAML.");
   };
 
-  const doImport = () => {
+  const doPkgImport = () => {
     try {
-      const imported = importFlowFromYaml(text);
-      setFlow(imported);
-      setFlowName(imported.name);
-      setMessage("Imported flow from YAML.");
+      pkgImport(text);
+      setMessage("Imported package YAML.");
     } catch (err) {
-      setMessage(`Import failed: ${(err as Error).message}`);
+      setMessage(`Package import failed: ${(err as Error).message}`);
     }
   };
 
@@ -38,11 +38,11 @@ const ImportExport: React.FC = () => {
         {message && <span className="badge">{message}</span>}
       </div>
       <div className="row">
-        <button className="button" onClick={doExport}>
-          Export YAML
+        <button className="button" onClick={doPkgExport}>
+          Export Package
         </button>
-        <button className="button secondary" onClick={doImport}>
-          Import YAML
+        <button className="button secondary" onClick={doPkgImport}>
+          Import Package
         </button>
       </div>
       <textarea

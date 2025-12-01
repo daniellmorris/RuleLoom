@@ -6,7 +6,7 @@ import { useFlowStore } from "./state/flowStore";
 import "./styles/global.css";
 
 const App = () => {
-  const flow = useFlowStore((s) => s.flows.find((f) => f.id === s.activeFlowId)!);
+  const flow = useFlowStore((s) => s.flows.find((f) => f.id === s.activeFlowId) ?? s.flows[0]);
   const layout = useFlowStore((s) => s.layout);
   const flows = useFlowStore((s) => s.flows);
   const activeFlowId = useFlowStore((s) => s.activeFlowId);
@@ -28,24 +28,28 @@ const App = () => {
         <div className="pill" style={{ fontWeight: 600 }}>
           Orchestrator UI v2
         </div>
-        <select
-          className="input"
-          style={{ width: 200 }}
-          value={activeFlowId}
-          onChange={(e) => setActiveFlow(e.target.value)}
-        >
-          {flows.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-            </option>
-          ))}
-        </select>
-        <input
-          className="input"
-          style={{ width: 180 }}
-          value={flow.name}
-          onChange={(e) => setFlowName(e.target.value)}
-        />
+        {flow && (
+          <>
+            <select
+              className="input"
+              style={{ width: 200 }}
+              value={activeFlowId ?? ""}
+              onChange={(e) => setActiveFlow(e.target.value)}
+            >
+              {flows.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+            <input
+              className="input"
+              style={{ width: 180 }}
+              value={flow.name ?? ""}
+              onChange={(e) => setFlowName(e.target.value)}
+            />
+          </>
+        )}
         <button className="button secondary" onClick={() => addFlow(`Flow ${flows.length + 1}`)}>
           Add flow
         </button>

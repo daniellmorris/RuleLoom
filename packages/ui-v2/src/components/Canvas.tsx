@@ -279,8 +279,10 @@ const completeLink = (event: React.MouseEvent, targetNode: Node) => {
               minHeight: NODE_HEIGHT,
               borderRadius: 14,
               border:
-                (node.kind === "input" && !edges.some((e) => (e.kind === "control" || e.kind === "branch") && e.from === node.id)) ||
-                (node.kind !== "input" && !edges.some((e) => (e.kind === "control" || e.kind === "branch" || e.kind === "param") && e.to === node.id))
+                node.kind !== "start" &&
+                ((node.kind === "input" && !edges.some((e) => (e.kind === "control" || e.kind === "branch") && e.from === node.id)) ||
+                  (node.kind !== "input" &&
+                    !edges.some((e) => (e.kind === "control" || e.kind === "branch" || e.kind === "param") && e.to === node.id)))
                   ? "2px solid #f87171"
                   : "1px solid var(--panel-border)",
               background: "rgba(255,255,255,0.03)",

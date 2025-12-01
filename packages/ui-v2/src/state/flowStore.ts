@@ -293,11 +293,15 @@ export const useFlowStore = create<FlowState>((set) => ({
     })),
   deleteNode: (id) =>
     set((state) => ({
-      ...applyActive(state, (flow) => ({
-        ...flow,
-        nodes: flow.nodes.filter((n) => n.id !== id),
-        edges: flow.edges.filter((e) => e.from !== id && e.to !== id)
-      })),
+      ...applyActive(state, (flow) => {
+        const target = flow.nodes.find((n) => n.id === id);
+        if (!target || target.kind === "start") return flow;
+        return {
+          ...flow,
+          nodes: flow.nodes.filter((n) => n.id !== id),
+          edges: flow.edges.filter((e) => e.from !== id && e.to !== id)
+        };
+      }),
       selection: { nodeId: null, edgeId: null }
     })),
   setFlowName: (name) =>

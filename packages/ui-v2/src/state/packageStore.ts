@@ -4,6 +4,7 @@ import coreManifest from "../data/coreManifest.json";
 import { importFlowFromYaml, exportFlowToYaml } from "../utils/yaml";
 import { useFlowStore } from "./flowStore";
 import yaml from "js-yaml";
+import { nanoid } from "../utils/id";
 
 export interface PackageState {
   name: string;
@@ -19,11 +20,33 @@ export const usePackageStore = create<PackageState>((set, get) => ({
   inputs: (coreManifest as any).inputs ?? [],
   importPackage: (yamlText: string) => {
     const pkg = importPackageYaml(yamlText);
+    const version = pkg.version ?? 1;
     const flowStore = useFlowStore.getState();
     const mergedClosures = mergeUniqueByName((coreManifest as any).closures ?? [], pkg.closures ?? []);
     const mergedInputs = mergeUniqueByType((coreManifest as any).inputs ?? [], pkg.inputs ?? []);
     flowStore.setCatalog(mergedClosures, mergedInputs);
     flowStore.setFlows(pkg.flows ?? []);
+    const closureFlows =
+      pkg.closures?.map((c: any) => {
+        const text = yaml.dump({
+          version,
+          inputs: pkg?.inputs ?? [],
+          flows: [
+            {
+              name: c.name,
+              steps: c.steps ?? []
+            }
+          ]
+        });
+        const imported = importFlowFromYaml(text, pkg.inputs, true);
+        return {
+          ...imported,
+          id: nanoid(),
+          name: c.name,
+          kind: "closure" as const
+        };
+      }) ?? [];
+    flowStore.setClosures(closureFlows);
     set({
       name: pkg.name ?? "Imported package",
       closures: mergedClosures,
@@ -43,7 +66,7 @@ export const usePackageStore = create<PackageState>((set, get) => ({
   }
 }));
 
-function importPackageYaml(text: string): { name?: string; inputs?: any[]; closures?: any[]; flows: Flow[] } {
+function importPackageYaml(text: string): { name?: string; inputs?: any[]; closures?: any[]; flows: Flow[]; version?: number } {
   const pkg = yaml.load(text) as any;
   const flows = (pkg?.flows ?? []).map((f: any) =>
     importFlowFromYaml(
@@ -55,7 +78,7 @@ function importPackageYaml(text: string): { name?: string; inputs?: any[]; closu
       pkg.inputs
     )
   );
-  return { name: pkg?.name, inputs: pkg?.inputs, closures: pkg?.closures, flows };
+  return { name: pkg?.name, inputs: pkg?.inputs, closures: pkg?.closures, flows, version: pkg?.version };
 }
 
 function pkgToYaml(pkg: any): string {

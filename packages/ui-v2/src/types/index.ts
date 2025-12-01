@@ -1,6 +1,6 @@
-export type NodeKind = "input" | "branch" | "closure";
+export type NodeKind = "input" | "branch" | "closure" | "start";
 
-export type ConnectorDirection = "prev" | "next" | "dynamic";
+export type ConnectorDirection = "prev" | "next" | "dynamic" | "param";
 
 export interface Connector {
   id: string;
@@ -14,9 +14,11 @@ export interface NodeData {
   closureName?: string;
   callTarget?: string;
   params?: Record<string, unknown>;
+  paramCalls?: Record<string, boolean>;
   branchRules?: Array<{ label: string; condition: string }>;
   description?: string;
   parametersMeta?: Array<{ name: string; type?: string; required?: boolean; description?: string }>;
+  closureParameters?: string[];
 }
 
 export interface Node {
@@ -43,4 +45,5 @@ export interface Flow {
   entryId: string;
   nodes: Node[];
   edges: Edge[];
+  kind?: "flow" | "closure";
 }

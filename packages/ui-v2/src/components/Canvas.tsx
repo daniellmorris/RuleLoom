@@ -10,8 +10,12 @@ const NODE_HEIGHT = 80;
 const CONNECTOR_COLORS = ["#7dd3fc", "#fbbf24", "#a78bfa", "#34d399", "#f87171", "#38bdf8"];
 
 const Canvas: React.FC = () => {
-  const flow = useFlowStore((s) => s.flows.find((f) => f.id === s.activeFlowId)!);
-  const { nodes, edges } = flow;
+  const mode = useFlowStore((s) => s.activeMode);
+  const flow =
+    mode === "closure"
+      ? useFlowStore((s) => s.closures.find((f) => f.id === s.activeClosureId) ?? s.closures[0])
+      : useFlowStore((s) => s.flows.find((f) => f.id === s.activeFlowId) ?? s.flows[0]);
+  const { nodes = [], edges = [] } = flow ?? { nodes: [], edges: [] };
   const closuresMeta = useFlowStore((s) => s.closuresMeta);
   const selectNode = useFlowStore((s) => s.selectNode);
   const selection = useFlowStore((s) => s.selection.nodeId);
@@ -178,6 +182,15 @@ const completeLink = (event: React.MouseEvent, targetNode: Node) => {
     setScale(nextScale);
     setPan(nextPan);
   };
+
+  if (!flow) {
+    return (
+      <div className="panel" style={{ minHeight: "calc(100vh - 120px)" }}>
+        <h3 style={{ margin: 0 }}>Canvas</h3>
+        <p style={{ color: "var(--muted)" }}>No {mode} selected.</p>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -460,7 +473,3 @@ function connectorPoint(node: Node, idx: number) {
 }
 
 export default Canvas;
-  const hasIncoming = (nodeId: string) =>
-    edges.some((e) => (e.kind === "control" || e.kind === "branch") && e.to === nodeId);
-  const hasOutgoing = (nodeId: string) =>
-    edges.some((e) => (e.kind === "control" || e.kind === "branch") && e.from === nodeId);

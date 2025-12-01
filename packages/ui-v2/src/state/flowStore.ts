@@ -15,6 +15,7 @@ interface FlowState {
   selection: Selection;
   selectNode: (id: string | null) => void;
   selectEdge: (id: string | null) => void;
+  setFlow: (flow: Flow) => void;
   addFlow: (name: string) => void;
   setActiveFlow: (id: string) => void;
   setFlowName: (name: string) => void;
@@ -111,6 +112,12 @@ export const useFlowStore = create<FlowState>((set) => ({
       availableClosures: Array.from(new Set([...state.availableClosures, ...(manifest.closures ?? [])])),
       availableInputs: Array.from(new Set([...state.availableInputs, ...(manifest.inputs ?? [])]))
     })),
+  setFlow: (flow) =>
+    set((state) => {
+      const exists = state.flows.some((f) => f.id === flow.id);
+      const flows = exists ? state.flows.map((f) => (f.id === flow.id ? flow : f)) : [...state.flows, flow];
+      return { flows, activeFlowId: flow.id, selection: { nodeId: null, edgeId: null } };
+    }),
   addFlow: (name) =>
     set((state) => {
       const id = nanoid();

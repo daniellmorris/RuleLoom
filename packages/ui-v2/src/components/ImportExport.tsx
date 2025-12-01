@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useFlowStore } from "../state/flowStore";
-import { exportFlowToYaml, importFlowFromYaml } from "../utils/yaml";
+import { exportFlowToYaml, importFlowFromYaml, validateFlow } from "../utils/yaml";
 
 const ImportExport: React.FC = () => {
   const flow = useFlowStore((s) => s.flow);
@@ -10,6 +10,11 @@ const ImportExport: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
 
   const doExport = () => {
+    const errors = validateFlow(flow);
+    if (errors.length) {
+      setMessage(`Fix errors before export: ${errors[0]}`);
+      return;
+    }
     const yaml = exportFlowToYaml(flow);
     setText(yaml);
     setMessage("Exported current flow to YAML.");

@@ -19,11 +19,13 @@ function nodeStep(node: Node) {
   return null;
 }
 
-function traverse(node: Node, nodes: Node[], edges: Edge[]): any[] {
+function traverse(node: Node, nodes: Node[], edges: Edge[], visited = new Set<string>()): any[] {
   // input nodes are entry; skip to next
+  if (visited.has(node.id)) return [];
+  visited.add(node.id);
   if (node.kind === "input") {
     const next = firstNext(edges, node.id);
-    return next ? traverse(nodes.find((n) => n.id === next.to)!, nodes, edges) : [];
+    return next ? traverse(nodes.find((n) => n.id === next.to)!, nodes, edges, visited) : [];
   }
 
   if (isBranch(node)) {
@@ -38,19 +40,44 @@ function traverse(node: Node, nodes: Node[], edges: Edge[]): any[] {
           expr: rules.find((r) => r.label === edge.label)?.condition ?? edge.label ?? "condition"
         }
       },
-      steps: traverse(nodes.find((n) => n.id === edge.to)!, nodes, edges)
+      steps: traverse(nodes.find((n) => n.id === edge.to)!, nodes, edges, new Set(visited))
     }));
 
     const otherwiseEdge = controlNext[0];
-    const otherwise = otherwiseEdge ? traverse(nodes.find((n) => n.id === otherwiseEdge.to)!, nodes, edges) : [];
+    const otherwise = otherwiseEdge ? traverse(nodes.find((n) => n.id === otherwiseEdge.to)!, nodes, edges, new Set(visited)) : [];
 
     return [{ cases, otherwise }];
   }
 
   const step = nodeStep(node);
+  // attach param edges as parameters
+  if (step) {
+    const paramEdges = edges.filter((e) => e.kind === "param" && e.to === node.id);
+    paramEdges.forEach((pe) => {
+      const fromNode = nodes.find((n) => n.id === pe.from);
+      if (fromNode) {
+        const paramName = pe.label ?? "value";
+        (step.parameters as any)[paramName] = `\${${fromNode.label}}`;
+      }
+    });
+  }
   const restEdge = firstNext(edges, node.id);
-  const rest = restEdge ? traverse(nodes.find((n) => n.id === restEdge.to)!, nodes, edges) : [];
+  const rest = restEdge ? traverse(nodes.find((n) => n.id === restEdge.to)!, nodes, edges, visited) : [];
   return step ? [step, ...rest] : rest;
+}
+
+export function validateFlow(flow: Flow): string[] {
+  const errors: string[] = [];
+  flow.nodes.forEach((n) => {
+    const inbound = flow.edges.filter((e) => (e.kind === "control" || e.kind === "branch" || e.kind === "param") && e.to === n.id);
+    const outbound = flow.edges.filter((e) => (e.kind === "control" || e.kind === "branch") && e.from === n.id);
+    if (n.kind === "input") {
+      if (!outbound.length) errors.push(`Input ${n.label} has no outgoing connection.`);
+    } else {
+      if (!inbound.length) errors.push(`Node ${n.label} has no incoming connection.`);
+    }
+  });
+  return errors;
 }
 
 export function exportFlowToYaml(flow: Flow): string {

@@ -6,7 +6,13 @@ const PARAM_COLORS = ["#7dd3fc", "#fbbf24", "#a78bfa", "#34d399", "#f87171", "#3
 const Inspector: React.FC = () => {
   const selectedId = useFlowStore((s) => s.selection.nodeId);
   const selectedEdge = useFlowStore((s) => s.selection.edgeId);
-  const flow = useFlowStore((s) => s.flows.find((f) => f.id === s.activeFlowId)!);
+  const mode = useFlowStore((s) => s.activeMode);
+  const flow =
+    mode === "closure"
+      ? useFlowStore((s) => s.closures.find((f) => f.id === s.activeClosureId) ?? s.closures[0])
+      : useFlowStore((s) => s.flows.find((f) => f.id === s.activeFlowId) ?? s.flows[0]);
+  const flowNodes = flow?.nodes ?? [];
+  const flowEdges = flow?.edges ?? [];
   const closuresMeta = useFlowStore((s) => s.closuresMeta);
   const inputsMeta = useFlowStore((s) => s.inputsMeta);
   const updateNode = useFlowStore((s) => s.updateNode);
@@ -14,7 +20,16 @@ const Inspector: React.FC = () => {
   const deleteEdge = useFlowStore((s) => s.deleteEdge);
   const deleteNode = useFlowStore((s) => s.deleteNode);
 
-  const node = useMemo(() => flow.nodes.find((n) => n.id === selectedId), [flow.nodes, selectedId]);
+  const node = useMemo(() => flowNodes.find((n) => n.id === selectedId), [flowNodes, selectedId]);
+
+  if (!flow) {
+    return (
+      <div className="panel">
+        <h3>Inspector</h3>
+        <p style={{ color: "var(--muted)" }}>No {mode} selected.</p>
+      </div>
+    );
+  }
 
   if (!node) {
     return (
@@ -256,7 +271,7 @@ const ParameterList: React.FC<{
   return (
     <div className="stack">
       <h3 style={{ margin: 0 }}>Parameters</h3>
-      {params.map((p, idx) => {
+      {params.map((p: string, idx: number) => {
         const metaEntry = paramsMeta.find((m: any) => m.name === p);
         const existing = edges.find((e) => e.kind === "param" && e.to === node.id && e.label === p);
         const bound = Boolean(existing);

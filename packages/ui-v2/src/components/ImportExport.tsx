@@ -1,12 +1,8 @@
 import React, { useState } from "react";
-import { useFlowStore } from "../state/flowStore";
 import { usePackageStore } from "../state/packageStore";
 import { exportFlowToYaml, importFlowFromYaml, validateFlow } from "../utils/yaml";
 
 const ImportExport: React.FC = () => {
-  const flow = useFlowStore((s) => s.flow);
-  const setFlowName = useFlowStore((s) => s.setFlowName);
-  const setFlow = useFlowStore((s) => s.setFlow);
   const pkgExport = usePackageStore((s) => s.exportPackage);
   const pkgImport = usePackageStore((s) => s.importPackage);
   const [text, setText] = useState("");

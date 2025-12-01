@@ -5,6 +5,7 @@ import { getNodeColor } from "../styles/palette";
 
 const Palette: React.FC = () => {
   const addNode = useFlowStore((s) => s.addNode);
+  const mode = useFlowStore((s) => s.activeMode);
   const availableClosures = useFlowStore((s) => s.availableClosures);
   const availableInputs = useFlowStore((s) => s.availableInputs);
   const registerPlugin = useFlowStore((s) => s.registerPlugin);
@@ -79,33 +80,34 @@ const Palette: React.FC = () => {
       </div>
 
       <div className="stack">
-        {availableInputs.map((input) => (
-          <div
-            key={input}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData("application/node-kind", "input");
-              e.dataTransfer.setData("application/node-label", input);
-              e.dataTransfer.effectAllowed = "copy";
-            }}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "10px 12px",
-              border: "1px solid var(--panel-border)",
-              borderRadius: 12
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 600 }}>{input}</div>
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>Input</div>
+        {mode === "flow" &&
+          availableInputs.map((input) => (
+            <div
+              key={input}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("application/node-kind", "input");
+                e.dataTransfer.setData("application/node-label", input);
+                e.dataTransfer.effectAllowed = "copy";
+              }}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "10px 12px",
+                border: "1px solid var(--panel-border)",
+                borderRadius: 12
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 600 }}>{input}</div>
+                <div style={{ color: "var(--muted)", fontSize: 12 }}>Input</div>
+              </div>
+              <button className="button" onClick={() => handleAdd("input", input)}>
+                Add
+              </button>
             </div>
-            <button className="button" onClick={() => handleAdd("input", input)}>
-              Add
-            </button>
-          </div>
-        ))}
+          ))}
         <div
           key="branch"
           draggable

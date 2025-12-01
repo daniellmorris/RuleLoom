@@ -7,7 +7,10 @@ type Selection = { nodeId: string | null; edgeId: string | null };
 
 interface FlowState {
   flows: Flow[];
+  closures: Flow[];
   activeFlowId: string;
+  activeClosureId: string | null;
+  activeMode: "flow" | "closure";
   availableClosures: string[];
   availableInputs: string[];
   closuresMeta: Record<string, any>;
@@ -17,8 +20,12 @@ interface FlowState {
   selectEdge: (id: string | null) => void;
   setFlow: (flow: Flow) => void;
   setFlows: (flows: Flow[]) => void;
+  setClosures: (flows: Flow[]) => void;
   addFlow: (name: string) => void;
+  addClosureFlow: (name: string) => void;
   setActiveFlow: (id: string) => void;
+  setActiveClosure: (id: string | null) => void;
+  setActiveMode: (mode: "flow" | "closure") => void;
   setFlowName: (name: string) => void;
   registerPlugin: (manifest: { closures?: string[]; inputs?: string[] }) => void;
   addNode: (partial: Omit<Node, "id">) => void;
@@ -91,7 +98,8 @@ const initialFlow: Flow = {
   name: "Customer Onboarding",
   entryId: "input-1",
   nodes: baseNodes,
-  edges: baseEdges
+  edges: baseEdges,
+  kind: "flow"
 };
 
 const manifestClosuresArr = Array.isArray((coreManifest as any)?.closures) ? (coreManifest as any).closures : [];
@@ -103,7 +111,10 @@ const inputsMetaMap = Object.fromEntries(manifestInputsArr.map((i: any) => [i.ty
 
 export const useFlowStore = create<FlowState>((set) => ({
   flows: [initialFlow],
+  closures: [],
   activeFlowId: initialFlow.id,
+  activeClosureId: null,
+  activeMode: "flow",
   availableClosures: manifestClosures,
   availableInputs: manifestInputs,
   closuresMeta: closuresMetaMap,
@@ -126,135 +137,176 @@ export const useFlowStore = create<FlowState>((set) => ({
       activeFlowId: flows.find((f) => f.id === state.activeFlowId)?.id ?? flows[0]?.id ?? null,
       selection: { nodeId: null, edgeId: null }
     })),
+  setClosures: (flows) =>
+    set((state) => ({
+      closures: flows,
+      activeClosureId: flows.find((f) => f.id === state.activeClosureId)?.id ?? flows[0]?.id ?? null,
+      selection: { nodeId: null, edgeId: null }
+    })),
   addFlow: (name) =>
     set((state) => {
       const id = nanoid();
+      const startId = `start-${id}`;
       const flow: Flow = {
         id,
         name,
-        entryId: "",
-        nodes: [],
+        entryId: startId,
+        nodes: [
+          {
+            id: startId,
+            kind: "start",
+            label: "START",
+            x: 60,
+            y: 120,
+            connectors: [{ id: "next", label: "next", direction: "next" }]
+          }
+        ],
         edges: []
       };
       return { flows: [...state.flows, flow], activeFlowId: id, selection: { nodeId: null, edgeId: null } };
     }),
+  addClosureFlow: (name) =>
+    set((state) => {
+      const id = nanoid();
+      const startId = `start-${id}`;
+      const flow: Flow = {
+        id,
+        name,
+        kind: "closure",
+        entryId: startId,
+        nodes: [
+          {
+            id: startId,
+            kind: "start",
+            label: "START",
+            x: 60,
+            y: 120,
+            connectors: [{ id: "next", label: "next", direction: "next" }]
+          }
+        ],
+        edges: []
+      };
+      return { closures: [...state.closures, flow], activeClosureId: id, selection: { nodeId: null, edgeId: null } };
+    }),
   setActiveFlow: (id) => set(() => ({ activeFlowId: id, selection: { nodeId: null, edgeId: null } })),
+  setActiveClosure: (id) => set(() => ({ activeClosureId: id, selection: { nodeId: null, edgeId: null } })),
+  setActiveMode: (mode) =>
+    set((state) => ({
+      activeMode: mode,
+      activeFlowId: mode === "flow" ? state.activeFlowId ?? state.flows[0]?.id ?? null : state.activeFlowId,
+      activeClosureId: mode === "closure" ? state.activeClosureId ?? state.closures[0]?.id ?? null : state.activeClosureId,
+      selection: { nodeId: null, edgeId: null }
+    })),
   selectNode: (id) => set({ selection: { nodeId: id, edgeId: null } }),
   selectEdge: (id) => set({ selection: { nodeId: null, edgeId: id } }),
   addNode: (partial) =>
-    set((state) => ({
-      flows: state.flows.map((flow) => {
-        if (flow.id !== state.activeFlowId) return flow;
+    set((state) =>
+      applyActive(state, (flow) => {
+        // block inputs inside closure canvases
+        if (state.activeMode === "closure" && partial.kind === "input") return flow;
+        // block adding additional start nodes
+        if (partial.kind === "start") return flow;
         const node = { ...partial, id: nanoid() };
         const nodes = [...flow.nodes, node];
         const edges = [...flow.edges];
-        const entryId = flow.entryId || flow.nodes.find((n) => n.kind === "input")?.id || node.id;
-        // if adding input and there's already an input with a start edge, connect to that same target
+        const entryId = flow.entryId || flow.nodes.find((n) => n.kind === "start")?.id || node.id;
         if (node.kind === "input") {
-          const anchor = edges.find((e) => (e.kind === "control" || e.kind === "branch") && flow.nodes.find((n) => n.id === e.from)?.kind === "input");
-          if (anchor) {
-            edges.push({ id: nanoid(), from: node.id, to: anchor.to, kind: "control", label: "next" });
-          }
+          // inputs always connect to START
+          if (entryId) edges.push({ id: nanoid(), from: node.id, to: entryId, kind: "control", label: "next" });
         } else {
-          // auto-connect input to first step if none
           const hasStartEdge = edges.some((e) => e.from === entryId);
-          if (!hasStartEdge && entryId) {
-            edges.push({ id: nanoid(), from: entryId, to: node.id, kind: "control", label: "next" });
-          }
+          if (!hasStartEdge && entryId) edges.push({ id: nanoid(), from: entryId, to: node.id, kind: "control", label: "next" });
         }
         return { ...flow, entryId, nodes, edges };
       })
-    })),
+    ),
   updateNode: (id, patch) =>
-    set((state) => ({
-      flows: state.flows.map((flow) =>
-        flow.id === state.activeFlowId
-          ? { ...flow, nodes: flow.nodes.map((n) => (n.id === id ? { ...n, ...patch, data: { ...n.data, ...patch.data } } : n)) }
-          : flow
-      )
-    })),
+    set((state) =>
+      applyActive(state, (flow) => ({
+        ...flow,
+        nodes: flow.nodes.map((n) => (n.id === id ? { ...n, ...patch, data: { ...n.data, ...patch.data } } : n))
+      }))
+    ),
   connect: (from, to, label, kind = "control") =>
-    set((state) => ({
-      flows: state.flows.map((flow) =>
-        flow.id === state.activeFlowId
-          ? (() => {
-              const fromNode = flow.nodes.find((n) => n.id === from);
-              const targetNode = flow.nodes.find((n) => n.id === to);
-              // forbid edges into inputs
-              if (targetNode?.kind === "input") return flow;
-              // all inputs share same start target; if connecting from an input, update all input edges to this target
-              let finalTo = to;
-              const inputNodes = flow.nodes.filter((n) => n.kind === "input");
-              const connectingFromInput = fromNode?.kind === "input";
-              if (connectingFromInput) {
-                // remove existing edges from inputs; we'll re-add
-              }
-              const effectiveLabel = label ?? (kind === "control" ? "next" : label);
-              // enforce single outbound per connector (from+kind+label)
-              // inbound rule: control/branch allow only one inbound; param allows multiple labels, replaces same label
-              let filtered = flow.edges.filter((e) => {
-                const sameOut =
-                  e.from === from &&
-                  e.kind === kind &&
-                  (kind === "branch" || kind === "param" || (kind === "control" && effectiveLabel)
-                    ? e.label === effectiveLabel
-                    : true);
-                // inbound conflict: only one inbound edge of any kind (control/branch/param) per target (inputs already guarded above)
-                const inboundConflict =
-                  (e.kind === "control" || e.kind === "branch" || e.kind === "param") &&
-                  (kind === "control" || kind === "branch" || kind === "param") &&
-                  e.to === finalTo;
-                const blockBranchSameTarget = kind === "branch" && e.kind === "branch" && e.to === finalTo;
-                return !sameOut && !blockBranchSameTarget && !inboundConflict;
-              });
-              // if connecting from an input, drop all existing input edges first
-              if (connectingFromInput) {
-                filtered = filtered.filter((e) => !(flow.nodes.find((n) => n.id === e.from)?.kind === "input"));
-              }
-              const edge: Edge = { id: nanoid(), from, to: finalTo, label: effectiveLabel, kind };
-              let nextEdges = [...filtered, edge];
-              if (connectingFromInput) {
-                inputNodes
-                  .filter((n) => n.id !== from)
-                  .forEach((n) => {
-                    // add edge for each other input to the same target
-                    nextEdges.push({ id: nanoid(), from: n.id, to: finalTo, label: "next", kind: "control" });
-                  });
-              }
-              return { ...flow, edges: nextEdges };
-            })()
-          : flow
-      )
-    })),
+    set((state) =>
+      applyActive(state, (flow) => {
+        const fromNode = flow.nodes.find((n) => n.id === from);
+        const targetNode = flow.nodes.find((n) => n.id === to);
+        if (!fromNode || !targetNode) return flow;
+        // forbid edges into inputs
+        if (targetNode.kind === "input" && kind !== "param") return flow;
+        // in closure mode, inputs are not allowed
+        if (state.activeMode === "closure" && (fromNode.kind === "input" || targetNode.kind === "input")) return flow;
+        // inputs always target START
+        const startNode = flow.nodes.find((n) => n.kind === "start");
+        if (fromNode.kind === "input" && startNode) {
+          to = startNode.id;
+        }
+
+        const inputNodes = flow.nodes.filter((n) => n.kind === "input");
+        const connectingFromInput = fromNode.kind === "input";
+        const effectiveLabel = label ?? (kind === "control" ? "next" : label);
+
+        let filtered = flow.edges.filter((e) => {
+          const sameOut =
+            e.from === from &&
+            e.kind === kind &&
+            (kind === "branch" || kind === "param" || (kind === "control" && effectiveLabel) ? e.label === effectiveLabel : true);
+          const inboundConflict =
+            (e.kind === "control" || e.kind === "branch" || e.kind === "param") &&
+            (kind === "control" || kind === "branch" || kind === "param") &&
+            e.to === to;
+          const blockBranchSameTarget = kind === "branch" && e.kind === "branch" && e.to === to;
+          return !sameOut && !blockBranchSameTarget && !inboundConflict;
+        });
+
+        if (connectingFromInput) {
+          filtered = filtered.filter((e) => !(flow.nodes.find((n) => n.id === e.from)?.kind === "input"));
+        }
+
+        const edge: Edge = { id: nanoid(), from, to, label: effectiveLabel, kind };
+        let nextEdges = [...filtered, edge];
+
+        if (connectingFromInput) {
+          inputNodes
+            .filter((n) => n.id !== from)
+            .forEach((n) => {
+              nextEdges.push({ id: nanoid(), from: n.id, to, label: "next", kind: "control" });
+            });
+        }
+
+        return { ...flow, edges: nextEdges };
+      })
+    ),
   connectParam: (toNode, param, fromNode) =>
-    set((state) => ({
-      flows: state.flows.map((flow) => {
-        if (flow.id !== state.activeFlowId) return flow;
+    set((state) =>
+      applyActive(state, (flow) => {
         const edges = flow.edges.filter((e) => !(e.kind === "param" && e.to === toNode && e.label === param));
         if (fromNode) edges.push({ id: nanoid(), from: fromNode, to: toNode, label: param, kind: "param" });
         return { ...flow, edges };
       })
-    })),
+    ),
   deleteEdge: (id) =>
     set((state) => ({
-      flows: state.flows.map((flow) =>
-        flow.id === state.activeFlowId ? { ...flow, edges: flow.edges.filter((e) => e.id !== id) } : flow
-      ),
+      ...applyActive(state, (flow) => ({ ...flow, edges: flow.edges.filter((e) => e.id !== id) })),
       selection: { nodeId: null, edgeId: null }
     })),
   deleteNode: (id) =>
     set((state) => ({
-      flows: state.flows.map((flow) =>
-        flow.id === state.activeFlowId
-          ? { ...flow, nodes: flow.nodes.filter((n) => n.id !== id), edges: flow.edges.filter((e) => e.from !== id && e.to !== id) }
-          : flow
-      ),
+      ...applyActive(state, (flow) => ({
+        ...flow,
+        nodes: flow.nodes.filter((n) => n.id !== id),
+        edges: flow.edges.filter((e) => e.from !== id && e.to !== id)
+      })),
       selection: { nodeId: null, edgeId: null }
     })),
   setFlowName: (name) =>
-    set((state) => ({
-      flows: state.flows.map((f) => (f.id === state.activeFlowId ? { ...f, name } : f))
-    })),
+    set((state) =>
+      applyActive(state, (flow) => ({
+        ...flow,
+        name
+      }))
+    ),
   setCatalog: (closures, inputs) =>
     set(() => ({
       availableClosures: closures.map((c: any) => c.name).filter(Boolean),
@@ -263,9 +315,7 @@ export const useFlowStore = create<FlowState>((set) => ({
       inputsMeta: Object.fromEntries(inputs.map((i: any) => [i.type, i]))
     })),
   layout: () =>
-    set((state) => ({
-      flows: state.flows.map((flow) => (flow.id === state.activeFlowId ? autoLayout(flow) : flow))
-    })),
+    set((state) => applyActive(state, (flow) => autoLayout(flow))),
   reset: () =>
     set({
       flows: [initialFlow],
@@ -315,7 +365,7 @@ export const createNodeTemplate = (kind: NodeKind, x: number, y: number): Omit<N
 
 export function autoLayout(flow: Flow): Flow {
   const edges = flow.edges;
-  const entry = flow.nodes.find((n) => n.id === flow.entryId) ?? flow.nodes[0];
+  const entry = flow.nodes.find((n) => n.id === flow.entryId) ?? flow.nodes.find((n) => n.kind === "start") ?? flow.nodes[0];
   const layerMap = new Map<string, number>();
   const visited = new Set<string>();
   const adj = new Map<string, string[]>();
@@ -372,4 +422,15 @@ export function autoLayout(flow: Flow): Flow {
   });
 
   return { ...flow, nodes: newNodes };
+}
+
+function applyActive(state: FlowState, mutator: (flow: Flow) => Flow): Partial<FlowState> {
+  if (state.activeMode === "flow") {
+    const flows = state.flows.map((f) => (f.id === state.activeFlowId ? mutator(f) : f));
+    const activeFlowId = flows.find((f) => f.id === state.activeFlowId)?.id ?? flows[0]?.id ?? null;
+    return { flows, activeFlowId };
+  }
+  const closures = state.closures.map((f) => (f.id === state.activeClosureId ? mutator(f) : f));
+  const activeClosureId = closures.find((f) => f.id === state.activeClosureId)?.id ?? closures[0]?.id ?? null;
+  return { closures, activeClosureId };
 }

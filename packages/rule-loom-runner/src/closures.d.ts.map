@@ -1,1 +1,0 @@
-{"version":3,"file":"closures.d.ts","sourceRoot":"","sources":["closures.ts"],"names":[],"mappings":"AACA,OAAuB,EAAwB,KAAK,iBAAiB,EAAuB,MAAM,kBAAkB,CAAC;AACrH,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,eAAe,CAAC;AACpD,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,aAAa,CAAC;AAgIjD,wBAAsB,aAAa,CACjC,cAAc,EAAE,aAAa,EAAE,EAC/B,OAAO,EAAE,MAAM,EACf,MAAM,CAAC,EAAE,cAAc,GACtB,OAAO,CAAC,iBAAiB,EAAE,CAAC,CAiC9B"}

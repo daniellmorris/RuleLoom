@@ -8,16 +8,20 @@ import { nanoid } from "../utils/id";
 
 export interface PackageState {
   name: string;
-  closures: any[];
-  inputs: any[];
+  catalogClosures: any[]; // core + custom (for palette/catalog)
+  catalogInputs: any[];
+  customClosures: any[]; // user/package-defined only
+  customInputs: any[];
   importPackage: (yamlText: string) => void;
   exportPackage: () => string;
 }
 
 export const usePackageStore = create<PackageState>((set, get) => ({
   name: "Untitled package",
-  closures: (coreManifest as any).closures ?? [],
-  inputs: (coreManifest as any).inputs ?? [],
+  catalogClosures: (coreManifest as any).closures ?? [],
+  catalogInputs: (coreManifest as any).inputs ?? [],
+  customClosures: [],
+  customInputs: [],
   importPackage: (yamlText: string) => {
     const pkg = importPackageYaml(yamlText);
     const version = pkg.version ?? 1;
@@ -49,18 +53,48 @@ export const usePackageStore = create<PackageState>((set, get) => ({
     flowStore.setClosures(closureFlows);
     set({
       name: pkg.name ?? "Imported package",
-      closures: mergedClosures,
-      inputs: mergedInputs
+      catalogClosures: mergedClosures,
+      catalogInputs: mergedInputs,
+      customClosures: pkg.closures ?? [],
+      customInputs: pkg.inputs ?? []
     });
   },
   exportPackage: () => {
-    const { closures, inputs } = get();
-    const flows = useFlowStore.getState().flows;
+    const { customClosures } = get();
+    const flowStore = useFlowStore.getState();
+    const flows = flowStore.flows;
+    const closuresFlows = flowStore.closures;
+
+    const serializeFlowOnly = (f: any) => {
+      const parsed = yaml.load(exportFlowToYaml(f)) as any;
+      return parsed?.flows?.[0] ?? {};
+    };
+
+    // derive current inputs from flow graphs (unique by type/label)
+    const derivedInputs: any[] = [];
+    flows.forEach((f) => {
+      f.nodes
+        .filter((n) => n.kind === "input")
+        .forEach((n) => {
+          if (!derivedInputs.find((i) => i.type === n.label)) {
+            derivedInputs.push({ type: n.label, schema: n.data?.schema ?? {} });
+          }
+        });
+    });
+
+    const serializedFlows = flows.map(serializeFlowOnly);
+
+    const serializedClosures =
+      closuresFlows.map((cf) => {
+        const flow = serializeFlowOnly(cf);
+        return { type: "flow", name: cf.name, steps: flow.steps ?? [] };
+      }) ?? customClosures;
+
     const pkg = {
       version: 1,
-      inputs,
-      closures,
-      flows: flows.map((f) => JSON.parse(exportFlowToYaml(f)))
+      inputs: derivedInputs,
+      closures: serializedClosures,
+      flows: serializedFlows
     };
     return pkgToYaml(pkg);
   }

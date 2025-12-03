@@ -96,8 +96,10 @@ describe('Orchestrator API', () => {
       const invalidConfig = `version: 1
 inputs:
   - type: http
-    routes:
-      - method: post
+    config: {}
+    triggers:
+      - type: httpRoute
+        method: post
         path: /invalid
         flow: invalid-flow
 flows:

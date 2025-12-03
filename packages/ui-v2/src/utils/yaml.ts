@@ -132,7 +132,8 @@ export function exportFlowToYaml(flow: Flow): string {
   const inputs = (flow as any)._inputs ?? [
     {
       type: "http",
-      routes: [{ method: "post", path: `/${flow.name ?? "flow"}`, flow: flow.name }]
+      config: {},
+      triggers: [{ type: "httpRoute", method: "post", path: `/${flow.name ?? "flow"}`, flow: flow.name }]
     }
   ];
 
@@ -303,23 +304,7 @@ export function importFlowFromYaml(text: string, pkgInputs?: any[], asClosure = 
     connectors: [{ id: "next", label: "next", direction: "next" }]
   });
 
-  // create input nodes from package inputs (or parsed inputs) only for flows
-  if (!asClosure) {
-    const inputs = pkgInputs ?? parsed?.inputs ?? [];
-    inputs.forEach((inp: any, idx: number) => {
-      const id = `input-${idx + 1}`;
-      nodes.push({
-        id,
-        kind: "input",
-        label: inp.type ?? `input-${idx + 1}`,
-        x: 60,
-        y: yBase + (idx + 1) * 120,
-        connectors: [{ id: "next", label: "next", direction: "next" }],
-        data: { schema: inp.schema ?? {} }
-      });
-      edges.push({ id: nanoid(), from: id, to: startId, kind: "control", label: "next" });
-    });
-  }
+  // inputs are now represented as triggers; we don't draw them as nodes on the canvas.
 
   const last = build(flowSpec?.steps ?? [], undefined);
   if (last) {

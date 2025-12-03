@@ -37,20 +37,35 @@ inputs:
           type: string
           enum:
             - mqtt
-        url:
-          type: string
-          minLength: 1
-        username:
-          type: string
-        password:
-          type: string
-        clientId:
-          type: string
-        subscriptions:
+        config:
+          type: object
+          properties:
+            url:
+              type: string
+              minLength: 1
+            username:
+              type: string
+            password:
+              type: string
+            clientId:
+              type: string
+            options:
+              type: object
+              additionalProperties: {}
+          required:
+            - url
+          additionalProperties: false
+        triggers:
           type: array
           items:
             type: object
             properties:
+              id:
+                type: string
+              type:
+                type: string
+                enum:
+                  - topic
               topic:
                 type: string
                 minLength: 1
@@ -75,11 +90,8 @@ inputs:
               - flow
             additionalProperties: false
           minItems: 1
-        options:
-          type: object
-          additionalProperties: {}
       required:
         - type
-        - url
-        - subscriptions
+        - config
+        - triggers
       additionalProperties: false

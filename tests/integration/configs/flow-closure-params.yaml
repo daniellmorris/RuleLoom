@@ -1,8 +1,10 @@
 version: 1
 inputs:
   - type: http
-    routes:
-      - method: post
+    config: {}
+    triggers:
+      - type: httpRoute
+        method: post
         path: /flow-params
         flow: invoke-flow-closure
 closures:

@@ -8,6 +8,7 @@ import type {
   ConditionDefinition,
 } from 'rule-loom-engine';
 import type { RunnerConfig } from './config.js';
+import type { HttpInputConfig, SchedulerInputConfig, InitInputConfig, BaseInputConfig } from 'rule-loom-core/inputs';
 
 export type ValidationIssueLevel = 'error' | 'warning';
 
@@ -34,6 +35,7 @@ export class RunnerValidationError extends Error {
 export function validateRunnerConfig(config: RunnerConfig, closures: ClosureDefinition[]): ValidationResult {
   const issues: ValidationIssue[] = [];
   const signatureByClosure = new Map<string, ClosureSignature>();
+  const flowNames = new Set(config.flows.map((f) => f.name));
 
   for (const closure of closures) {
     if (!closure.signature) {
@@ -47,11 +49,47 @@ export function validateRunnerConfig(config: RunnerConfig, closures: ClosureDefi
     signatureByClosure.set(closure.name, closure.signature);
   }
 
+  validateInputTriggers(config.inputs ?? [], flowNames, issues);
+
   for (const flow of config.flows ?? []) {
     validateFlow(flow, signatureByClosure, issues);
   }
 
   return { valid: issues.every((issue) => issue.level !== 'error'), issues };
+}
+
+function validateInputTriggers(inputs: BaseInputConfig[], flowNames: Set<string>, issues: ValidationIssue[]) {
+  inputs.forEach((input, idx) => {
+    const path = `inputs[${idx}]`;
+    const type = (input as any).type;
+    const triggers = (input as any).triggers;
+    if (!Array.isArray(triggers) || triggers.length === 0) {
+      issues.push({
+        level: 'error',
+        message: `Input "${type}" must provide at least one trigger.`,
+        path,
+      });
+      return;
+    }
+    triggers.forEach((trigger: any, tIdx: number) => {
+      const trigPath = `${path}.triggers[${tIdx}]`;
+      if (!trigger?.flow || typeof trigger.flow !== 'string') {
+        issues.push({
+          level: 'error',
+          message: `Trigger at ${trigPath} is missing required "flow".`,
+          path: trigPath,
+        });
+        return;
+      }
+      if (!flowNames.has(trigger.flow)) {
+        issues.push({
+          level: 'error',
+          message: `Trigger flow "${trigger.flow}" does not match any configured flow.`,
+          path: trigPath,
+        });
+      }
+    });
+  });
 }
 
 function validateFlow(flow: FlowDefinition, signatureByClosure: Map<string, ClosureSignature>, issues: ValidationIssue[]) {

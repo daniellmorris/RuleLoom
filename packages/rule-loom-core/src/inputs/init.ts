@@ -3,16 +3,24 @@ import type { InitInputConfig, InputPlugin, InputPluginContext } from './types.j
 
 export const initInputSchema = z.object({
   type: z.literal('init'),
-  flow: z.string().min(1),
-  initialState: z.record(z.any()).optional(),
-  runtime: z.record(z.any()).optional(),
+  triggers: z.array(
+    z.object({
+      id: z.string().optional(),
+      type: z.literal('init').optional(),
+      flow: z.string().min(1),
+      initialState: z.record(z.any()).optional(),
+      runtime: z.record(z.any()).optional(),
+    }),
+  ).min(1),
 });
 
 export const initInputPlugin: InputPlugin<InitInputConfig> = {
   type: 'init',
   schema: initInputSchema,
   initialize: async (config, context: InputPluginContext) => {
-    context.logger.info?.(`Init input executing flow "${config.flow}"`);
-    await context.engine.execute(config.flow, config.initialState ?? {}, config.runtime ?? {});
+    for (const trigger of config.triggers) {
+      context.logger.info?.(`Init trigger executing flow "${trigger.flow}"`);
+      await context.engine.execute(trigger.flow, trigger.initialState ?? {}, trigger.runtime ?? {});
+    }
   },
 };

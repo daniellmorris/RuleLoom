@@ -9,7 +9,7 @@ function buildSetStateClosure(entry: Extract<ClosureConfig, { type: 'template'; 
   return {
     name,
     description: entry.description,
-    handler: async (state, context) => {
+    handler: async (state: any, context: ClosureContext) => {
       const templateContext = {
         state,
         runtime: context.runtime,
@@ -50,7 +50,7 @@ function buildRespondClosure(entry: Extract<ClosureConfig, { type: 'template'; t
   return {
     name,
     description: entry.description,
-    handler: async (state, context) => {
+    handler: async (state: any, context: ClosureContext) => {
       const templateContext = {
         state,
         runtime: context.runtime,
@@ -150,7 +150,7 @@ export async function buildClosures(
       closures.push({
         name: entry.name,
         description: entry.description,
-        handler: async (state, context) => {
+        handler: async (state: any, context: ClosureContext) => {
           const engine = context.runtime.engine;
           if (!engine || !(engine instanceof RuleLoomEngine)) {
             throw new Error('Flow closures require execution within a RuleLoomEngine context.');

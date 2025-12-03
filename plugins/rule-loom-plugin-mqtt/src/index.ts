@@ -14,7 +14,9 @@ type PublishParams = {
 export const plugin = {
   name: 'rule-loom-plugin-mqtt',
   async register(ctx: PluginRegistrationContext) {
-    const subscriptionSchema = z.object({
+    const triggerSchema = z.object({
+      id: z.string().optional(),
+      type: z.literal('topic').optional(),
       topic: z.string().min(1),
       flow: z.string().min(1),
       qos: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
@@ -23,12 +25,16 @@ export const plugin = {
 
     const mqttInputSchema = z.object({
       type: z.literal('mqtt'),
-      url: z.string().min(1),
-      username: z.string().optional(),
-      password: z.string().optional(),
-      clientId: z.string().optional(),
-      subscriptions: z.array(subscriptionSchema).min(1),
-      options: z.record(z.any()).optional(),
+      config: z
+        .object({
+          url: z.string().min(1),
+          username: z.string().optional(),
+          password: z.string().optional(),
+          clientId: z.string().optional(),
+          options: z.record(z.any()).optional(),
+        })
+        .strict(),
+      triggers: z.array(triggerSchema).min(1),
     });
 
     type MqttInputConfig = z.infer<typeof mqttInputSchema>;
@@ -38,11 +44,11 @@ export const plugin = {
       schema: mqttInputSchema,
       initialize: async (config: MqttInputConfig, context: any) => {
         const mqtt = await import('mqtt');
-        const client = mqtt.connect(config.url, {
-          username: config.username,
-          password: config.password,
-          clientId: config.clientId,
-          ...(config.options ?? {}),
+        const client = mqtt.connect(config.config.url, {
+          username: config.config.username,
+          password: config.config.password,
+          clientId: config.config.clientId,
+          ...(config.config.options ?? {}),
         });
 
         await new Promise<void>((resolve, reject) => {
@@ -51,15 +57,15 @@ export const plugin = {
         });
 
         // Subscribe to configured topics
-        const subs = config.subscriptions.map((s) => ({ topic: s.topic, qos: s.qos ?? 0 }));
+        const subs = config.triggers.map((s) => ({ topic: s.topic, qos: s.qos ?? 0 }));
         if (subs.length) {
           await new Promise<void>((resolve, reject) => {
-            client.subscribe(subs as any, (err) => (err ? reject(err) : resolve()));
-          });
+          client.subscribe(subs as any, (err) => (err ? reject(err) : resolve()));
+        });
         }
 
         const onMessage = async (topic: string, payload: Buffer) => {
-          const sub = config.subscriptions.find((s) => s.topic === topic);
+          const sub = config.triggers.find((s) => s.topic === topic);
           if (!sub) return;
           try {
             const body = sub.json ? JSON.parse(payload.toString('utf8')) : payload.toString('utf8');

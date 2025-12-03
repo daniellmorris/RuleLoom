@@ -3,13 +3,16 @@ logger:
   level: warn
 inputs:
   - type: http
-    routes:
-      - method: get
+    config: {}
+    triggers:
+      - type: httpRoute
+        method: get
         path: /status
         flow: status
   - type: scheduler
-    jobs:
-      - name: heartbeat
+    triggers:
+      - type: interval
+        name: heartbeat
         flow: heartbeat-flow
         interval: "1s"
         runtime:

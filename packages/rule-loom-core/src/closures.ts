@@ -166,7 +166,7 @@ export function coreLessThanClosure(): ClosureDefinition {
 export function coreIncludesClosure(): ClosureDefinition {
   return {
     name: 'core.includes',
-    handler: async (_state, context) => {
+    handler: async (_state: any, context: any) => {
       const collection = context.parameters?.collection as unknown;
       const value = context.parameters?.value;
       if (Array.isArray(collection)) {

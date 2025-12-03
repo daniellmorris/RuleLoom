@@ -4,7 +4,13 @@ import _ from 'lodash';
 import { z } from 'zod';
 import type { RuleLoomEngine, ExecutionResult } from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
-import type { SchedulerInputConfig, SchedulerJobConfig, RunnerScheduler, SchedulerJobState, InputPlugin } from './types.js';
+import type {
+  SchedulerInputConfig,
+  SchedulerTriggerConfig,
+  RunnerScheduler,
+  SchedulerJobState,
+  InputPlugin,
+} from './types.js';
 
 export interface SchedulerInputOptions {
   engine: RuleLoomEngine;
@@ -12,9 +18,11 @@ export interface SchedulerInputOptions {
   events: EventEmitter;
 }
 
-const schedulerJobSchema = z
+const schedulerTriggerSchema = z
   .object({
-    name: z.string().min(1),
+    id: z.string().optional(),
+    type: z.enum(['cron', 'interval', 'timeout']).optional(),
+    name: z.string().min(1).optional(),
     flow: z.string().min(1),
     interval: z.union([z.number().positive(), z.string().min(1)]).optional(),
     cron: z.string().min(1).optional(),
@@ -24,13 +32,13 @@ const schedulerJobSchema = z
     enabled: z.boolean().optional(),
   })
   .refine((job) => job.interval !== undefined || job.cron !== undefined || job.timeout !== undefined, {
-    message: 'Scheduler job requires interval, cron, or timeout',
+    message: 'Scheduler trigger requires interval, cron, or timeout',
     path: ['interval'],
   });
 
 export const schedulerInputSchema = z.object({
   type: z.literal('scheduler'),
-  jobs: z.array(schedulerJobSchema).min(1),
+  triggers: z.array(schedulerTriggerSchema).min(1),
 });
 
 export const schedulerInputPlugin: InputPlugin<SchedulerInputConfig> = {
@@ -57,15 +65,16 @@ function buildJobCode(jobName: string) {
 })()`;
 }
 
-function createJobDefinitions(jobs: SchedulerJobConfig[]) {
-  return jobs.map((job) => {
-    const jobCode = buildJobCode(job.name);
+function createJobDefinitions(triggers: SchedulerTriggerConfig[]) {
+  return triggers.map((job, idx) => {
+    const name = job.name ?? job.id ?? `job-${idx + 1}`;
+    const jobCode = buildJobCode(name);
     const definition: any = {
-      name: job.name,
+      name,
       path: jobCode,
       worker: {
         eval: true,
-        workerData: { name: job.name },
+        workerData: { name },
       },
     };
     if (job.interval !== undefined) definition.interval = job.interval;
@@ -79,21 +88,21 @@ export async function createSchedulerInput(
   input: SchedulerInputConfig,
   options: SchedulerInputOptions,
 ): Promise<RunnerScheduler | undefined> {
-  if (!input.jobs?.length) return undefined;
+  if (!input.triggers?.length) return undefined;
 
   const bree = await createBree(input, options);
   return startScheduler(bree, options.logger);
 }
 
 async function createBree(input: SchedulerInputConfig, options: SchedulerInputOptions) {
-  const definitions = createJobDefinitions(input.jobs);
+  const definitions = createJobDefinitions(input.triggers);
   const bree = new Bree({
     root: false,
     jobs: definitions,
     workerMessageHandler: async (message: any) => {
       if (message?.type === 'run-flow') {
         const flowName = message.name as string;
-        const jobConfig = input.jobs.find((job) => job.name === flowName);
+        const jobConfig = input.triggers.find((job) => (job.name ?? job.id) === flowName);
         if (!jobConfig) return;
         const state = _.cloneDeep(jobConfig.initialState ?? {});
         const runtime = _.cloneDeep(jobConfig.runtime ?? {});

@@ -5,10 +5,9 @@ plugins:
   - source: file
     path: ./plugins/example-plugin/plugin.js
 inputs:
-  - type: echo
-    message: "boot message"
   - type: init
-    flow: hello-flow
+    triggers:
+      - flow: hello-flow
 flows:
   - name: hello-flow
     description: Demo flow using plugin bundle + closure

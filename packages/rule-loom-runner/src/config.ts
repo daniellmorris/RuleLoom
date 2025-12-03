@@ -4,12 +4,7 @@ import { pathToFileURL } from 'node:url';
 import yaml from 'js-yaml';
 import { z } from 'zod';
 import type { LogLevel } from 'rule-loom-lib';
-import type {
-  HttpInputConfig,
-  SchedulerInputConfig,
-  SchedulerJobConfig,
-  RunnerInputConfig,
-} from 'rule-loom-core/inputs';
+import type { HttpInputConfig, SchedulerInputConfig, BaseInputConfig } from 'rule-loom-core/inputs';
 import { getInputSchema } from 'rule-loom-core/inputs';
 import { logLevelSchema, flowSchema, templateClosureSchema, moduleClosureSchema, flowClosureSchema } from './schemas.js';
 import { pluginSpecSchema } from './pluginSpecs.js';

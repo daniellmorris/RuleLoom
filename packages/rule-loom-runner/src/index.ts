@@ -10,12 +10,7 @@ import {
   type RunnerConfigWithMeta,
   type FlowConfig,
 } from './config.js';
-import {
-  createPlaceholderHttpApp,
-  type HttpInputApp,
-  type RunnerScheduler,
-  type RunnerInputConfig,
-} from 'rule-loom-core/inputs';
+import { createPlaceholderHttpApp, type HttpInputApp, type RunnerScheduler, type BaseInputConfig } from 'rule-loom-core/inputs';
 import { initializeInputs } from './inputPlugins.js';
 import { RunnerValidationError, validateRunnerConfig, type ValidationResult } from './validator.js';
 import { parsePluginSpecs } from './pluginSpecs.js';
@@ -89,7 +84,7 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
   const engine = await instantiateEngine(closures, config.flows, logger, pluginClosures);
   const events = new EventEmitter();
   const { httpApp, scheduler, cleanup } = await initializeInputs(
-    config.inputs as RunnerInputConfig[],
+    config.inputs as BaseInputConfig[],
     engine,
     logger,
     config.metadata,
@@ -165,7 +160,7 @@ export async function validateConfig(configPath: string): Promise<ValidationResu
 
 export { getHttpInput, getSchedulerInput } from './config.js';
 export type { RunnerConfig, RunnerConfigWithMeta } from './config.js';
-export type { RunnerScheduler, SchedulerJobConfig, SchedulerInputConfig, HttpInputConfig } from 'rule-loom-core/inputs';
+export type { RunnerScheduler, SchedulerInputConfig, HttpInputConfig } from 'rule-loom-core/inputs';
 export { RunnerValidationError } from './validator.js';
 export type { ValidationIssue, ValidationResult } from './validator.js';
 export type { PluginRegistrationContext, RuleLoomPlugin } from './pluginLoader.js';

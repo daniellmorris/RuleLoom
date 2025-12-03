@@ -211,7 +211,7 @@ export const useFlowStore = create<FlowState>((set) => ({
         const edges = [...flow.edges];
         const entryId = flow.entryId || flow.nodes.find((n) => n.kind === "start")?.id || node.id;
         if (node.kind === "input") {
-          // inputs always connect to START
+          // inputs connect to START
           if (entryId) edges.push({ id: nanoid(), from: node.id, to: entryId, kind: "control", label: "next" });
         } else {
           const hasStartEdge = edges.some((e) => e.from === entryId);

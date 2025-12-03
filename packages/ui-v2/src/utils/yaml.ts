@@ -129,13 +129,22 @@ export function exportFlowToYaml(flow: Flow): string {
   const entryNode = flow.nodes.find((n) => n.id === flow.entryId) ?? flow.nodes[0];
   const steps = traverse(entryNode, flow.nodes, flow.edges);
 
-  const inputs = (flow as any)._inputs ?? [
-    {
-      type: "http",
-      config: {},
-      triggers: [{ type: "httpRoute", method: "post", path: `/${flow.name ?? "flow"}`, flow: flow.name }]
-    }
-  ];
+  const inputNodes = flow.nodes.filter((n) => n.kind === "input");
+  const grouped: Record<string, { config: any; triggers: any[] }> = {};
+  inputNodes.forEach((n) => {
+    const type = n.label;
+    const config = (n.data as any)?.config ?? {};
+    const trigger = { ...(n.data as any)?.trigger, flow: flow.name };
+    if (!grouped[type]) grouped[type] = { config, triggers: [] };
+    grouped[type].triggers.push(trigger);
+    // prefer first seen config
+    if (Object.keys(grouped[type].config).length === 0) grouped[type].config = config;
+  });
+  const inputs = Object.entries(grouped).map(([type, obj]) => ({
+    type,
+    config: obj.config,
+    triggers: obj.triggers
+  }));
 
   const closuresFromMeta = (flow as any)._closures;
   let closures;
@@ -304,7 +313,23 @@ export function importFlowFromYaml(text: string, pkgInputs?: any[], asClosure = 
     connectors: [{ id: "next", label: "next", direction: "next" }]
   });
 
-  // inputs are now represented as triggers; we don't draw them as nodes on the canvas.
+  // create input trigger nodes
+  const inputsArr = pkgInputs ?? parsed?.inputs ?? [];
+  inputsArr.forEach((inp: any, idx: number) => {
+    const trigList = inp.triggers ?? [];
+    trigList.forEach((tr: any, tIdx: number) => {
+      nodes.push({
+        id: `input-${idx + 1}-${tIdx + 1}`,
+        kind: "input",
+        label: inp.type ?? `input-${idx + 1}`,
+        x: 40,
+        y: yBase + (idx * 140) + tIdx * 80,
+        connectors: [{ id: "next", label: "next", direction: "next" }],
+        data: { ...(inp.config ? { config: inp.config } : {}), trigger: tr }
+      });
+      edges.push({ id: nanoid(), from: `input-${idx + 1}-${tIdx + 1}`, to: startId, kind: "control", label: "next" });
+    });
+  });
 
   const last = build(flowSpec?.steps ?? [], undefined);
   if (last) {

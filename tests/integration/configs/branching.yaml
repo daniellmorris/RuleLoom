@@ -3,8 +3,10 @@ logger:
   level: info
 inputs:
   - type: http
-    routes:
-      - method: post
+    config: {}
+    triggers:
+      - type: httpRoute
+        method: post
         path: /orders
         flow: process-order
 flows:

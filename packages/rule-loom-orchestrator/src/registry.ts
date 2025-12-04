@@ -80,7 +80,7 @@ export class RunnerRegistry {
       throw error;
     }
     const httpInput = getHttpInput(instance.config);
-    const basePath = sanitizeBasePath(options.basePath, httpInput?.basePath);
+    const basePath = sanitizeBasePath(options.basePath, httpInput?.config?.basePath);
 
     if (this.findByBasePath(basePath)) {
       await instance.close().catch(() => undefined);

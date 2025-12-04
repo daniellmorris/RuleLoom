@@ -71,15 +71,16 @@ export const usePackageStore = create<PackageState>((set, get) => ({
     };
 
     // derive current inputs from flow graphs (unique by type/label)
+    // Prefer preserved inputs from imported flows; otherwise empty (UI doesn't model triggers yet)
     const derivedInputs: any[] = [];
-    flows.forEach((f) => {
-      f.nodes
-        .filter((n) => n.kind === "input")
-        .forEach((n) => {
-          if (!derivedInputs.find((i) => i.type === n.label)) {
-            derivedInputs.push({ type: n.label, schema: n.data?.schema ?? {} });
+    flows.forEach((f: any) => {
+      if (Array.isArray(f._inputs)) {
+        f._inputs.forEach((inp: any) => {
+          if (!derivedInputs.find((i) => JSON.stringify(i) === JSON.stringify(inp))) {
+            derivedInputs.push(inp);
           }
         });
+      }
     });
 
     const serializedFlows = flows.map(serializeFlowOnly);

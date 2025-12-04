@@ -5,7 +5,7 @@ import _ from 'lodash';
 import { z } from 'zod';
 import type { RuleLoomEngine, ExecutionRuntime } from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
-import type { HttpInputConfig, HttpRouteConfig, HttpInputApp, InputPlugin } from './types.js';
+import type { HttpInputConfig, HttpTriggerConfig, HttpInputApp, InputPlugin } from './types.js';
 
 function buildInitialState(req: Request) {
   return {
@@ -20,7 +20,7 @@ function buildInitialState(req: Request) {
   } as Record<string, unknown>;
 }
 
-function applyResponse(res: Response, result: { state: Record<string, unknown>; lastResult: unknown }, route: HttpRouteConfig) {
+function applyResponse(res: Response, result: { state: Record<string, unknown>; lastResult: unknown }, route: HttpTriggerConfig) {
   const stateResponse = _.get(result.state, 'response') as
     | { status?: number; body?: unknown; headers?: Record<string, string> }
     | undefined;
@@ -47,7 +47,7 @@ function applyResponse(res: Response, result: { state: Record<string, unknown>; 
 
 function routeHandler(
   engine: RuleLoomEngine,
-  route: HttpRouteConfig,
+  route: HttpTriggerConfig,
   logger: RuleLoomLogger,
   metadata?: Record<string, unknown>,
 ) {
@@ -77,23 +77,30 @@ export interface CreateHttpInputOptions {
 export const httpInputSchema = z.object({
   type: z.literal('http'),
   id: z.string().optional(),
-  basePath: z.string().optional(),
-  bodyLimit: z.union([z.string(), z.number()]).optional(),
-  routes: z.array(
-    z.object({
-      id: z.string().optional(),
-      method: z.enum(['get', 'post', 'put', 'patch', 'delete']).optional(),
-      path: z.string().min(1),
-      flow: z.string().min(1),
-      respondWith: z
-        .object({
-          status: z.number().int().optional(),
-          headers: z.record(z.string()).optional(),
-          body: z.any().optional(),
-        })
-        .optional(),
-    }),
-  ).min(1),
+  config: z
+    .object({
+      basePath: z.string().optional(),
+      bodyLimit: z.union([z.string(), z.number()]).optional(),
+    })
+    .optional(),
+  triggers: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        type: z.literal('httpRoute').optional(),
+        method: z.enum(['get', 'post', 'put', 'patch', 'delete']).optional(),
+        path: z.string().min(1),
+        flow: z.string().min(1),
+        respondWith: z
+          .object({
+            status: z.number().int().optional(),
+            headers: z.record(z.string()).optional(),
+            body: z.any().optional(),
+          })
+          .optional(),
+      }),
+    )
+    .min(1),
 });
 
 export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
@@ -102,7 +109,7 @@ export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
   initialize: async (config: HttpInputConfig, { logger, engine, metadata }) => {
     const httpInput = createHttpInputApp(engine, config, { logger, metadata });
     return {
-      http: { app: httpInput, basePath: config.basePath ?? '/' },
+      http: { app: httpInput, basePath: config.config?.basePath ?? '/' },
       cleanup: async () => {
         httpInput.removeAllListeners();
       },
@@ -112,12 +119,12 @@ export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
 
 export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions): HttpInputApp {
   const app = express();
-  const limit = input.bodyLimit ?? '1mb';
+  const limit = input.config?.bodyLimit ?? '1mb';
   app.use(express.json({ limit }));
   app.use(express.urlencoded({ extended: true, limit }));
   app.use(morgan('combined'));
 
-  for (const route of input.routes) {
+  for (const route of input.triggers) {
     const method = (route.method ?? 'post').toLowerCase();
     const handler = routeHandler(engine, route, options.logger, options.metadata);
     (app as any)[method](route.path, handler);

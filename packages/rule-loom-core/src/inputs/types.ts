@@ -5,6 +5,7 @@ import type { EventEmitter } from 'node:events';
 export interface BaseInputConfig {
   type: string;
   id?: string;
+  config?: Record<string, unknown>;
 }
 
 export interface InputPluginContext {
@@ -32,8 +33,9 @@ export interface HttpRouteRespondWith {
   body?: unknown;
 }
 
-export interface HttpRouteConfig {
+export interface HttpTriggerConfig {
   id?: string;
+  type?: 'httpRoute';
   method?: 'get' | 'post' | 'put' | 'patch' | 'delete';
   path: string;
   flow: string;
@@ -42,22 +44,32 @@ export interface HttpRouteConfig {
 
 export interface HttpInputConfig extends BaseInputConfig {
   type: 'http';
-  basePath?: string;
-  bodyLimit?: string | number;
-  routes: HttpRouteConfig[];
+  config?: {
+    basePath?: string;
+    bodyLimit?: string | number;
+  };
+  triggers: HttpTriggerConfig[];
 }
 
 export type HttpInputApp = any; // Express app, but keep loose to avoid dependency typing
 
-export interface InitInputConfig extends BaseInputConfig {
-  type: 'init';
+export interface InitTriggerConfig {
+  id?: string;
+  type?: 'init';
   flow: string;
   initialState?: Record<string, unknown>;
   runtime?: Record<string, unknown>;
 }
 
-export interface SchedulerJobConfig {
-  name: string;
+export interface InitInputConfig extends BaseInputConfig {
+  type: 'init';
+  triggers: InitTriggerConfig[];
+}
+
+export interface SchedulerTriggerConfig {
+  id?: string;
+  type?: 'cron' | 'interval' | 'timeout';
+  name?: string;
   flow: string;
   interval?: number | string;
   cron?: string;
@@ -81,22 +93,7 @@ export interface RunnerScheduler {
 
 export interface SchedulerInputConfig extends BaseInputConfig {
   type: 'scheduler';
-  jobs: SchedulerJobConfig[];
+  triggers: SchedulerTriggerConfig[];
 }
 
-export type RunnerInputConfig =
-  | HttpInputConfig
-  | SchedulerInputConfig
-  | InitInputConfig
-  | MqttInputConfig
-  | AmqpInputConfig;
-
-export interface MqttInputConfig extends BaseInputConfig {
-  type: 'mqtt';
-  options?: Record<string, unknown>;
-}
-
-export interface AmqpInputConfig extends BaseInputConfig {
-  type: 'amqp';
-  options?: Record<string, unknown>;
-}
+export type RunnerInputConfig = HttpInputConfig | SchedulerInputConfig | InitInputConfig;

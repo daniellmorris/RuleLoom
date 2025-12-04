@@ -181,21 +181,27 @@ inputs:
           type: string
           enum:
             - http
-        id:
-          type: string
-        basePath:
-          type: string
-        bodyLimit:
-          anyOf:
-            - type: string
-            - type: number
-        routes:
+        config:
+          type: object
+          properties:
+            basePath:
+              type: string
+            bodyLimit:
+              anyOf:
+                - type: string
+                - type: number
+          additionalProperties: false
+        triggers:
           type: array
           items:
             type: object
             properties:
               id:
                 type: string
+              type:
+                type: string
+                enum:
+                  - httpRoute
               method:
                 type: string
                 enum:
@@ -228,7 +234,7 @@ inputs:
           minItems: 1
       required:
         - type
-        - routes
+        - triggers
       additionalProperties: false
   - type: scheduler
     schema:
@@ -238,11 +244,19 @@ inputs:
           type: string
           enum:
             - scheduler
-        jobs:
+        triggers:
           type: array
           items:
             type: object
             properties:
+              id:
+                type: string
+              type:
+                type: string
+                enum:
+                  - cron
+                  - interval
+                  - timeout
               name:
                 type: string
                 minLength: 1
@@ -275,13 +289,12 @@ inputs:
               enabled:
                 type: boolean
             required:
-              - name
               - flow
             additionalProperties: false
           minItems: 1
       required:
         - type
-        - jobs
+        - triggers
       additionalProperties: false
   - type: init
     schema:
@@ -291,16 +304,31 @@ inputs:
           type: string
           enum:
             - init
-        flow:
-          type: string
-          minLength: 1
-        initialState:
-          type: object
-          additionalProperties: {}
-        runtime:
-          type: object
-          additionalProperties: {}
+        triggers:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                enum:
+                  - init
+              flow:
+                type: string
+                minLength: 1
+              initialState:
+                type: object
+                additionalProperties: {}
+              runtime:
+                type: object
+                additionalProperties: {}
+            required:
+              - flow
+            additionalProperties: false
+          minItems: 1
       required:
         - type
-        - flow
+        - triggers
       additionalProperties: false

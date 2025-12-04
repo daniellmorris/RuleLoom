@@ -13,17 +13,16 @@ export {
 } from './scheduler.js';
 export { initInputPlugin, initInputSchema } from './init.js';
 export type {
+  BaseInputConfig,
   HttpInputConfig,
   HttpInputApp,
-  HttpRouteConfig,
+  HttpTriggerConfig,
   HttpRouteRespondWith,
   SchedulerInputConfig,
-  SchedulerJobConfig,
+  SchedulerTriggerConfig,
   SchedulerJobState,
   RunnerScheduler,
   RunnerInputConfig,
-  MqttInputConfig,
-  AmqpInputConfig,
   InitInputConfig,
   InputPluginContext,
   InputPlugin,

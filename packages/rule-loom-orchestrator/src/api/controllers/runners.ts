@@ -9,11 +9,11 @@ import { RunnerStore } from '../../persistence/runnerStore.js';
 
 function serializeRoutes(record: ReturnType<RunnerRegistry['get']>): Array<{ method: string; path: string; flow: string }> {
   const httpInput = record ? getHttpInput(record.instance.config) : undefined;
-  const routes = httpInput?.routes ?? [];
-  return routes.map((route: any) => ({
-    method: route.method ?? 'post',
-    path: route.path,
-    flow: route.flow,
+  const triggers = httpInput?.triggers ?? [];
+  return triggers.map((trigger: any) => ({
+    method: trigger.method ?? 'post',
+    path: trigger.path,
+    flow: trigger.flow,
   }));
 }
 
@@ -69,9 +69,9 @@ function serializeClosures(
 
 function serializeJobs(record: ReturnType<RunnerRegistry['get']>) {
   const schedulerConfig = record ? getSchedulerInput(record.instance.config) : undefined;
-  const jobs = schedulerConfig?.jobs ?? [];
-  return jobs.map((job: any) => ({
-    name: job.name,
+  const triggers = schedulerConfig?.triggers ?? [];
+  return triggers.map((job: any, idx: number) => ({
+    name: job.name ?? job.id ?? `job-${idx + 1}`,
     flow: job.flow,
     interval: job.interval,
     cron: job.cron,

@@ -1,4 +1,8 @@
 {
+  "version": 1,
+  "name": "rule-loom-core",
+  "pluginVersion": "0.1.0",
+  "entry": "dist/index.js",
   "closures": [
     {
       "name": "core.assign",
@@ -294,29 +298,38 @@
               "http"
             ]
           },
-          "id": {
-            "type": "string"
-          },
-          "basePath": {
-            "type": "string"
-          },
-          "bodyLimit": {
-            "anyOf": [
-              {
+          "config": {
+            "type": "object",
+            "properties": {
+              "basePath": {
                 "type": "string"
               },
-              {
-                "type": "number"
+              "bodyLimit": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
               }
-            ]
+            },
+            "additionalProperties": false
           },
-          "routes": {
+          "triggers": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "id": {
                   "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "httpRoute"
+                  ]
                 },
                 "method": {
                   "type": "string",
@@ -364,7 +377,7 @@
         },
         "required": [
           "type",
-          "routes"
+          "triggers"
         ],
         "additionalProperties": false
       }
@@ -380,11 +393,22 @@
               "scheduler"
             ]
           },
-          "jobs": {
+          "triggers": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "cron",
+                    "interval",
+                    "timeout"
+                  ]
+                },
                 "name": {
                   "type": "string",
                   "minLength": 1
@@ -438,7 +462,6 @@
                 }
               },
               "required": [
-                "name",
                 "flow"
               ],
               "additionalProperties": false
@@ -448,7 +471,7 @@
         },
         "required": [
           "type",
-          "jobs"
+          "triggers"
         ],
         "additionalProperties": false
       }
@@ -464,22 +487,44 @@
               "init"
             ]
           },
-          "flow": {
-            "type": "string",
-            "minLength": 1
-          },
-          "initialState": {
-            "type": "object",
-            "additionalProperties": {}
-          },
-          "runtime": {
-            "type": "object",
-            "additionalProperties": {}
+          "triggers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "init"
+                  ]
+                },
+                "flow": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "initialState": {
+                  "type": "object",
+                  "additionalProperties": {}
+                },
+                "runtime": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "flow"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1
           }
         },
         "required": [
           "type",
-          "flow"
+          "triggers"
         ],
         "additionalProperties": false
       }

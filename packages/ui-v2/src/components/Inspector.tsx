@@ -92,38 +92,54 @@ const Inspector: React.FC = () => {
 
 const InputConfig: React.FC<{ node: Node; meta?: any }> = ({ node, meta }) => {
   const updateNode = useFlowStore((s) => s.updateNode);
-  const schemaProps = (meta?.schema?.properties as Record<string, any>) ?? {};
-  const required = meta?.schema?.required ?? [];
-  const entries = Object.entries(schemaProps);
-  if (!entries.length) {
-    return (
-      <div className="stack">
-        <h3 style={{ margin: 0 }}>Input Config</h3>
-        <div style={{ color: "var(--muted)", fontSize: 12 }}>No schema provided.</div>
-      </div>
-    );
-  }
+  const schema = meta?.schema ?? {};
+  const configProps = schema.properties?.config?.properties ?? {};
+  const triggerProps = schema.properties?.triggers?.items?.properties ?? {};
+  const configRequired = schema.properties?.config?.required ?? [];
+  const triggerRequired = schema.properties?.triggers?.items?.required ?? [];
+
   return (
     <div className="stack">
       <h3 style={{ margin: 0 }}>Input Config</h3>
-      {entries.map(([key, val]) => (
+      {Object.entries(configProps).map(([key, val]) => (
         <div key={key} className="stack" style={{ border: "1px solid var(--panel-border)", borderRadius: 10, padding: 8 }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
             <span style={{ fontWeight: 600 }}>{key}</span>
-            <span className="badge">{val.type ?? "any"}</span>
+            <span className="badge">{(val as any).type ?? "any"}</span>
           </div>
           <input
             className="input"
-            placeholder={val.description ?? key}
-            value={(node.data?.params as any)?.[key] ?? ""}
+            placeholder={(val as any).description ?? key}
+            value={(node.data as any)?.config?.[key] ?? ""}
             onChange={(e) =>
               updateNode(node.id, {
-                data: { ...node.data, params: { ...(node.data?.params ?? {}), [key]: e.target.value } }
+                data: { ...node.data, config: { ...(node.data?.config ?? {}), [key]: e.target.value } }
               })
             }
           />
-          {required.includes(key) && <span className="badge" style={{ color: "#fbbf24" }}>required</span>}
-          {val.description && <div style={{ color: "var(--muted)", fontSize: 12 }}>{val.description}</div>}
+          {configRequired.includes(key) && <span className="badge" style={{ color: "#fbbf24" }}>required</span>}
+          {(val as any).description && <div style={{ color: "var(--muted)", fontSize: 12 }}>{(val as any).description}</div>}
+        </div>
+      ))}
+      <h4 style={{ margin: "6px 0" }}>Trigger</h4>
+      {Object.entries(triggerProps).map(([key, val]) => (
+        <div key={key} className="stack" style={{ border: "1px solid var(--panel-border)", borderRadius: 10, padding: 8 }}>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span style={{ fontWeight: 600 }}>{key}</span>
+            <span className="badge">{(val as any).type ?? "any"}</span>
+          </div>
+          <input
+            className="input"
+            placeholder={(val as any).description ?? key}
+            value={(node.data as any)?.trigger?.[key] ?? ""}
+            onChange={(e) =>
+              updateNode(node.id, {
+                data: { ...node.data, trigger: { ...(node.data as any)?.trigger, [key]: e.target.value } }
+              })
+            }
+          />
+          {triggerRequired.includes(key) && <span className="badge" style={{ color: "#fbbf24" }}>required</span>}
+          {(val as any).description && <div style={{ color: "var(--muted)", fontSize: 12 }}>{(val as any).description}</div>}
         </div>
       ))}
     </div>

@@ -15,6 +15,8 @@ export interface NodeData {
   callTarget?: string;
   params?: Record<string, unknown>;
   paramCalls?: Record<string, boolean>;
+  config?: Record<string, unknown>;
+  trigger?: Record<string, unknown>;
   branchRules?: Array<{ label: string; condition: string }>;
   description?: string;
   parametersMeta?: Array<{ name: string; type?: string; required?: boolean; description?: string }>;

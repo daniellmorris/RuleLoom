@@ -74,38 +74,60 @@ export interface CreateHttpInputOptions {
   metadata?: Record<string, unknown>;
 }
 
-export const httpInputSchema = z.object({
-  type: z.literal('http'),
-  id: z.string().optional(),
-  config: z
-    .object({
-      basePath: z.string().optional(),
-      bodyLimit: z.union([z.string(), z.number()]).optional(),
-    })
-    .optional(),
-  triggers: z
-    .array(
-      z.object({
-        id: z.string().optional(),
-        type: z.literal('httpRoute').optional(),
-        method: z.enum(['get', 'post', 'put', 'patch', 'delete']).optional(),
-        path: z.string().min(1),
-        flow: z.string().min(1),
-        respondWith: z
-          .object({
-            status: z.number().int().optional(),
-            headers: z.record(z.string()).optional(),
-            body: z.any().optional(),
-          })
-          .optional(),
-      }),
-    )
-    .min(1),
-});
+export const httpConfigParameters = [
+  { name: 'basePath', type: 'string', required: false, description: 'Prefix for all routes' },
+  { name: 'bodyLimit', type: 'string', required: false, description: 'JSON body limit (e.g. 1mb)' },
+];
+
+export const httpTriggerParameters = [
+  { name: 'method', type: 'string', required: false, description: 'HTTP method', enum: ['get', 'post', 'put', 'patch', 'delete'] },
+  { name: 'path', type: 'string', required: true, description: 'Route path' },
+  { name: 'flow', type: 'string', required: true, description: 'Target flow name' },
+  { name: 'respondWith', type: 'any', required: false, description: 'Static fallback response' },
+];
+
+function buildHttpSchema() {
+  const toZod = (p: any) => {
+    switch (p.type) {
+      case 'string':
+        return z.string();
+      case 'number':
+        return z.number();
+      case 'boolean':
+        return z.boolean();
+      default:
+        return z.any();
+    }
+  };
+  const configShape: Record<string, any> = {};
+  httpConfigParameters.forEach((p) => {
+    const shape = p.required ? toZod(p) : toZod(p).optional();
+    configShape[p.name] = shape;
+  });
+  const triggerShape: Record<string, any> = {
+    id: z.string().optional(),
+    type: z.literal('httpRoute').optional(),
+  };
+  httpTriggerParameters.forEach((p) => {
+    const shape = p.required ? toZod(p) : toZod(p).optional();
+    triggerShape[p.name] = shape;
+  });
+
+  return z.object({
+    type: z.literal('http'),
+    id: z.string().optional(),
+    config: z.object(configShape).optional(),
+    triggers: z.array(z.object(triggerShape)).min(1),
+  });
+}
+
+export const httpInputSchema = buildHttpSchema();
 
 export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
   type: 'http',
   schema: httpInputSchema,
+  configParameters: httpConfigParameters,
+  triggerParameters: httpTriggerParameters,
   initialize: async (config: HttpInputConfig, { logger, engine, metadata }) => {
     const httpInput = createHttpInputApp(engine, config, { logger, metadata });
     return {

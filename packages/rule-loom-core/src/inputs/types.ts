@@ -24,6 +24,8 @@ export interface InputPluginResult {
 export interface InputPlugin<Config extends BaseInputConfig = BaseInputConfig> {
   type: Config['type'];
   schema: any; // z.ZodType but keep loose to avoid circular deps in plain JS build
+  configParameters?: Array<{ name: string; type?: string; required?: boolean; description?: string; enum?: string[]; properties?: any; items?: any }>;
+  triggerParameters?: Array<{ name: string; type?: string; required?: boolean; description?: string; enum?: string[]; properties?: any; items?: any }>;
   initialize: (config: Config, context: InputPluginContext) => Promise<InputPluginResult | void> | InputPluginResult | void;
 }
 

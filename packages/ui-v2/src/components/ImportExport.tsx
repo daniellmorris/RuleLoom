@@ -1,29 +1,28 @@
 import React, { useState } from "react";
-import { usePackageStore } from "../state/packageStore";
-import { exportFlowToYaml, importFlowFromYaml, validateFlow } from "../utils/yaml";
+import { useAppStore } from "../state/appStore";
 
 const ImportExport: React.FC = () => {
-  const pkgExport = usePackageStore((s) => s.exportPackage);
-  const pkgImport = usePackageStore((s) => s.importPackage);
+  const loadYaml = useAppStore((s) => s.loadYaml);
+  const toYaml = useAppStore((s) => s.toYaml);
   const [text, setText] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
-  const doPkgExport = () => {
+  const doImport = () => {
     try {
-      const y = pkgExport();
-      setText(y);
-      setMessage("Exported package YAML.");
+      loadYaml(text);
+      setMessage("Imported YAML");
     } catch (err) {
-      setMessage(`Package export failed: ${(err as Error).message}`);
+      setMessage(`Import failed: ${(err as Error).message}`);
     }
   };
 
-  const doPkgImport = () => {
+  const doExport = () => {
     try {
-      pkgImport(text);
-      setMessage("Imported package YAML.");
+      const y = toYaml();
+      setText(y);
+      setMessage("Exported YAML");
     } catch (err) {
-      setMessage(`Package import failed: ${(err as Error).message}`);
+      setMessage(`Export failed: ${(err as Error).message}`);
     }
   };
 
@@ -34,32 +33,16 @@ const ImportExport: React.FC = () => {
         {message && <span className="badge">{message}</span>}
       </div>
       <div className="row">
-        <button className="button" onClick={doPkgExport}>
-          Export Package
-        </button>
-        <button className="button secondary" onClick={doPkgImport}>
-          Import Package
-        </button>
+        <button className="button" onClick={doExport}>Export Package</button>
+        <button className="button secondary" onClick={doImport}>Import Package</button>
       </div>
       <textarea
-        style={{
-          minHeight: 220,
-          width: "100%",
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid var(--panel-border)",
-          color: "var(--text)",
-          borderRadius: 12,
-          padding: 10,
-          fontFamily: "ui-monospace",
-          fontSize: 13
-        }}
+        style={{ minHeight: 220, width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid var(--panel-border)", color: "var(--text)", borderRadius: 12, padding: 10, fontFamily: "ui-monospace", fontSize: 13 }}
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Paste runner YAML here"
       />
-      <p style={{ color: "var(--muted)", fontSize: 12 }}>
-        Format matches runner config: version, inputs, closures, flows[].steps (with cases/otherwise).
-      </p>
+      <p style={{ color: "var(--muted)", fontSize: 12 }}>YAML mirrors runner config plus optional $ui on steps/disconnected.</p>
     </div>
   );
 };

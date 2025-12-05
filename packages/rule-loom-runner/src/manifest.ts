@@ -18,7 +18,8 @@ export interface RuleLoomManifestClosure {
 export interface RuleLoomManifestInputPlugin {
   type: string;
   description?: string;
-  schema?: unknown;
+  configParameters?: any[];
+  triggerParameters?: any[];
 }
 
 export interface RuleLoomManifest {
@@ -51,22 +52,12 @@ function sanitizeClosure(closure: ClosureDefinition): RuleLoomManifestClosure {
   return { name, description, signature };
 }
 
-function schemaToJson(schema: unknown): unknown {
-  if (!schema) return undefined;
-  try {
-    // Best-effort conversion; tolerate non-Zod schemas
-    const convert = zodToJsonSchema as unknown as (input: unknown, options?: unknown) => unknown;
-    return convert(schema as any, { target: 'openApi3' });
-  } catch (_error) {
-    return undefined;
-  }
-}
-
 function sanitizeInputPlugin(plugin: InputPlugin<BaseInputConfig>): RuleLoomManifestInputPlugin {
   return {
     type: plugin.type,
     description: (plugin as any).description,
-    schema: schemaToJson((plugin as any).schema),
+    configParameters: (plugin as any).configParameters,
+    triggerParameters: (plugin as any).triggerParameters,
   };
 }
 

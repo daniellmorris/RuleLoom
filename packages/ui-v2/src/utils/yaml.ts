@@ -1,6 +1,7 @@
 import yaml from "js-yaml";
 import { Edge, Flow, Node, Connector } from "../types";
-import { autoLayout } from "../state/flowStore";
+// Legacy helpers kept for reference; autoLayout is stubbed to a no-op that returns the input graph.
+const autoLayout = (flow: any) => flow;
 import coreManifest from "../data/coreManifest.json";
 import { nanoid } from "../utils/id";
 
@@ -24,7 +25,10 @@ function firstNext(edges: Edge[], from: string) {
 function nodeStep(node: Node) {
   if (node.kind === "closure") {
     const params = { ...(node.data?.params ?? {}) };
-    return { closure: node.data?.closureName ?? node.label, parameters: params };
+    const step: any = { closure: node.data?.closureName ?? node.label };
+    if (Object.keys(params).length) step.parameters = params;
+    if ((node.data as any)?.ui) step.$ui = (node.data as any).ui;
+    return step;
   }
   return null;
 }
@@ -128,6 +132,23 @@ export function validateFlow(flow: Flow): string[] {
 export function exportFlowToYaml(flow: Flow): string {
   const entryNode = flow.nodes.find((n) => n.id === flow.entryId) ?? flow.nodes[0];
   const steps = traverse(entryNode, flow.nodes, flow.edges);
+  // attach $ui positions from node coordinates where missing
+  const attachUi = (stepsArr: any[], parentNode?: Node) => {
+    stepsArr?.forEach((s, idx) => {
+      const node = flow.nodes.find((n) => (n.data as any)?.closureName === s.closure) ?? flow.nodes[idx];
+      if (node) {
+        s.$ui = s.$ui ?? { x: node.x, y: node.y, w: 180, h: 80 };
+      }
+      if (s.cases) {
+        s.cases.forEach((c: any) => attachUi(c.steps, node));
+      }
+      if (s.otherwise) attachUi(s.otherwise, node);
+      Object.entries(s.parameters ?? {}).forEach(([key, val]) => {
+        if (Array.isArray(val)) attachUi(val as any[], node);
+      });
+    });
+  };
+  attachUi(steps);
 
   const inputNodes = flow.nodes.filter((n) => n.kind === "input");
   const grouped: Record<string, { config: any; triggers: any[] }> = {};
@@ -175,7 +196,8 @@ export function exportFlowToYaml(flow: Flow): string {
     flows: [
       {
         name: flow.name,
-        steps
+        steps,
+        ...(flow as any)._uiDisconnected ? { $ui: { disconnected: (flow as any)._uiDisconnected } } : {}
       }
     ]
   };
@@ -242,6 +264,7 @@ export function importFlowFromYaml(text: string, pkgInputs?: any[], asClosure = 
   const build = (steps: any[], parent?: Node): Node | undefined => {
     let firstCreated: Node | undefined;
     for (const step of steps) {
+      const ui = step?.$ui ?? {};
       if (step.cases) {
         const branchNode = addNode({ kind: "branch", label: "Branch", connectors: [] });
         const branchConnectors: Connector[] = [{ id: "prev", label: "prev", direction: "prev" }];
@@ -286,6 +309,8 @@ export function importFlowFromYaml(text: string, pkgInputs?: any[], asClosure = 
             ? { callTarget: name.replace(/^\$call[:\s]*/, ""), params: step.parameters }
             : { closureName: name, params: step.parameters }
         });
+        if (ui.x !== undefined) node.x = ui.x;
+        if (ui.y !== undefined) node.y = ui.y;
         if (parent) edges.push({ id: `e-${edges.length}`, from: parent.id, to: node.id, kind: "control" });
         // handle flowSteps inside parameters
         Object.entries(step.parameters ?? {}).forEach(([param, val]) => {
@@ -318,14 +343,21 @@ export function importFlowFromYaml(text: string, pkgInputs?: any[], asClosure = 
   inputsArr.forEach((inp: any, idx: number) => {
     const trigList = inp.triggers ?? [];
     trigList.forEach((tr: any, tIdx: number) => {
+      const meta = inputMetaMap[inp.type ?? ""];
+      const ui = tr?.$ui ?? {};
       nodes.push({
         id: `input-${idx + 1}-${tIdx + 1}`,
         kind: "input",
         label: inp.type ?? `input-${idx + 1}`,
-        x: 40,
-        y: yBase + (idx * 140) + tIdx * 80,
+        x: ui.x ?? 40,
+        y: ui.y ?? yBase + (idx * 140) + tIdx * 80,
         connectors: [{ id: "next", label: "next", direction: "next" }],
-        data: { ...(inp.config ? { config: inp.config } : {}), trigger: tr }
+        data: {
+          ...(inp.config ? { config: inp.config } : {}),
+          trigger: tr,
+          configParameters: meta?.configParameters ?? [],
+          triggerParameters: meta?.triggerParameters ?? []
+        }
       });
       edges.push({ id: nanoid(), from: `input-${idx + 1}-${tIdx + 1}`, to: startId, kind: "control", label: "next" });
     });
@@ -336,6 +368,16 @@ export function importFlowFromYaml(text: string, pkgInputs?: any[], asClosure = 
     edges.push({ id: nanoid(), from: startId, to: last.id, kind: "control", label: "next" });
   }
 
+  // disconnected UI steps: render as loose subgraphs
+  const disconnected = parsed?.flows?.[0]?.$ui?.disconnected ?? [];
+  disconnected.forEach((disc: any, di: number) => {
+    const sub = build(disc.steps ?? [], undefined);
+    if (sub) {
+      // ensure position honored if provided
+      // no edges connect to start; keep isolated
+    }
+  });
+
   const flow = autoLayout({
     id: "imported-flow",
     name: flowName,
@@ -345,5 +387,6 @@ export function importFlowFromYaml(text: string, pkgInputs?: any[], asClosure = 
   });
   (flow as any)._closures = closuresSpec;
   (flow as any)._inputs = parsed?.inputs;
+  (flow as any)._uiDisconnected = disconnected;
   return flow;
 }

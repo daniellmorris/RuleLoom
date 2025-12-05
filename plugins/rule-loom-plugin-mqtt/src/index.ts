@@ -42,6 +42,19 @@ export const plugin = {
     ctx.registerInputPlugin({
       type: 'mqtt',
       schema: mqttInputSchema,
+      configParameters: [
+        { name: 'url', type: 'string', required: true },
+        { name: 'username', type: 'string' },
+        { name: 'password', type: 'string' },
+        { name: 'clientId', type: 'string' },
+        { name: 'options', type: 'any' },
+      ],
+      triggerParameters: [
+        { name: 'topic', type: 'string', required: true },
+        { name: 'flow', type: 'flow', required: true },
+        { name: 'qos', type: 'string', enum: ['0', '1', '2'] },
+        { name: 'json', type: 'boolean' },
+      ],
       initialize: async (config: MqttInputConfig, context: any) => {
         const mqtt = await import('mqtt');
         const client = mqtt.connect(config.config.url, {

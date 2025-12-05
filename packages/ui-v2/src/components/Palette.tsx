@@ -1,182 +1,38 @@
 import React from "react";
-import { useFlowStore, createNodeTemplate } from "../state/flowStore";
-import { NodeKind } from "../types";
-import { getNodeColor } from "../styles/palette";
+import { useCatalogStore } from "../state/catalogStore";
+import { useAppStore } from "../state/appStore";
+import { useFlowStore } from "../state/flowStore";
 
 const Palette: React.FC = () => {
-  const addNode = useFlowStore((s) => s.addNode);
-  const mode = useFlowStore((s) => s.activeMode);
-  const availableClosures = useFlowStore((s) => s.availableClosures);
-  const availableInputs = useFlowStore((s) => s.availableInputs);
-  const registerPlugin = useFlowStore((s) => s.registerPlugin);
-  const closuresMeta = useFlowStore((s) => s.closuresMeta);
-  const inputsMeta = useFlowStore((s) => s.inputsMeta);
+  const availableClosures = useCatalogStore((s) => s.availableClosures);
+  const availableInputs = useCatalogStore((s) => s.availableInputs);
+  const addTriggerToStore = useAppStore((s) => s.addTrigger);
+  const addClosureStepToStore = useAppStore((s) => s.addClosureStep);
+  const flowIdx = useFlowStore((s) => s.activeFlowId);
+  const flowName = useAppStore((s) => s.app.flows[flowIdx]?.name ?? "Flow 1");
 
-  const handleAdd = (kind: NodeKind, label?: string) => {
-    const x = 140 + Math.random() * 400;
-    const y = 160 + Math.random() * 320;
-    const template = createNodeTemplate(kind, x, y);
-    if (kind === "closure" && label) {
-      const meta = closuresMeta[label];
-      const paramsMeta = meta?.signature?.parameters ?? [];
-      const closureParameters = paramsMeta.filter((p: any) => p.type === "flowSteps").map((p: any) => p.name);
-      addNode({
-        ...template,
-        label,
-        data: {
-          ...template.data,
-          closureName: label,
-          parametersMeta: paramsMeta,
-          closureParameters,
-          params: {}
-        }
-      });
-    } else if (kind === "input" && label) {
-      const meta = inputsMeta[label];
-      addNode({
-        ...template,
-        label,
-        data: {
-          ...template.data,
-          schema: meta?.schema ?? {},
-          params: {}
-        }
-      });
-    } else {
-      addNode({ ...template, label: label ?? template.label, data: { ...template.data, closureName: label ?? template.label } });
-    }
+  const addTrigger = (type: string) => {
+    addTriggerToStore(type, flowName);
   };
 
-  const loadPlugin = () => {
-    // stub manifest
-    registerPlugin({
-      closures: ["payments.charge", "payments.refund", "risk.score"],
-      inputs: ["scheduler"]
-    });
+  const addClosure = (name: string) => {
+    addClosureStepToStore(flowIdx, name);
   };
 
   return (
     <div className="panel stack">
-      <div>
-        <h3>Palette</h3>
-        <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
-          Build flows by dropping node types. Colors map to node roles.
-        </p>
-      </div>
-
-      <div className="legend">
-        <div className="legend-item">
-          <span className="legend-dot" style={{ background: getNodeColor("input") }} />
-          Input
-        </div>
-        <div className="legend-item">
-          <span className="legend-dot" style={{ background: getNodeColor("closure") }} />
-          Closure
-        </div>
-        <div className="legend-item">
-          <span className="legend-dot" style={{ background: getNodeColor("branch") }} />
-          Branch
-        </div>
-      </div>
-
+      <h3>Palette</h3>
       <div className="stack">
-        {mode === "flow" &&
-          availableInputs.map((input) => (
-            <div
-              key={input}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData("application/node-kind", "input");
-                e.dataTransfer.setData("application/node-label", input);
-                e.dataTransfer.effectAllowed = "copy";
-              }}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "10px 12px",
-                border: "1px solid var(--panel-border)",
-                borderRadius: 12
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 600 }}>{input}</div>
-                <div style={{ color: "var(--muted)", fontSize: 12 }}>Input</div>
-              </div>
-              <button className="button" onClick={() => handleAdd("input", input)}>
-                Add
-              </button>
-            </div>
-          ))}
-        <div
-          key="branch"
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.setData("application/node-kind", "branch");
-            e.dataTransfer.effectAllowed = "copy";
-          }}
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "10px 12px",
-            border: "1px solid var(--panel-border)",
-            borderRadius: 12
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 600 }}>Branch</div>
-            <div style={{ color: "var(--muted)", fontSize: 12 }}>Conditional split</div>
-          </div>
-          <button className="button" onClick={() => handleAdd("branch", "Branch")}>
-            Add
+        {availableInputs.map((inp) => (
+          <button key={inp} className="button" onClick={() => addTrigger(inp)}>
+            Add {inp} trigger
           </button>
-        </div>
-        {availableClosures.map((c) => (
-          <div
-            key={c}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData("application/node-kind", "closure");
-              e.dataTransfer.setData("application/node-label", c);
-              e.dataTransfer.effectAllowed = "copy";
-            }}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "10px 12px",
-              border: "1px solid var(--panel-border)",
-              borderRadius: 12
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 600 }}>{c}</div>
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>Closure</div>
-            </div>
-            <button className="button" onClick={() => handleAdd("closure", c)}>
-              Add
-            </button>
-          </div>
         ))}
-      </div>
-
-      <div className="panel" style={{ background: "rgba(255,255,255,0.02)" }}>
-        <h3>Plugins</h3>
-        <button className="button" onClick={loadPlugin}>
-          Load sample plugin manifest
-        </button>
-        <p style={{ color: "var(--muted)", fontSize: 12, marginBottom: 0 }}>
-          After loading, plugin closures/inputs appear above.
-        </p>
-      </div>
-
-      <div className="panel" style={{ background: "rgba(255,255,255,0.02)" }}>
-        <h3>Flow Templates</h3>
-        <div className="row">
-          <button className="button secondary">Import JSON</button>
-          <button className="button secondary">Save as Template</button>
-        </div>
+        {availableClosures.map((c) => (
+          <button key={c} className="button secondary" onClick={() => addClosure(c)}>
+            Add {c}
+          </button>
+        ))}
       </div>
     </div>
   );

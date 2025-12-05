@@ -18,32 +18,51 @@ export interface SchedulerInputOptions {
   events: EventEmitter;
 }
 
-const schedulerTriggerSchema = z
-  .object({
-    id: z.string().optional(),
-    type: z.enum(['cron', 'interval', 'timeout']).optional(),
-    name: z.string().min(1).optional(),
-    flow: z.string().min(1),
-    interval: z.union([z.number().positive(), z.string().min(1)]).optional(),
-    cron: z.string().min(1).optional(),
-    timeout: z.union([z.number().nonnegative(), z.string().min(1), z.boolean()]).optional(),
-    initialState: z.record(z.any()).optional(),
-    runtime: z.record(z.any()).optional(),
-    enabled: z.boolean().optional(),
-  })
-  .refine((job) => job.interval !== undefined || job.cron !== undefined || job.timeout !== undefined, {
-    message: 'Scheduler trigger requires interval, cron, or timeout',
-    path: ['interval'],
-  });
+export const schedulerConfigParameters: any[] = [];
+export const schedulerTriggerParameters = [
+  { name: 'name', type: 'string', required: false, description: 'Friendly job name' },
+  { name: 'flow', type: 'string', required: true, description: 'Flow to run' },
+  { name: 'interval', type: 'string', required: false, description: 'Interval expression or ms' },
+  { name: 'cron', type: 'string', required: false, description: 'Cron expression' },
+  { name: 'timeout', type: 'string', required: false, description: 'Timeout or delay' },
+  { name: 'initialState', type: 'any', required: false },
+  { name: 'runtime', type: 'any', required: false },
+  { name: 'enabled', type: 'boolean', required: false },
+];
 
-export const schedulerInputSchema = z.object({
-  type: z.literal('scheduler'),
-  triggers: z.array(schedulerTriggerSchema).min(1),
-});
+function buildSchedulerSchema() {
+  const toZod = (p: any) => {
+    switch (p.type) {
+      case 'string':
+        return z.string();
+      case 'number':
+        return z.number();
+      case 'boolean':
+        return z.boolean();
+      default:
+        return z.any();
+    }
+  };
+  const triggerShape: Record<string, any> = { id: z.string().optional(), type: z.enum(['cron', 'interval', 'timeout']).optional() };
+  schedulerTriggerParameters.forEach((p) => {
+    triggerShape[p.name] = p.required ? toZod(p) : toZod(p).optional();
+  });
+  return z.object({
+    type: z.literal('scheduler'),
+    triggers: z.array(z.object(triggerShape).refine((job) => job.interval !== undefined || job.cron !== undefined || job.timeout !== undefined, {
+      message: 'Scheduler trigger requires interval, cron, or timeout',
+      path: ['interval'],
+    })).min(1),
+  });
+}
+
+export const schedulerInputSchema = buildSchedulerSchema();
 
 export const schedulerInputPlugin: InputPlugin<SchedulerInputConfig> = {
   type: 'scheduler',
   schema: schedulerInputSchema,
+  configParameters: schedulerConfigParameters,
+  triggerParameters: schedulerTriggerParameters,
   initialize: async (config: SchedulerInputConfig, context) => {
     const scheduler = await createSchedulerInput(config, {
       engine: context.engine,

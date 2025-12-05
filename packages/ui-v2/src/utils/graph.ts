@@ -10,7 +10,7 @@ export interface GraphBuild {
 }
 
 function makeId(path: string, uiId?: string) {
-  return uiId ?? path;
+  return path; // path-anchored ids to keep drag/selection consistent even when ui ids reuse
 }
 
 export function buildGraph(flow: FlowWithUi, inputs: any[] = []): GraphBuild {
@@ -50,26 +50,36 @@ export function buildGraph(flow: FlowWithUi, inputs: any[] = []): GraphBuild {
       }
       prevId = id;
 
-      // flowSteps params: connect to first step in array
+      // flowSteps params: embed steps and connect to first
       Object.entries(step.parameters ?? {})
-        .filter(([_, v]) => Array.isArray(v))
+        .filter(([_, v]) => typeof v === "object" && v !== null && Array.isArray((v as any).steps))
         .forEach(([pname, v]) => {
-          const subSteps = v as StepWithUi[];
+          const subSteps = (v as any).steps as StepWithUi[];
           if (subSteps.length) {
             const targetPath = `${path}.parameters.${pname}.steps[0]`;
-            const tid = makeId(targetPath);
+            const tid = makeId(targetPath, subSteps[0].$ui?.id);
+            pathById[tid] = targetPath;
             edges.push({ id: nanoid(), from: id, to: tid, kind: "control", label: pname });
+            walk(subSteps, `${path}.parameters.${pname}.`, null);
           }
         });
 
-      // $call params: connect to target path
+      // $call params: string target or embedded steps
       Object.entries(step.parameters ?? {})
         .filter(([_, v]) => typeof v === "object" && v !== null && "$call" in (v as any))
         .forEach(([pname, v]) => {
-          const targetPath = (v as any).$call as string;
-          if (!targetPath) return;
-          const tid = makeId(targetPath);
-          edges.push({ id: nanoid(), from: id, to: tid, kind: "control", label: pname });
+          const callVal = (v as any).$call;
+          if (typeof callVal === "string") {
+            const tid = makeId(callVal);
+            edges.push({ id: nanoid(), from: id, to: tid, kind: "control", label: pname });
+          } else if (callVal?.steps?.length) {
+            const subSteps = callVal.steps as StepWithUi[];
+            const targetPath = `${path}.parameters.${pname}.$call.steps[0]`;
+            const tid = makeId(targetPath, subSteps[0].$ui?.id);
+            pathById[tid] = targetPath;
+            edges.push({ id: nanoid(), from: id, to: tid, kind: "control", label: pname });
+            walk(subSteps, `${path}.parameters.${pname}.$call.`, null);
+          }
         });
       if (step.cases) {
         step.cases.forEach((c: any, ci: number) => {

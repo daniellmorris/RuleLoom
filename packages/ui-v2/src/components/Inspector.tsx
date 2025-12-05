@@ -13,6 +13,8 @@ function resolveStep(flow: any, path: string | null): any | null {
   for (const part of parts) {
     const mSteps = part.match(/^steps\[(\d+)\]$/);
     if (mSteps) { cur = cur?.steps?.[Number(mSteps[1])]; continue; }
+    const mDisc = part.match(/^\$ui\.disconnected\[(\d+)\]$/);
+    if (mDisc) { cur = cur?.$ui?.disconnected?.[Number(mDisc[1])]; continue; }
     const mCases = part.match(/^cases\[(\d+)\]$/);
     if (mCases) { cur = cur?.cases?.[Number(mCases[1])]; continue; }
     if (part === 'otherwise') { cur = cur?.otherwise; continue; }
@@ -32,12 +34,13 @@ function inputPathPieces(path: string) {
 const Inspector: React.FC = () => {
   const selection = useFlowStore((s) => s.selection.nodePath);
   const app = useAppStore((s) => s.app);
-  const flowIdx = useFlowStore((s) => s.activeFlowId);
+  const mode = useFlowStore((s) => s.activeMode);
+  const flowIdx = useFlowStore((s) => (s.activeMode === "flow" ? s.activeFlowId : s.activeClosureId));
   const updateStepParam = useAppStore((s) => s.updateStepParam);
   const updateTriggerField = useAppStore((s) => s.updateTriggerField);
   const updateInputConfig = useAppStore((s) => s.updateInputConfig);
   const catalog = useCatalogStore((s) => s);
-  const flow = app.flows[flowIdx] ?? app.flows[0];
+  const flow = mode === "flow" ? app.flows[flowIdx] ?? app.flows[0] : app.closures[flowIdx] ?? app.closures[0];
   const graph = flow ? buildGraph(flow as any, app.inputs) : { pathById: {} as Record<string, string>, nodes: [] as any[] };
 
   if (!selection || !flow) {
@@ -58,6 +61,7 @@ const Inspector: React.FC = () => {
     const meta = catalog.inputsMeta[input?.type ?? ""] ?? {};
     const triggerParams: ParamMeta[] = meta.triggerParameters ?? [];
     const configParams: ParamMeta[] = meta.configParameters ?? [];
+    const currentFlowName = flow?.name;
 
     return (
       <div className="panel">
@@ -80,7 +84,9 @@ const Inspector: React.FC = () => {
               key={p.name}
               param={p}
               value={trigger?.[p.name]}
-              onValue={(val) => updateTriggerField(selection, p.name, val)}
+              onValue={p.name === "flow" || p.type === "flow" ? () => null : (val) => updateTriggerField(selection, p.name, val)}
+              lockedValue={p.name === "flow" || p.type === "flow" ? currentFlowName : undefined}
+              readOnly={p.name === "flow" || p.type === "flow"}
               onCallToggle={() => null}
               onInitFlowSteps={() => null}
             />
@@ -142,14 +148,16 @@ const ParamRow: React.FC<{
   onCallToggle: (enabled: boolean) => void;
   onInitFlowSteps: () => void;
   allowCall?: boolean;
-}> = ({ param, value, onValue, onCallToggle, onInitFlowSteps, allowCall }) => {
+  readOnly?: boolean;
+  lockedValue?: any;
+}> = ({ param, value, onValue, onCallToggle, onInitFlowSteps, allowCall, readOnly, lockedValue }) => {
   const isFlowSteps = param.type === "flowSteps";
   const isCall = typeof value === "object" && value !== null && "$call" in value;
-  const baseValue = isCall ? (value as any).$call : value;
+  const baseValue = lockedValue ?? (isCall ? (value as any).$call : value);
 
   const field =
-    isFlowSteps || isCall ? (
-      <input className="input" value="(connected)" readOnly disabled />
+    isFlowSteps || isCall || readOnly ? (
+      <input className="input" value={baseValue ?? "(connected)"} readOnly disabled />
     ) : param.enum && param.enum.length ? (
       <select className="input" value={baseValue ?? ""} onChange={(e) => onValue(e.target.value)}>
         <option value="">(select)</option>
@@ -167,7 +175,7 @@ const ParamRow: React.FC<{
     <div className="stack" style={{ gap: 4 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 12, color: "var(--muted)" }}>{param.name}</span>
-        {allowCall && param.type !== "flowSteps" && (
+        {allowCall && !readOnly && param.type !== "flowSteps" && (
           <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
             <input
               type="checkbox"

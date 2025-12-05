@@ -33,6 +33,54 @@ body {
   min-height: 100vh;
 }
 
+.topbar {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  backdrop-filter: blur(10px);
+  background: linear-gradient(90deg, rgba(14, 23, 41, 0.8), rgba(14, 23, 41, 0.6));
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.segmented {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  padding: 2px;
+}
+
+.segmented button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.segmented .seg-active {
+  background: linear-gradient(120deg, rgba(125, 211, 252, 0.25), rgba(167, 139, 250, 0.25));
+  color: var(--text);
+  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.3);
+}
+
+.selector-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
 #root {
   min-height: 100vh;
 }

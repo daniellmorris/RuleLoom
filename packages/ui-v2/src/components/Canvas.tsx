@@ -14,9 +14,11 @@ const CONNECTOR_COLORS = ["#7dd3fc", "#fbbf24", "#a78bfa", "#34d399", "#f87171",
 const Canvas: React.FC = () => {
   const app = useAppStore((s) => s.app);
   const setFlowStartUi = useAppStore((s) => s.updateNodeUi); // reuse node UI updater for start via flow $ui path
-  const activeIdx = useFlowStore((s) => s.activeFlowId);
-  const flow = app.flows[activeIdx] ?? app.flows[0];
-  const { nodes, edges, pathById } = flow ? buildGraph(flow as any, app.inputs) : { nodes: [], edges: [], pathById: {} };
+  const mode = useFlowStore((s) => s.activeMode);
+  const activeFlowIdx = useFlowStore((s) => s.activeFlowId);
+  const activeClosureIdx = useFlowStore((s) => s.activeClosureId);
+  const flow = mode === "flow" ? app.flows[activeFlowIdx] ?? app.flows[0] : app.closures[activeClosureIdx] ?? app.closures[0];
+  const { nodes, edges, pathById } = flow ? buildGraph(flow as any, mode === "flow" ? app.inputs : []) : { nodes: [], edges: [], pathById: {} };
   const selection = useFlowStore((s) => s.selection.nodePath);
   const selectNode = useFlowStore((s) => s.selectNode);
   const updateNodeUi = useAppStore((s) => s.updateNodeUi);
@@ -280,7 +282,13 @@ const EdgeLine: React.FC<{ edge: Edge; nodes: Node[]; connectorsByNode: Record<s
   const midX = (startX + endX) / 2;
   return (
     <g style={{ pointerEvents: "stroke", cursor: "pointer" }}>
-      <path d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`} stroke={selected ? "var(--accent-2)" : color} strokeWidth={selected ? 3 : 2} fill="none" markerEnd={`url(#arrow-color-0)`} />
+      <path
+        d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`}
+        stroke={selected ? "var(--accent-2)" : color}
+        strokeWidth={selected ? 3 : 2}
+        fill="none"
+        markerEnd={`url(#arrow-color-${connIdx % CONNECTOR_COLORS.length})`}
+      />
       {edge.label && (
         <text x={midX} y={(startY + endY) / 2 - 6} fill={color} fontSize={12} textAnchor="middle">
           {edge.label}

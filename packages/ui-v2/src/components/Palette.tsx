@@ -8,26 +8,29 @@ const Palette: React.FC = () => {
   const availableInputs = useCatalogStore((s) => s.availableInputs);
   const addTriggerToStore = useAppStore((s) => s.addTrigger);
   const addClosureStepToStore = useAppStore((s) => s.addClosureStep);
-  const flowIdx = useFlowStore((s) => s.activeFlowId);
-  const flowName = useAppStore((s) => s.app.flows[flowIdx]?.name ?? "Flow 1");
+  const mode = useFlowStore((s) => s.activeMode);
+  const flowIdx = useFlowStore((s) => (s.activeMode === "flow" ? s.activeFlowId : s.activeClosureId));
+  const flowName = useAppStore((s) => (mode === "flow" ? s.app.flows[flowIdx]?.name : s.app.closures[flowIdx]?.name) ?? "Flow 1");
 
   const addTrigger = (type: string) => {
+    if (mode !== "flow") return;
     addTriggerToStore(type, flowName);
   };
 
   const addClosure = (name: string) => {
-    addClosureStepToStore(flowIdx, name);
+    addClosureStepToStore(mode === "closure" ? "closures" : "flows", flowIdx, name);
   };
 
   return (
     <div className="panel stack">
       <h3>Palette</h3>
       <div className="stack">
-        {availableInputs.map((inp) => (
-          <button key={inp} className="button" onClick={() => addTrigger(inp)}>
-            Add {inp} trigger
-          </button>
-        ))}
+        {mode === "flow" &&
+          availableInputs.map((inp) => (
+            <button key={inp} className="button" onClick={() => addTrigger(inp)}>
+              Add {inp} trigger
+            </button>
+          ))}
         {availableClosures.map((c) => (
           <button key={c} className="button secondary" onClick={() => addClosure(c)}>
             Add {c}

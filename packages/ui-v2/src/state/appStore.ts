@@ -9,7 +9,7 @@ export type FlowWithUi = { name: string; steps: StepWithUi[]; $ui?: { id?: strin
 export interface AppState {
   version: number;
   inputs: any[];
-  closures: any[];
+  closures: FlowWithUi[];
   flows: FlowWithUi[];
 }
 
@@ -18,6 +18,12 @@ interface AppStore {
   loadYaml: (text: string) => void;
   toYaml: () => string;
   setFlows: (flows: FlowWithUi[]) => void;
+  addFlow: (name?: string) => void;
+  addClosure: (name?: string) => void;
+  renameFlow: (idx: number, name: string) => void;
+  renameClosure: (idx: number, name: string) => void;
+  removeFlow: (idx: number) => void;
+  removeClosure: (idx: number) => void;
   updateStepUi: (flowName: string, stepPath: string, ui: UiMeta) => void;
   updateStepCallTarget: (flowName: string, stepPath: string, paramName: string, targetPath: string | null) => void;
   attachCallChain: (flowName: string, stepPath: string, paramName: string, targetPath: string) => void;
@@ -27,7 +33,7 @@ interface AppStore {
   updateNodeUi: (flowName: string, path: string, ui: UiMeta) => void;
   addDisconnected: (flowName: string, steps: StepWithUi[]) => void;
   addTrigger: (type: string, flowName: string) => void;
-  addClosureStep: (flowIdx: number, closureName: string) => void;
+  addClosureStep: (collection: "flows" | "closures", idx: number, closureName: string) => void;
   updateStepParam: (flowName: string, stepPath: string, key: string, value: any) => void;
   updateTriggerField: (triggerPath: string, key: string, value: any) => void;
   updateInputConfig: (inputIdx: number, key: string, value: any) => void;
@@ -54,16 +60,23 @@ function parse(text: string): AppState {
       s.$ui.id = s.$ui.id ?? nanoid();
       if (Array.isArray(s.cases)) s.cases.forEach((c: any) => seedIds(c.steps ?? []));
       if (Array.isArray((s as any).otherwise)) seedIds((s as any).otherwise as any);
+      Object.values(s.parameters ?? {}).forEach((p: any) => {
+        if (p?.steps) seedIds(p.steps);
+        if (p?.$call?.steps) seedIds(p.$call.steps);
+      });
     });
   };
-  (obj?.flows ?? []).forEach((f: any) => {
+  const seedFlow = (f: any) => {
     f.$ui = f.$ui ?? { id: nanoid(), x: 60, y: 120, disconnected: [] };
     f.$ui.id = f.$ui.id ?? nanoid();
     f.$ui.x = f.$ui.x ?? 60;
     f.$ui.y = f.$ui.y ?? 120;
     seedIds(f.steps ?? []);
     (f?.$ui?.disconnected ?? []).forEach((d: any) => seedIds(d.steps ?? []));
-  });
+  };
+  (obj?.flows ?? []).forEach(seedFlow);
+  (obj?.closures ?? []).forEach(seedFlow);
+
   return {
     version: obj?.version ?? 1,
     inputs: obj?.inputs ?? [],
@@ -260,6 +273,8 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string) {
 }
 
 function attachCallChain(flow: FlowWithUi, callerPath: string, paramName: string, targetPath: string) {
+  const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".") || a === b;
+  if (isBoundaryPrefix(callerPath, targetPath) || isBoundaryPrefix(targetPath, callerPath)) return;
   const caller = getStep(flow, callerPath);
   const callerCtx = resolveStepArray(flow, callerPath);
   if (!caller) return;
@@ -271,6 +286,8 @@ function attachCallChain(flow: FlowWithUi, callerPath: string, paramName: string
 }
 
 function attachFlowStepsChain(flow: FlowWithUi, callerPath: string, paramName: string, targetPath: string) {
+  const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".") || a === b;
+  if (isBoundaryPrefix(callerPath, targetPath) || isBoundaryPrefix(targetPath, callerPath)) return;
   const caller = getStep(flow, callerPath);
   const callerCtx = resolveStepArray(flow, callerPath);
   if (!caller) return;
@@ -285,6 +302,14 @@ function setStepParam(flow: FlowWithUi, path: string, key: string, value: any) {
   const step = getStep(flow, path);
   if (!step) return;
   step.parameters = { ...(step.parameters ?? {}), [key]: value };
+}
+
+function findFlowOrClosure(app: AppState, name: string): { kind: "flows" | "closures"; idx: number } | null {
+  const fIdx = app.flows.findIndex((f) => f.name === name);
+  if (fIdx >= 0) return { kind: "flows", idx: fIdx };
+  const cIdx = app.closures.findIndex((f) => f.name === name);
+  if (cIdx >= 0) return { kind: "closures", idx: cIdx };
+  return null;
 }
 
 function setTriggerUi(inputs: any[], path: string, ui: UiMeta) {
@@ -306,55 +331,100 @@ export const useAppStore = create<AppStore>((set, get) => ({
   loadYaml: (text) => set({ app: parse(text) }),
   toYaml: () => dump(get().app),
   setFlows: (flows) => set((state) => ({ app: { ...state.app, flows } })),
+  addFlow: (name = "New Flow") =>
+    set((state) => {
+      const flows = [...state.app.flows, { name, steps: [], $ui: { id: nanoid(), x: 60, y: 120, disconnected: [] } }];
+      return { app: { ...state.app, flows } };
+    }),
+  addClosure: (name = "New Closure") =>
+    set((state) => {
+      const closures = [...state.app.closures, { name, steps: [], $ui: { id: nanoid(), x: 60, y: 120, disconnected: [] } }];
+      return { app: { ...state.app, closures } };
+    }),
+  renameFlow: (idx, name) =>
+    set((state) => {
+      const flows = state.app.flows.map((f, i) => (i === idx ? { ...f, name } : f));
+      const oldName = state.app.flows[idx]?.name;
+      const inputs = (state.app.inputs ?? []).map((inp) => ({
+        ...inp,
+        triggers: (inp.triggers ?? []).map((t: any) => (oldName && t.flow === oldName ? { ...t, flow: name } : t))
+      }));
+      return { app: { ...state.app, flows, inputs } };
+    }),
+  renameClosure: (idx, name) =>
+    set((state) => {
+      const closures = state.app.closures.map((f, i) => (i === idx ? { ...f, name } : f));
+      return { app: { ...state.app, closures } };
+    }),
+  removeFlow: (idx) =>
+    set((state) => {
+      const flows = state.app.flows.filter((_, i) => i !== idx);
+      return { app: { ...state.app, flows } };
+    }),
+  removeClosure: (idx) =>
+    set((state) => {
+      const closures = state.app.closures.filter((_, i) => i !== idx);
+      return { app: { ...state.app, closures } };
+    }),
   updateStepUi: (flowName, stepPath, ui) =>
     set((state) => {
-      const flows = state.app.flows.map((f) => {
-        if (f.name !== flowName) return f;
+      const where = findFlowOrClosure(state.app, flowName);
+      if (!where) return state;
+      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+        if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
         setStepUi(copy, stepPath, ui);
         return copy;
       });
-      return { app: { ...state.app, flows } };
+      return { app: { ...state.app, [where.kind]: list } as AppState };
     }),
   updateStepCallTarget: (flowName, stepPath, paramName, targetPath) =>
     set((state) => {
-      const flows = state.app.flows.map((f) => {
-        if (f.name !== flowName) return f;
+      const where = findFlowOrClosure(state.app, flowName);
+      if (!where) return state;
+      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+        if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
         setStepCall(copy, stepPath, paramName, targetPath);
         return copy;
       });
-      return { app: { ...state.app, flows } };
+      return { app: { ...state.app, [where.kind]: list } as AppState };
     }),
   attachCallChain: (flowName, stepPath, paramName, targetPath) =>
     set((state) => {
-      const flows = state.app.flows.map((f) => {
-        if (f.name !== flowName) return f;
+      const where = findFlowOrClosure(state.app, flowName);
+      if (!where) return state;
+      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+        if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
         attachCallChain(copy, stepPath, paramName, targetPath);
         return copy;
       });
-      return { app: { ...state.app, flows } };
+      return { app: { ...state.app, [where.kind]: list } as AppState };
     }),
   attachFlowStepsChain: (flowName, stepPath, paramName, targetPath) =>
     set((state) => {
-      const flows = state.app.flows.map((f) => {
-        if (f.name !== flowName) return f;
+      const where = findFlowOrClosure(state.app, flowName);
+      if (!where) return state;
+      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+        if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
         attachFlowStepsChain(copy, stepPath, paramName, targetPath);
         return copy;
       });
-      return { app: { ...state.app, flows } };
+      return { app: { ...state.app, [where.kind]: list } as AppState };
     }),
   moveStepChainAfter: (flowName, sourceStepPath, targetStepPath) =>
     set((state) => {
-      const flows = state.app.flows.map((f) => {
-        if (f.name !== flowName) return f;
+      const where = findFlowOrClosure(state.app, flowName);
+      if (!where) return state;
+      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+        if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
         moveChain(copy, sourceStepPath, targetStepPath);
         return copy;
       });
-      return { app: { ...state.app, flows } };
+      return { app: { ...state.app, [where.kind]: list } as AppState };
     }),
   updateTriggerUi: (triggerPath, ui) =>
     set((state) => {
@@ -365,8 +435,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
   updateNodeUi: (flowName, path, ui) => {
     if (path === "$ui") {
       return set((state) => {
-        const flows = state.app.flows.map((f) => (f.name === flowName ? { ...f, $ui: { ...(f.$ui ?? {}), ...ui } } : f));
-        return { app: { ...state.app, flows } };
+        const where = findFlowOrClosure(state.app, flowName);
+        if (!where) return state;
+        const list = state.app[where.kind].map((f: FlowWithUi) => (f.name === flowName ? { ...f, $ui: { ...(f.$ui ?? {}), ...ui } } : f));
+        return { app: { ...state.app, [where.kind]: list } as AppState };
       });
     }
     if (path.startsWith("inputs[")) {
@@ -394,17 +466,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
       target.triggers = [...(target.triggers ?? []), { flow: flowName, $ui: { x: 40, y: 160 + (target.triggers?.length ?? 0) * 90 } }];
       return { app: { ...state.app, inputs } };
     }),
-  addClosureStep: (flowIdx, closureName) =>
+  addClosureStep: (collection, flowIdx, closureName) =>
     set((state) => {
-      const flows = state.app.flows.map((f) => ({ ...f, steps: [...(f.steps ?? [])] }));
-      const flow = flows[flowIdx] ?? flows[0];
+      const key = collection === "closures" ? "closures" : "flows";
+      const list = state.app[key].map((f: any) => ({ ...f, steps: [...(f.steps ?? [])] }));
+      const flow = list[flowIdx] ?? list[0];
       if (!flow) return state;
       flow.steps = [
         ...(flow.steps ?? []),
         { closure: closureName, parameters: {}, $ui: { id: nanoid(), x: 240, y: 200 + (flow.steps?.length ?? 0) * 120 } }
       ];
-      flows[flowIdx] = flow;
-      return { app: { ...state.app, flows } };
+      list[flowIdx] = flow;
+      return { app: { ...state.app, [key]: list } as AppState };
     }),
   updateStepParam: (flowName, stepPath, key, value) =>
     set((state) => {

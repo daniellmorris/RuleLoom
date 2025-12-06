@@ -20,7 +20,8 @@ const Canvas: React.FC = () => {
   const selection = useFlowStore((s) => s.selection.nodePath);
   const selectNode = useFlowStore((s) => s.selectNode);
   const updateNodeUi = useAppStore((s) => s.updateNodeUi);
-  const updateStepCallTarget = useAppStore((s) => s.updateStepCallTarget);
+  const attachCallChain = useAppStore((s) => s.attachCallChain);
+  const attachFlowStepsChain = useAppStore((s) => s.attachFlowStepsChain);
   const moveStepChainAfter = useAppStore((s) => s.moveStepChainAfter);
   const closuresMeta = useCatalogStore((s) => s.closuresMeta);
 
@@ -147,10 +148,23 @@ const Canvas: React.FC = () => {
                 e.stopPropagation();
                 const path = pathById[node.id];
                 if (linkRef.current.fromPath) {
+                  const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".");
+                  if (path && (isBoundaryPrefix(linkRef.current.fromPath, path) || isBoundaryPrefix(path, linkRef.current.fromPath))) {
+                    linkRef.current = { fromPath: "", connectorId: "", color: "" };
+                    setGhost(null);
+                    return;
+                  }
                   if (linkRef.current.connectorId === "next") {
                     moveStepChainAfter(flow.name, linkRef.current.fromPath, path ?? "");
                   } else {
-                    updateStepCallTarget(flow.name, linkRef.current.fromPath, linkRef.current.connectorId, path ?? "");
+                    const fromNodeId = nodes.find((n) => pathById[n.id] === linkRef.current.fromPath)?.id;
+                    const fromConnectors = fromNodeId ? connectorsByNode[fromNodeId] ?? [] : [];
+                    const connector = fromConnectors.find((c) => c.id === linkRef.current.connectorId);
+                    if (connector?.direction === "dynamic") {
+                      attachFlowStepsChain(flow.name, linkRef.current.fromPath, linkRef.current.connectorId, path ?? "");
+                    } else {
+                      attachCallChain(flow.name, linkRef.current.fromPath, linkRef.current.connectorId, path ?? "");
+                    }
                   }
                   linkRef.current = { fromPath: "", connectorId: "", color: "" };
                   setGhost(null);
@@ -170,10 +184,23 @@ const Canvas: React.FC = () => {
                 e.stopPropagation();
                 const path = pathById[node.id];
                 if (!path) return;
+                const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".");
+                if (isBoundaryPrefix(linkRef.current.fromPath, path) || isBoundaryPrefix(path, linkRef.current.fromPath)) {
+                  linkRef.current = { fromPath: "", connectorId: "", color: "" };
+                  setGhost(null);
+                  return;
+                }
                 if (linkRef.current.connectorId === "next") {
                   moveStepChainAfter(flow.name, linkRef.current.fromPath, path);
                 } else {
-                  updateStepCallTarget(flow.name, linkRef.current.fromPath, linkRef.current.connectorId, path);
+                  const fromNodeId = nodes.find((n) => pathById[n.id] === linkRef.current.fromPath)?.id;
+                  const fromConnectors = fromNodeId ? connectorsByNode[fromNodeId] ?? [] : [];
+                  const connector = fromConnectors.find((c) => c.id === linkRef.current.connectorId);
+                  if (connector?.direction === "dynamic") {
+                    attachFlowStepsChain(flow.name, linkRef.current.fromPath, linkRef.current.connectorId, path);
+                  } else {
+                    attachCallChain(flow.name, linkRef.current.fromPath, linkRef.current.connectorId, path);
+                  }
                 }
                 linkRef.current = { fromPath: "", connectorId: "", color: "" };
                 setGhost(null);
@@ -201,7 +228,7 @@ const Canvas: React.FC = () => {
                 {connectors.map((c, idx) => {
                   const color = CONNECTOR_COLORS[idx % CONNECTOR_COLORS.length];
                   return (
-                    <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div key={`${c.id}-${idx}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ color, fontSize: 12, fontWeight: 600 }}>{c.label}</span>
                       <div
                         title={`${c.label} (${c.direction})`}
@@ -244,16 +271,13 @@ const EdgeLine: React.FC<{ edge: Edge; nodes: Node[]; connectorsByNode: Record<s
   const to = nodes.find((n) => n.id === edge.to);
   if (!from || !to) return null;
   const fromConnectors = connectorsByNode[from.id] ?? [];
-  const connIdx = Math.max(
-    0,
-    fromConnectors.findIndex((c) => c.id === edge.label) // match by id/label
-  );
+  const connIdx = Math.max(0, fromConnectors.findIndex((c) => c.id === edge.label));
+  const color = CONNECTOR_COLORS[connIdx % CONNECTOR_COLORS.length];
   const startX = from.x + NODE_WIDTH + 2;
   const startY = from.y + 22 + connIdx * 22;
   const endX = to.x - 6;
   const endY = to.y + NODE_HEIGHT / 2;
   const midX = (startX + endX) / 2;
-  const color = "#7dd3fc";
   return (
     <g style={{ pointerEvents: "stroke", cursor: "pointer" }}>
       <path d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`} stroke={selected ? "var(--accent-2)" : color} strokeWidth={selected ? 3 : 2} fill="none" markerEnd={`url(#arrow-color-0)`} />
@@ -267,16 +291,20 @@ const EdgeLine: React.FC<{ edge: Edge; nodes: Node[]; connectorsByNode: Record<s
 };
 
 function buildConnectors(node: Node, meta?: any): Connector[] {
-  const connectors: Connector[] = [{ id: "next", label: "next", direction: "next" }];
+  const seen = new Set<string>();
+  const connectors: Connector[] = [];
+  const add = (c: Connector) => {
+    if (seen.has(c.id)) return;
+    seen.add(c.id);
+    connectors.push(c);
+  };
+  add({ id: "next", label: "next", direction: "next" });
   if (node.kind !== "closure") return connectors;
   const paramsMeta = meta?.signature?.parameters ?? [];
-  paramsMeta
-    .filter((p: any) => p.type === "flowSteps")
-    .forEach((p: any) => connectors.push({ id: p.name, label: p.name, direction: "dynamic" }));
-  // $call connectors only when parameter currently has $call marker
+  paramsMeta.filter((p: any) => p.type === "flowSteps").forEach((p: any) => add({ id: p.name, label: p.name, direction: "dynamic" }));
   Object.entries(node.data?.params ?? {})
     .filter(([, v]) => typeof v === "object" && v !== null && "$call" in (v as any))
-    .forEach(([name]) => connectors.push({ id: name, label: name, direction: "param" }));
+    .forEach(([name]) => add({ id: name, label: name, direction: "param" }));
   return connectors;
 }
 

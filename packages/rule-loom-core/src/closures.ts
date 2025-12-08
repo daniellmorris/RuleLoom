@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import type { ClosureDefinition, FlowStep } from 'rule-loom-engine';
+import type { ClosureDefinition, FlowBranchCase, FlowStep } from 'rule-loom-engine';
 import RuleLoomEngine from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
 
@@ -220,7 +220,6 @@ export function coreLengthClosure(): ClosureDefinition {
 export function coreForEachClosure(): ClosureDefinition {
   return {
     name: 'core.for-each',
-    functionalParams: [{ name: 'steps', mode: 'array' }],
     handler: async (state: any, context: any) => {
       const items = context.parameters?.collection as unknown;
       const steps = context.parameters?.steps as FlowStep[] | undefined;
@@ -256,6 +255,60 @@ export function coreForEachClosure(): ClosureDefinition {
   };
 }
 
+export function coreBranchClosure(): ClosureDefinition {
+  return {
+    name: 'core.branch',
+    implicitFields: ['cases', 'otherwise'],
+    handler: async (state: any, context: any) => {
+      const engine = context.runtime.engine as RuleLoomEngine | undefined;
+      if (!engine) {
+        throw new Error('core.branch requires runtime.engine to be available.');
+      }
+
+      const cases = (context.parameters?.cases as FlowBranchCase[] | undefined) ?? [];
+      const otherwise = context.parameters?.otherwise as FlowStep[] | undefined;
+
+      for (const branchCase of cases) {
+        const whenBlock = branchCase.when;
+        const thenBlock = branchCase.then;
+        const last = await engine.runSteps(whenBlock, state, context.runtime);
+        const shouldRun = Boolean(last);
+        if (shouldRun) {
+          return engine.runSteps(thenBlock, state, context.runtime);
+        }
+      }
+
+      if (otherwise) {
+        return engine.runSteps(otherwise, state, context.runtime);
+      }
+
+      return undefined;
+    },
+    signature: {
+      description: 'Branches execution based on conditional cases.',
+      parameters: [
+        {
+          name: 'cases',
+          type: 'array',
+          skipTemplateResolution: true,
+          required: true,
+          description: 'Array of branch cases; each entry must include `when: FlowStep[]` and `then: FlowStep[]`.',
+          children: [
+            { name: 'when', type: 'flowSteps', required: true, description: 'Step array evaluated for truthiness (last result).' },
+            { name: 'then', type: 'flowSteps', required: true, description: 'Step array executed when `when` is truthy.' },
+          ],
+        },
+        {
+          name: 'otherwise',
+          type: 'flowSteps',
+          description: 'Fallback steps when no case matches.',
+        },
+      ],
+      returns: { type: 'any', description: 'Result of the executed branch steps.' },
+    },
+  };
+}
+
 export function createCoreClosures(): ClosureDefinition[] {
   return [
     coreAssignClosure(),
@@ -268,5 +321,6 @@ export function createCoreClosures(): ClosureDefinition[] {
     coreIncludesClosure(),
     coreLengthClosure(),
     coreForEachClosure(),
+    coreBranchClosure(),
   ];
 }

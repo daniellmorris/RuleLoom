@@ -4,7 +4,7 @@ import { useAppStore } from "../state/appStore";
 import { useCatalogStore } from "../state/catalogStore";
 import { buildGraph } from "../utils/graph";
 
-type ParamMeta = { name: string; type?: string; required?: boolean; enum?: string[] };
+type ParamMeta = { name: string; type?: string; required?: boolean; enum?: string[]; children?: ParamMeta[]; skipTemplateResolution?: boolean };
 
 function resolveStep(flow: any, path: string | null): any | null {
   if (!path) return null;
@@ -132,7 +132,7 @@ const Inspector: React.FC = () => {
             onCallToggle={(enabled) =>
               updateStepParam(flow.name, selection, p.name, enabled ? { $call: "" } : "")
             }
-            onInitFlowSteps={() => updateStepParam(flow.name, selection, p.name, { steps: [] })}
+            onInitFlowSteps={() => updateStepParam(flow.name, selection, p.name, [])}
             allowCall
           />
         ))}
@@ -152,8 +152,78 @@ const ParamRow: React.FC<{
   lockedValue?: any;
 }> = ({ param, value, onValue, onCallToggle, onInitFlowSteps, allowCall, readOnly, lockedValue }) => {
   const isFlowSteps = param.type === "flowSteps";
+  const isArray = param.type === "array";
   const isCall = typeof value === "object" && value !== null && "$call" in value;
   const baseValue = lockedValue ?? (isCall ? (value as any).$call : value);
+
+  if (isArray) {
+    const items: any[] = Array.isArray(baseValue) ? baseValue : [];
+    const children = param.children ?? [];
+
+    const addItem = () => {
+      const next = [...items, createDefaultArrayItem(children)];
+      onValue(next);
+    };
+
+    const updateItem = (idx: number, childName: string, childVal: any) => {
+      const next = [...items];
+      next[idx] = { ...(next[idx] ?? {}), [childName]: childVal };
+      onValue(next);
+    };
+
+    const removeItem = (idx: number) => {
+      const next = [...items];
+      next.splice(idx, 1);
+      onValue(next);
+    };
+
+    return (
+      <div className="stack" style={{ gap: 6, border: "1px solid var(--border)", padding: 8, borderRadius: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>{param.name} (array)</span>
+          <button className="button tertiary" style={{ marginLeft: "auto" }} onClick={addItem}>
+            + add
+          </button>
+        </div>
+        {items.length === 0 && <div style={{ fontSize: 12, color: "var(--muted)" }}>No items</div>}
+        {items.map((item, idx) => (
+          <div key={idx} className="stack" style={{ gap: 6, border: "1px dashed var(--border)", padding: 8, borderRadius: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>item {idx + 1}</span>
+              <button className="button tertiary" style={{ marginLeft: "auto" }} onClick={() => removeItem(idx)}>
+                delete
+              </button>
+            </div>
+            {children.length === 0 ? (
+              <input
+                className="input"
+                value={item ?? ""}
+                onChange={(e) => {
+                  const next = [...items];
+                  next[idx] = e.target.value;
+                  onValue(next);
+                }}
+              />
+            ) : (
+              children.map((child) => (
+                <ParamRow
+                  key={child.name}
+                  param={child}
+                  value={item?.[child.name]}
+                  onValue={(val) => updateItem(idx, child.name, val)}
+                  onCallToggle={(enabled) =>
+                    updateItem(idx, child.name, enabled ? { $call: "" } : "")
+                  }
+                  onInitFlowSteps={() => updateItem(idx, child.name, [])}
+                  allowCall
+                />
+              ))
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   const field =
     isFlowSteps || isCall || readOnly ? (
@@ -198,3 +268,16 @@ const ParamRow: React.FC<{
 };
 
 export default Inspector;
+
+function createDefaultArrayItem(children: ParamMeta[]): any {
+  if (!children || children.length === 0) return "";
+  const obj: any = {};
+  children.forEach((child) => {
+    if (child.type === "flowSteps") {
+      obj[child.name] = [];
+    } else {
+      obj[child.name] = "";
+    }
+  });
+  return obj;
+}

@@ -221,7 +221,7 @@ Some closures (e.g., `core.for-each`) expect raw step arrays. In YAML you can pa
         value: "${state.currentItem}"
 ```
 
-The engine skips interpolation on `steps` because the closure declares it via `functionalParams`.
+The engine skips interpolation on `steps` because the closure signature marks it as `flowSteps`.
 
 ## Scheduler Jobs
 

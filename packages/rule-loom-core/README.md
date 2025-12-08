@@ -48,5 +48,5 @@ engine.registerFlow({
 ## Development
 
 - To add a new reusable closure, export a factory (e.g., `coreRetryClosure`) and append it to `createCoreClosures()`.
-- Mark any inline-step parameters via `functionalParams` if the closure should receive raw `FlowStep[]` arrays.
+- Use closure signature type `flowSteps` when a parameter should receive raw `FlowStep[]` arrays (templating is skipped for those params).
 - Build with `npm run build --workspace rule-loom-core`.

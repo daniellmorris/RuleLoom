@@ -13,6 +13,8 @@ export interface RuleLoomManifestClosure {
   name: string;
   description?: string;
   signature?: ClosureSignature;
+  implicitFields?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface RuleLoomManifestInputPlugin {
@@ -48,8 +50,8 @@ function createSilentLogger() {
 }
 
 function sanitizeClosure(closure: ClosureDefinition): RuleLoomManifestClosure {
-  const { name, description, signature } = closure;
-  return { name, description, signature };
+  const { name, description, signature, implicitFields, metadata } = closure;
+  return { name, description, signature, implicitFields, metadata };
 }
 
 function sanitizeInputPlugin(plugin: InputPlugin<BaseInputConfig>): RuleLoomManifestInputPlugin {

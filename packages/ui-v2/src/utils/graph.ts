@@ -50,19 +50,32 @@ export function buildGraph(flow: FlowWithUi, inputs: any[] = []): GraphBuild {
       }
       prevId = id;
 
-      // flowSteps params: embed steps and connect to first
-      Object.entries(step.parameters ?? {})
-        .filter(([_, v]) => typeof v === "object" && v !== null && Array.isArray((v as any).steps))
-        .forEach(([pname, v]) => {
-          const subSteps = (v as any).steps as StepWithUi[];
-          if (subSteps.length) {
-            const targetPath = `${path}.parameters.${pname}.steps[0]`;
-            const tid = makeId(targetPath, subSteps[0].$ui?.id);
+      const paramsMeta = useCatalogStore.getState().closuresMeta[step.closure ?? ""]?.signature?.parameters ?? [];
+      const visitParam = (pmeta: any, pval: any, basePath: string, label: string) => {
+        if (!pmeta) return;
+        if (pmeta.type === "flowSteps" && Array.isArray(pval)) {
+          if (pval.length) {
+            const targetPath = `${basePath}[0]`;
+            const tid = makeId(targetPath, pval[0].$ui?.id);
             pathById[tid] = targetPath;
-            edges.push({ id: nanoid(), from: id, to: tid, kind: "control", label: pname });
-            walk(subSteps, `${path}.parameters.${pname}.`, null);
+            edges.push({ id: nanoid(), from: id, to: tid, kind: "control", label });
+            walk(pval, `${basePath}.`, null);
           }
-        });
+          return;
+        }
+        if (pmeta.type === "array" && Array.isArray(pval) && Array.isArray(pmeta.children)) {
+          pval.forEach((item: any, idx: number) => {
+            pmeta.children.forEach((child: any) => {
+              visitParam(child, item?.[child.name], `${basePath}[${idx}].${child.name}`, `${label}[${idx}].${child.name}`);
+            });
+          });
+        }
+      };
+
+      paramsMeta.forEach((pm: any) => {
+        const val = (step.parameters ?? {})[pm.name];
+        visitParam(pm, val, `${path}.parameters.${pm.name}`, pm.name);
+      });
 
       // $call params: string target or embedded steps
       Object.entries(step.parameters ?? {})
@@ -83,8 +96,8 @@ export function buildGraph(flow: FlowWithUi, inputs: any[] = []): GraphBuild {
         });
       if (step.cases) {
         step.cases.forEach((c: any, ci: number) => {
-          const targetId = walk(c.steps ?? [], `${path}.cases[${ci}].`, id) || id;
-          edges.push({ id: nanoid(), from: id, to: targetId, kind: "branch", label: c.when?.parameters?.expr ?? `case-${ci + 1}` });
+          const targetId = walk(c.then ?? [], `${path}.cases[${ci}].`, id) || id;
+          edges.push({ id: nanoid(), from: id, to: targetId, kind: "branch", label: `case-${ci + 1}` });
         });
         if (step.otherwise) {
           const targetId = walk(step.otherwise, `${path}.otherwise.`, id) || id;

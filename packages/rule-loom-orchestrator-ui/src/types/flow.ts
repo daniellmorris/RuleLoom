@@ -16,8 +16,8 @@ export interface FlowInvokeStep {
 }
 
 export interface FlowBranchCase {
-  when: FlowCondition;
-  steps: FlowStep[];
+  when: FlowStep[];
+  then: FlowStep[];
 }
 
 export interface FlowBranchStep {
@@ -41,4 +41,5 @@ export interface ClosureDefinition {
   template?: string;
   module?: string;
   steps?: FlowStep[];
+  metadata?: Record<string, unknown>;
 }

@@ -144,6 +144,33 @@ closures:
       mutates:
         - state.currentItem
         - state.currentIndex
+  - name: core.branch
+    signature:
+      description: Branches execution based on conditional cases.
+      parameters:
+        - name: cases
+          type: array
+          skipTemplateResolution: true
+          required: true
+          description: 'Array of branch cases; each entry must include `when: FlowStep[]` and `then: FlowStep[]`.'
+          children:
+            - name: when
+              type: flowSteps
+              required: true
+              description: Step array evaluated for truthiness (last result).
+            - name: then
+              type: flowSteps
+              required: true
+              description: Step array executed when `when` is truthy.
+        - name: otherwise
+          type: flowSteps
+          description: Fallback steps when no case matches.
+      returns:
+        type: any
+        description: Result of the executed branch steps.
+    implicitFields:
+      - cases
+      - otherwise
   - name: http.request
     description: Performs an HTTP request and returns status, headers, and body.
     signature:

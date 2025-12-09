@@ -38,14 +38,14 @@ Shared utilities (currently a structured logger) that provide consistent interfa
 ### rule-loom-engine
 - Registers closures (`ClosureDefinition`) and flows (`FlowDefinition`).
 - Executes steps sequentially, supporting `when` conditions, branching, and nested flow execution via `runSteps`.
-- Resolves parameter templates (`${state.foo}`, `${runtime.requestId}`), `$call` directives (closure or inline steps), and honours `functionalParams` metadata for closures that expect raw `FlowStep[]` values.
+- Resolves parameter templates (`${state.foo}`, `${runtime.requestId}`), `$call` directives (closure or inline steps), and honours signature parameters typed `flowSteps` for closures that expect raw `FlowStep[]` values.
 - Provides execution context objects:
   - `state`: shared mutable data across the flow.
   - `runtime`: read-only metadata (logger, request info, active engine).
   - `parameters`: per-step arguments after template resolution.
 
 ### rule-loom-core
-Supplies reusable closures (assign/respond/log/comparisons/iterators) that follow engine conventions. Closures can declare `functionalParams` when they need raw step arrays (e.g., `core.for-each`).
+Supplies reusable closures (assign/respond/log/comparisons/iterators) that follow engine conventions. Closures declare step-array parameters in their signature (e.g., `core.for-each` uses `flowSteps`).
 
 ### rule-loom-inputs
 - Encapsulates concrete input adapters (Express HTTP server, Bree scheduler, future AMQP/MQTT bridges).
@@ -69,7 +69,7 @@ Supplies reusable closures (assign/respond/log/comparisons/iterators) that follo
 2. Engine clones `initialState`, attaches itself to `runtime.engine`, and iterates steps.
 3. For each step:
    - If `when` exists, evaluate conditions via registered closures.
-   - If the step contains `cases` and no `closure`, treat it as a branch and evaluate each case in order.
+   - If the step contains `cases` and no `closure`, treat it as a branch and evaluate each case in order (`when` step array -> last result truthy -> run `then` step array).
    - Otherwise, resolve parameters (interpolate templates, execute `$call`, reinsert functional parameter blocks) and invoke the closure.
    - Handle `assign`/`mergeResult` to update state.
 4. `$call` directives:
@@ -81,11 +81,11 @@ Supplies reusable closures (assign/respond/log/comparisons/iterators) that follo
 
 - **State** – mutable object shared by all steps. Runners seed `state.request`. Core closures may add helper fields (`state.currentItem`, `state.response`, etc.).
 - **Runtime** – contextual metadata (logger, requestId, route description, active engine). Intended to stay read-only.
-- **Parameters** – closure arguments after interpolation and `$call` expansion. Closure definitions can tweak how they receive parameters via `functionalParams`.
+- **Parameters** – closure arguments after interpolation and `$call` expansion. Closure definitions can mark parameters as `flowSteps` to receive raw step arrays without interpolation.
 
 ## Extensibility Guidelines
 
 - To add new reusable closures, export factories from `rule-loom-core` and register them in `createCoreClosures()`.
-- When creating custom closures in applications, declare `functionalParams` if the closure should handle raw step arrays (iterators, retries, transactions, etc.).
+- When creating custom closures in applications, set the parameter type to `flowSteps` if the closure should handle raw step arrays (iterators, retries, transactions, etc.).
 - Enhance the engine’s resolution logic in `resolveDynamicValues`, `prepareParameters`, or `$call` handlers when introducing new parameter conventions.
 - Use the runner schema (`packages/rule-loom-runner/src/config.ts`) as the canonical place to describe YAML structure; any new closure metadata should be reflected there for validation.

@@ -35,6 +35,7 @@ export class RunnerValidationError extends Error {
 export function validateRunnerConfig(config: RunnerConfig, closures: ClosureDefinition[]): ValidationResult {
   const issues: ValidationIssue[] = [];
   const signatureByClosure = new Map<string, ClosureSignature>();
+  const implicitClosures = closures.filter((c) => (c.implicitFields ?? []).length > 0);
   const flowNames = new Set(config.flows.map((f) => f.name));
 
   for (const closure of closures) {
@@ -52,7 +53,7 @@ export function validateRunnerConfig(config: RunnerConfig, closures: ClosureDefi
   validateInputTriggers(config.inputs ?? [], flowNames, issues);
 
   for (const flow of config.flows ?? []) {
-    validateFlow(flow, signatureByClosure, issues);
+    validateFlow(flow, signatureByClosure, implicitClosures, issues);
   }
 
   return { valid: issues.every((issue) => issue.level !== 'error'), issues };
@@ -92,14 +93,20 @@ function validateInputTriggers(inputs: BaseInputConfig[], flowNames: Set<string>
   });
 }
 
-function validateFlow(flow: FlowDefinition, signatureByClosure: Map<string, ClosureSignature>, issues: ValidationIssue[]) {
+function validateFlow(
+  flow: FlowDefinition,
+  signatureByClosure: Map<string, ClosureSignature>,
+  implicitClosures: ClosureDefinition[],
+  issues: ValidationIssue[],
+) {
   const visitSteps = (steps: FlowStep[], path: string) => {
     steps.forEach((step, index) => {
       if (isBranchStep(step)) {
         const branchPath = `${path}.steps[${index}]`;
         step.cases.forEach((branchCase, caseIndex) => {
-          validateConditions(branchCase.when, flow.name, `${branchPath}.cases[${caseIndex}]`, signatureByClosure, issues);
-          visitSteps(branchCase.steps, `${branchPath}.cases[${caseIndex}]`);
+          const caseBase = `${branchPath}.cases[${caseIndex}]`;
+          visitSteps(branchCase.when, `${caseBase}.when`);
+          visitSteps(branchCase.then, `${caseBase}.then`);
         });
         if (step.otherwise) {
           visitSteps(step.otherwise, `${branchPath}.otherwise`);
@@ -107,7 +114,7 @@ function validateFlow(flow: FlowDefinition, signatureByClosure: Map<string, Clos
         return;
       }
 
-      validateInvokeStep(step, flow.name, `${path}.steps[${index}]`, signatureByClosure, issues);
+      validateInvokeStep(step, flow.name, `${path}.steps[${index}]`, signatureByClosure, implicitClosures, issues);
       if (step.when) {
         validateConditions(step.when, flow.name, `${path}.steps[${index}].when`, signatureByClosure, issues);
       }
@@ -122,8 +129,41 @@ function validateInvokeStep(
   flowName: string,
   path: string,
   signatureByClosure: Map<string, ClosureSignature>,
+  implicitClosures: ClosureDefinition[],
   issues: ValidationIssue[],
 ) {
+  if (!step.closure) {
+    const matched = implicitClosures.find((closure) => {
+      const fields = closure.implicitFields ?? [];
+      if (!fields.length) return false;
+      return fields.every((field) => Object.prototype.hasOwnProperty.call(step as any, field));
+    });
+
+    if (!matched) {
+      issues.push({
+        level: 'error',
+        message: 'Step is missing "closure" and does not satisfy any implicit closure matcher.',
+        flow: flowName,
+        path,
+      });
+      return;
+    }
+
+    if (!matched.signature) {
+      issues.push({
+        level: 'error',
+        message: `Implicit closure "${matched.name}" is missing signature metadata for validation.`,
+        flow: flowName,
+        closure: matched.name,
+        path,
+      });
+      return;
+    }
+
+    validateParameters(step.parameters ?? {}, matched.signature, flowName, matched.name, path, issues);
+    return;
+  }
+
   const signature = signatureByClosure.get(step.closure);
   if (!signature) {
     issues.push({ level: 'error', message: `Closure "${step.closure}" is not registered.`, flow: flowName, closure: step.closure, path });
@@ -197,14 +237,16 @@ function validateParameters(
     }
 
     const value = parameters[descriptor.name];
-    if (value !== undefined && descriptor.type === 'flowSteps' && !Array.isArray(value)) {
-      issues.push({
-        level: 'error',
-        message: `Parameter "${descriptor.name}" on closure "${closureName}" must be an array of steps.`,
-        flow: flowName,
-        closure: closureName,
-        path,
-      });
+    if (value !== undefined && descriptor.type === 'flowSteps') {
+      if (!Array.isArray(value)) {
+        issues.push({
+          level: 'error',
+          message: `Parameter "${descriptor.name}" on closure "${closureName}" must be an array of steps.`,
+          flow: flowName,
+          closure: closureName,
+          path,
+        });
+      }
     }
   }
 

@@ -30,3 +30,30 @@ closures:
           required: false
 inputs:
   - type: mqtt
+    configParameters:
+      - name: url
+        type: string
+        required: true
+      - name: username
+        type: string
+      - name: password
+        type: string
+      - name: clientId
+        type: string
+      - name: options
+        type: any
+    triggerParameters:
+      - name: topic
+        type: string
+        required: true
+      - name: flow
+        type: flow
+        required: true
+      - name: qos
+        type: string
+        enum:
+          - '0'
+          - '1'
+          - '2'
+      - name: json
+        type: boolean

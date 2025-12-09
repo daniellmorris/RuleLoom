@@ -74,21 +74,46 @@ function traverse(node: Node, nodes: Node[], edges: Edge[], visited = new Set<st
         (step.parameters as any)[paramName] = `\${${fromNode.label}}`;
       }
     });
-    // flowSteps parameters (dynamic connectors on closure)
-    const flowParams =
-      (node.data as any)?.closureParameters ??
-      ((closureMetaMap[node.data?.closureName ?? ""]?.signature?.parameters ?? [])
-        .filter((p: any) => p.type === "flowSteps")
-        .map((p: any) => p.name) as string[]) ??
-      [];
-    flowParams.forEach((p: string) => {
-      const edge = edges.find((e) => e.from === node.id && e.label === p);
-      if (edge) {
-        const target = nodes.find((n) => n.id === edge.to);
-        if (target) {
-          (step.parameters as any)[p] = traverse(target, nodes, edges, new Set(visited));
+    // flowSteps parameters (dynamic connectors on closure), including nested array children
+    const paramsMeta = closureMetaMap[node.data?.closureName ?? ""]?.signature?.parameters ?? [];
+    const visitFlowParams = (pmeta: any, baseLabel: string, baseValSetter: (val: any) => void) => {
+      if (pmeta.type === "flowSteps") {
+        const edge = edges.find((e) => e.from === node.id && e.label === baseLabel);
+        if (edge) {
+          const target = nodes.find((n) => n.id === edge.to);
+          if (target) {
+            baseValSetter(traverse(target, nodes, edges, new Set(visited)));
+          }
         }
+        return;
       }
+      if (pmeta.type === "array" && Array.isArray(pmeta.children)) {
+        const items: any[] = [];
+        pmeta.children.forEach((child: any) => {
+          const matching = edges.filter((e) => e.from === node.id && (e.label ?? "").startsWith(`${baseLabel}[`));
+          matching.forEach((edge) => {
+            const label = edge.label ?? "";
+            const m = label.match(/^.+\[(\d+)\]\.(.+)$/);
+            const idx = m ? Number(m[1]) : 0;
+            const childName = m ? m[2] : child.name;
+            if (childName !== child.name) return;
+            const target = nodes.find((n) => n.id === edge.to);
+            if (!target) return;
+            items[idx] = items[idx] ?? {};
+            items[idx][child.name] = child.type === "flowSteps"
+              ? traverse(target, nodes, edges, new Set(visited))
+              : items[idx][child.name];
+          });
+        });
+        if (items.length) baseValSetter(items);
+      }
+    };
+
+    paramsMeta.forEach((p: any) => {
+      visitFlowParams(p, p.name, (val) => {
+        (step.parameters = step.parameters ?? {});
+        (step.parameters as any)[p.name] = val;
+      });
     });
     if (Object.keys(step.parameters ?? {}).length === 0) {
       delete (step as any).parameters;

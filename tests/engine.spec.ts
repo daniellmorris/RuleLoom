@@ -20,14 +20,16 @@ async function testBranchInference() {
       {
         cases: [
           {
-            when: {
-              closure: 'core.greater-than',
-              parameters: {
-                left: '${state.order.total}',
-                right: 100,
+            when: [
+              {
+                closure: 'core.greater-than',
+                parameters: {
+                  left: '${state.order.total}',
+                  right: 100,
+                },
               },
-            },
-            steps: [
+            ],
+            then: [
               {
                 closure: 'core.log',
                 parameters: {
@@ -38,13 +40,15 @@ async function testBranchInference() {
               {
                 cases: [
                   {
-                    when: {
-                      closure: 'core.truthy',
-                      parameters: {
-                        value: '${state.request.body.items}',
+                    when: [
+                      {
+                        closure: 'core.truthy',
+                        parameters: {
+                          value: '${state.request.body.items}',
+                        },
                       },
-                    },
-                    steps: [
+                    ],
+                    then: [
                       {
                         closure: 'core.respond',
                         parameters: {
@@ -244,11 +248,55 @@ async function testClosureParameterReference() {
   assert.equal(state.formatted, 'Value:50');
 }
 
+async function testImplicitBranchClosure() {
+  const engine = new RuleLoomEngine({
+    closures: createCoreClosures(),
+  });
+
+  engine.registerFlow({
+    name: 'implicit-branch',
+    steps: [
+      {
+        closure: 'core.assign',
+        parameters: {
+          target: 'value',
+          value: 5,
+        },
+      },
+      {
+        cases: [
+          {
+            when: [
+              {
+                closure: 'core.greater-than',
+                parameters: { left: '${state.value}', right: 1 },
+              },
+            ],
+            then: [
+              {
+                closure: 'core.assign',
+                parameters: {
+                  target: 'branch.hit',
+                  value: 'implicit-branch',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  const { state } = await engine.execute('implicit-branch');
+  assert.equal(state.branch?.hit, 'implicit-branch');
+}
+
 async function run() {
   await testBranchInference();
   await testFlowClosure();
   await testForEachClosure();
   await testClosureParameterReference();
+  await testImplicitBranchClosure();
   // eslint-disable-next-line no-console
   console.log('All engine tests passed');
 }

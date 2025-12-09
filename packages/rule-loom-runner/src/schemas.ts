@@ -17,13 +17,21 @@ let flowStepSchema: z.ZodType<FlowDefinition['steps'][number]>;
 const invokeStepSchema = z
   .object({
     type: z.literal('invoke').optional(),
-    closure: z.string().min(1),
+    closure: z.string().min(1).optional(),
     parameters: z.record(z.any()).optional(),
     assign: z.string().min(1).optional(),
     mergeResult: z.boolean().optional(),
     when: whenSchema.optional(),
   })
   .passthrough()
+  .superRefine((step, ctx) => {
+    if ('cases' in step) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invoke steps cannot include "cases"; use branch step shape instead.',
+      });
+    }
+  })
   .transform((step) => {
     const { type, closure, parameters, assign, mergeResult, when, ...rest } = step as any;
     const computedParams: Record<string, unknown> = { ...(parameters ?? {}) };
@@ -48,22 +56,24 @@ const invokeStepSchema = z
   });
 
 const branchCaseSchema = z.object({
-  when: whenSchema,
-  steps: z.lazy(() => flowStepSchema.array().min(1)),
+  when: z.lazy(() => flowStepSchema.array().min(1)),
+  then: z.lazy(() => flowStepSchema.array().min(1)),
 });
 
-const rawBranchStepSchema = z.object({
-  type: z.literal('branch').optional(),
-  cases: z.array(branchCaseSchema).min(1),
-  otherwise: z.lazy(() => flowStepSchema.array()).optional(),
-}).superRefine((value, ctx) => {
-  if ('closure' in (value as Record<string, unknown>)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Branch steps cannot specify "closure".',
-    });
-  }
-});
+const rawBranchStepSchema = z
+  .object({
+    type: z.literal('branch').optional(),
+    cases: z.array(branchCaseSchema).min(1),
+    otherwise: z.lazy(() => flowStepSchema.array()).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if ('closure' in (value as Record<string, unknown>)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Branch steps cannot specify "closure".',
+      });
+    }
+  });
 
 const branchStepSchema = rawBranchStepSchema.transform((step) => ({
   type: 'branch' as const,

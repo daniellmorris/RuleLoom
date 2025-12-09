@@ -294,8 +294,44 @@ function attachFlowStepsChain(flow: FlowWithUi, callerPath: string, paramName: s
   const detached = detachChain(flow, targetPath, callerCtx ?? undefined);
   if (!detached) return;
   reseedUiIds(detached.chain);
+
+  const segments: (string | number)[] = [];
+  paramName.split('.').forEach((part) => {
+    const regex = /([\w$]+)(\[(\d+)\])?/g;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(part)) !== null) {
+      if (m[1]) segments.push(m[1]);
+      if (m[3] !== undefined) segments.push(Number(m[3]));
+    }
+  });
+
   caller.parameters = caller.parameters ?? {};
-  caller.parameters[paramName] = { steps: detached.chain };
+  let cursor: any = caller.parameters;
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const last = i === segments.length - 1;
+    if (last) {
+      if (typeof seg === 'number') {
+        if (!Array.isArray(cursor)) cursor = [];
+        cursor[seg] = detached.chain;
+      } else {
+        cursor[seg] = detached.chain;
+      }
+      break;
+    }
+    const nextSeg = segments[i + 1];
+    if (typeof seg === 'number') {
+      if (!Array.isArray(cursor)) {
+        // reattach to parent if lost
+        return;
+      }
+      cursor[seg] = cursor[seg] ?? (typeof nextSeg === 'number' ? [] : {});
+      cursor = cursor[seg];
+    } else {
+      cursor[seg] = cursor[seg] ?? (typeof nextSeg === 'number' ? [] : {});
+      cursor = cursor[seg];
+    }
+  }
 }
 
 function setStepParam(flow: FlowWithUi, path: string, key: string, value: any) {

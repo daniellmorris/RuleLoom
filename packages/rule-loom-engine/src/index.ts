@@ -15,7 +15,14 @@ export type ClosureHandler = (
   context: ClosureContext,
 ) => Promise<unknown> | unknown;
 
-export type ClosureParameterType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'any' | 'flowSteps';
+export type ClosureParameterType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'object'
+  | 'array'
+  | 'any'
+  | 'flowSteps';
 
 export interface ClosureParameterDefinition {
   name: string;
@@ -24,6 +31,10 @@ export interface ClosureParameterDefinition {
   required?: boolean;
   allowDynamicValue?: boolean;
   defaultValue?: unknown;
+  /** When true, skip templating/resolution for this parameter value. */
+  skipTemplateResolution?: boolean;
+  /** Nested parameter definitions for array/object values (e.g., shape of array items or object fields). */
+  children?: ClosureParameterDefinition[];
 }
 
 export interface ClosureReturnDefinition {
@@ -45,8 +56,9 @@ export interface ClosureDefinition {
   handler: ClosureHandler;
   description?: string;
   metadata?: Record<string, unknown>;
-  functionalParams?: Array<{ name: string; mode?: 'single' | 'array' }>;
   signature?: ClosureSignature;
+  /** Optional list of top-level fields this closure claims implicitly when `closure` is absent. */
+  implicitFields?: string[];
 }
 
 export interface ConditionDefinition {
@@ -57,7 +69,7 @@ export interface ConditionDefinition {
 
 export interface FlowInvokeStep {
   type?: 'invoke';
-  closure: string;
+  closure?: string;
   parameters?: Record<string, unknown>;
   assign?: string;
   mergeResult?: boolean;
@@ -65,8 +77,10 @@ export interface FlowInvokeStep {
 }
 
 export interface FlowBranchCase {
-  when: ConditionDefinition | ConditionDefinition[];
-  steps: FlowStep[];
+  /** Steps whose last result is treated as the condition. */
+  when: FlowStep[];
+  /** Steps to execute when `when` evaluates truthy. */
+  then: FlowStep[];
 }
 
 export interface FlowBranchStep {
@@ -107,6 +121,7 @@ export interface ExecutionRuntime {
 
 export class RuleLoomEngine {
   private closures = new Map<string, ClosureDefinition>();
+  private implicitClosures: ClosureDefinition[] = [];
   private flows = new Map<string, FlowDefinition>();
 
   constructor(options?: EngineOptions) {
@@ -123,6 +138,10 @@ export class RuleLoomEngine {
       throw new Error(`Closure named "${definition.name}" is already registered.`);
     }
     this.closures.set(definition.name, definition);
+
+    if (definition.implicitFields && definition.implicitFields.length) {
+      this.implicitClosures.push(definition);
+    }
   }
 
   registerClosures(definitions: ClosureDefinition[]): void {
@@ -146,6 +165,10 @@ export class RuleLoomEngine {
 
   getClosure(name: string): ClosureDefinition | undefined {
     return this.closures.get(name);
+  }
+
+  getImplicitClosures(): ClosureDefinition[] {
+    return [...this.implicitClosures];
   }
 
   getFlow(name: string): FlowDefinition | undefined {
@@ -177,16 +200,36 @@ export class RuleLoomEngine {
   ): Promise<unknown> {
     let result: unknown;
     for (const step of steps) {
+      if (this.isInvokeStep(step)) {
+        if (!(await this.shouldExecute(step, state, runtime))) {
+          continue;
+        }
+        result = await this.invokeStep(step, state, runtime, inheritedParameters);
+        continue;
+      }
+
+      const implicit = await this.resolveImplicitClosure(step, state, runtime);
+      if (implicit) {
+        const implicitParams = this.extractParameters(step);
+        const implicitInvoke: FlowInvokeStep = {
+          ...(step as any),
+          type: 'invoke',
+          closure: implicit.name,
+          parameters: implicitParams,
+        };
+        if (!(await this.shouldExecute(implicitInvoke, state, runtime))) {
+          continue;
+        }
+        result = await this.invokeStep(implicitInvoke, state, runtime, inheritedParameters);
+        continue;
+      }
+
       if (this.isBranchStep(step)) {
         result = await this.executeBranch(step, state, runtime, inheritedParameters);
         continue;
       }
 
-      if (!(await this.shouldExecute(step, state, runtime))) {
-        continue;
-      }
-
-      result = await this.invokeStep(step, state, runtime, inheritedParameters);
+      throw new Error('Flow step is missing "closure" and no implicit closure matched.');
     }
     return result;
   }
@@ -196,6 +239,43 @@ export class RuleLoomEngine {
     return Array.isArray((record as any).cases) && !('closure' in record);
   }
 
+  private isInvokeStep(step: FlowStep): step is FlowInvokeStep & { closure: string } {
+    return typeof (step as FlowInvokeStep).closure === 'string';
+  }
+
+  private async resolveImplicitClosure(
+    step: FlowStep,
+    state: Record<string, unknown>,
+    runtime: ExecutionRuntime,
+  ): Promise<ClosureDefinition | undefined> {
+    for (const candidate of this.implicitClosures) {
+      const fields = candidate.implicitFields ?? [];
+      if (!fields.length) continue;
+      const allPresent = fields.every((field) => Object.prototype.hasOwnProperty.call(step as any, field));
+      if (allPresent) {
+        if (runtime.logger?.debug) {
+          runtime.logger.debug('Implicit closure matched step', { closure: candidate.name, step });
+        }
+        return candidate;
+      }
+    }
+    return undefined;
+  }
+
+  private extractParameters(step: FlowStep): Record<string, unknown> | undefined {
+    const explicit = (step as FlowInvokeStep).parameters;
+    const rest = { ...(step as Record<string, unknown>) };
+    delete rest.type;
+    delete rest.closure;
+    delete rest.when;
+    delete rest.assign;
+    delete rest.mergeResult;
+    delete rest.parameters;
+
+    const merged = explicit ? { ...rest, ...explicit } : rest;
+    return Object.keys(merged).length ? merged : undefined;
+  }
+
   private async executeBranch(
     step: FlowBranchStep,
     state: Record<string, unknown>,
@@ -203,9 +283,12 @@ export class RuleLoomEngine {
     inheritedParameters?: Record<string, unknown>,
   ): Promise<unknown> {
     for (const branchCase of step.cases) {
-      const shouldRun = await this.evaluateConditions(branchCase.when, state, runtime);
+      const whenBlock = branchCase.when;
+      const thenBlock = branchCase.then;
+      const last = await this.runSteps(whenBlock, state, runtime, inheritedParameters);
+      const shouldRun = Boolean(last);
       if (shouldRun) {
-        return this.runSteps(branchCase.steps, state, runtime, inheritedParameters);
+        return this.runSteps(thenBlock, state, runtime, inheritedParameters);
       }
     }
 
@@ -227,7 +310,7 @@ export class RuleLoomEngine {
     return this.evaluateConditions(step.when, state, runtime);
   }
 
-  private async evaluateConditions(
+  async evaluateConditions(
     conditions: ConditionDefinition | ConditionDefinition[],
     state: Record<string, unknown>,
     runtime: ExecutionRuntime,
@@ -267,6 +350,10 @@ export class RuleLoomEngine {
     runtime: ExecutionRuntime,
     inheritedParameters?: Record<string, unknown>,
   ): Promise<unknown> {
+    if (!step.closure) {
+      throw new Error('invokeStep requires a closure name.');
+    }
+
     const closure = this.closures.get(step.closure);
     if (!closure) {
       throw new Error(`Closure "${step.closure}" is not registered.`);
@@ -306,13 +393,20 @@ export class RuleLoomEngine {
     }
 
     let working = _.cloneDeep(rawParameters);
-    const reserved: Record<string, unknown> = {};
 
-    if (closure.functionalParams && working) {
-      for (const spec of closure.functionalParams) {
-        if (spec.name in working) {
-          reserved[spec.name] = working[spec.name];
-          delete working[spec.name];
+    const signatureSkip = new Set(
+      (closure.signature?.parameters ?? [])
+        .filter((p) => p.type === 'flowSteps' || p.skipTemplateResolution)
+        .map((p) => p.name),
+    );
+    const skipKeys = signatureSkip;
+
+    const reserved: Record<string, unknown> = {};
+    if (skipKeys.size && working) {
+      for (const key of Object.keys(working)) {
+        if (skipKeys.has(key)) {
+          reserved[key] = working[key];
+          delete working[key];
         }
       }
     }
@@ -327,17 +421,14 @@ export class RuleLoomEngine {
       ? (resolveDynamicValues(working, templateContext) as Record<string, unknown>)
       : undefined;
 
-    if (closure.functionalParams) {
+    if (skipKeys.size) {
       resolved = resolved ?? {};
-      for (const spec of closure.functionalParams) {
-        if (spec.name in reserved) {
-          resolved[spec.name] = reserved[spec.name];
-        }
+      for (const key of Object.keys(reserved)) {
+        resolved[key] = reserved[key];
       }
     }
 
     if (resolved) {
-      const skipKeys = new Set(closure.functionalParams?.map((spec) => spec.name));
       resolved = (await this.resolveClosureReferences(resolved, state, runtime, skipKeys)) as Record<
         string,
         unknown

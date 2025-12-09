@@ -18,15 +18,15 @@ flows:
           value: "${request.body}"
       - cases:
           - when:
-              closure: core.greater-than
-              parameters:
-                left:
-                  $call:
-                    name: core.length
-                    parameters:
-                      value: "${state.payload.items}"
-                right: 0
-            steps:
+              - closure: core.greater-than
+                parameters:
+                  left:
+                    $call:
+                      name: core.length
+                      parameters:
+                        value: "${state.payload.items}"
+                  right: 0
+            then:
               - closure: core.respond
                 parameters:
                   status: 200

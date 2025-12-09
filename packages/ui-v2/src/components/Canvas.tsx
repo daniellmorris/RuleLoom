@@ -309,7 +309,28 @@ function buildConnectors(node: Node, meta?: any): Connector[] {
   add({ id: "next", label: "next", direction: "next" });
   if (node.kind !== "closure") return connectors;
   const paramsMeta = meta?.signature?.parameters ?? [];
-  paramsMeta.filter((p: any) => p.type === "flowSteps").forEach((p: any) => add({ id: p.name, label: p.name, direction: "dynamic" }));
+  const paramsValue = node.data?.params ?? {};
+
+  const visit = (param: any, val: any, base: string) => {
+    if (!param) return;
+    if (param.type === "flowSteps") {
+      add({ id: base, label: base, direction: "dynamic" });
+      return;
+    }
+    if (param.type === "array" && Array.isArray(val) && Array.isArray(param.children)) {
+      val.forEach((item: any, idx: number) => {
+        param.children.forEach((child: any) => {
+          visit(child, item?.[child.name], `${base}[${idx}].${child.name}`);
+        });
+      });
+      return;
+    }
+  };
+
+  paramsMeta.forEach((p: any) => {
+    visit(p, paramsValue[p.name], p.name);
+  });
+
   Object.entries(node.data?.params ?? {})
     .filter(([, v]) => typeof v === "object" && v !== null && "$call" in (v as any))
     .forEach(([name]) => add({ id: name, label: name, direction: "param" }));

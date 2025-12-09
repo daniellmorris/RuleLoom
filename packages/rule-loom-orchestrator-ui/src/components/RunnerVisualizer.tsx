@@ -34,12 +34,6 @@ const RUNNER_Y = 0;
 const INPUT_Y = RUNNER_Y + Y_UNIT;
 const FLOW_Y = INPUT_Y + Y_UNIT;
 
-type FunctionalParamDescriptor = {
-  key: string;
-  steps: FlowStep[];
-  width: number;
-};
-
 function isFlowStep(value: unknown): value is FlowStep {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Record<string, unknown>;
@@ -51,54 +45,6 @@ function isFlowStep(value: unknown): value is FlowStep {
 
 function isFlowStepArray(value: unknown): value is FlowStep[] {
   return Array.isArray(value) && value.every((item) => isFlowStep(item));
-}
-
-function extractFunctionalParams(step: FlowStep): FunctionalParamDescriptor[] {
-  if ((step as FlowBranchStep).type === 'branch') return [];
-  const invokeStep = step as FlowInvokeStep;
-  if (!invokeStep.parameters) return [];
-  const descriptors: FunctionalParamDescriptor[] = [];
-
-  const visitValue = (value: unknown, parts: string[]) => {
-    if (!value) return;
-    if (isFlowStepArray(value)) {
-      const label = formatLabel(parts);
-      descriptors.push({ key: label, steps: value, width: Math.max(1, measureSequence(value)) });
-      return;
-    }
-    if (isFlowStep(value)) {
-      const label = formatLabel(parts);
-      const single = [value];
-      descriptors.push({ key: label, steps: single, width: Math.max(1, measureSequence(single)) });
-      return;
-    }
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => {
-        if (item && typeof item === 'object') {
-          visitValue(item, [...parts, `[${index}]`]);
-        }
-      });
-      return;
-    }
-    if (typeof value === 'object') {
-      Object.entries(value as Record<string, unknown>).forEach(([childKey, childValue]) => {
-        visitValue(childValue, [...parts, childKey]);
-      });
-    }
-  };
-
-  Object.entries(invokeStep.parameters).forEach(([key, paramValue]) => {
-    visitValue(paramValue, [key]);
-  });
-
-  return descriptors;
-}
-
-function formatLabel(parts: string[]): string {
-  const normalized = parts.filter((part) => part && part.length > 0);
-  if (normalized.length === 0) return 'steps';
-  const deduped = normalized.filter((part, index) => index === 0 || part !== normalized[index - 1]);
-  return deduped.join(' › ');
 }
 
 function formatConditionClause(condition: FlowConditionClause): string {
@@ -154,10 +100,6 @@ function formatBranchSummary(step: FlowBranchStep): string {
   return `branch (${caseCount} option${caseCount === 1 ? '' : 's'})`;
 }
 
-function formatCaseLabel(condition: FlowCondition, index: number): string {
-  return `case ${index + 1}\n${formatCondition(condition)}`;
-}
-
 function formatSchedule(job: RunnerVisualizerProps['data']['scheduler']['jobs'][number]): string {
   if (job.cron) return `cron ${job.cron}`;
   if (job.interval) return `every ${job.interval}`;
@@ -177,7 +119,7 @@ function measureSequence(steps: FlowStep[] | undefined): number {
 
 function measureStep(step: FlowStep): number {
   if (step.type === 'branch') {
-    const childWidths = step.cases.map((caseStep) => measureSequence(caseStep.steps));
+    const childWidths = step.cases.map((caseStep) => measureSequence(caseStep.then ?? caseStep.steps));
     if (step.otherwise) childWidths.push(measureSequence(step.otherwise));
     if (childWidths.length === 0) {
       return 1;
@@ -186,23 +128,19 @@ function measureStep(step: FlowStep): number {
     const maxChild = childWidths.reduce((max, value) => Math.max(max, value), 1);
     return Math.max(1, combined, maxChild);
   }
-  const functionalParams = extractFunctionalParams(step);
-  if (functionalParams.length === 0) return 1;
-  const functionalWidth = functionalParams.reduce((sum, descriptor) => sum + descriptor.width, 0);
-  return Math.max(1, 1 + functionalWidth);
+  return 1;
 }
 
 function collectClosuresFromSteps(steps: FlowStep[] | undefined, accumulator: Set<string>) {
   if (!steps) return;
   for (const step of steps) {
     if (step.type === 'branch') {
-      step.cases.forEach((caseStep) => collectClosuresFromSteps(caseStep.steps, accumulator));
+      step.cases.forEach((caseStep) => collectClosuresFromSteps(caseStep.then, accumulator));
       if (step.otherwise) collectClosuresFromSteps(step.otherwise, accumulator);
     } else {
       if (step.closure) {
         accumulator.add(step.closure);
       }
-      extractFunctionalParams(step).forEach((descriptor) => collectClosuresFromSteps(descriptor.steps, accumulator));
     }
   }
 }
@@ -350,9 +288,9 @@ export default function RunnerVisualizer({ data, showClosures = true, showRunner
           const childDescriptors: Array<{ label: string; steps: FlowStep[]; width: number }> = [];
           step.cases.forEach((caseStep, caseIndex) => {
             childDescriptors.push({
-              label: formatCaseLabel(caseStep.when, caseIndex),
-              steps: caseStep.steps ?? [],
-              width: Math.max(1, measureSequence(caseStep.steps)),
+              label: `case ${caseIndex + 1}`,
+              steps: caseStep.then ?? [],
+              width: Math.max(1, measureSequence(caseStep.then)),
             });
           });
           if (step.otherwise) {
@@ -401,11 +339,10 @@ export default function RunnerVisualizer({ data, showClosures = true, showRunner
           currentY = Math.max(deepestY, currentY + 2 * Y_UNIT);
         } else {
           const invokeY = currentY;
-          const functionalParams = extractFunctionalParams(step);
           const invokeLabel = formatInvoke(step);
           const invokeId = createNode(invokeLabel, { x: centerX, y: invokeY }, {
             type: 'invoke',
-            data: { label: invokeLabel, showParamHandle: functionalParams.length > 0 },
+            data: { label: invokeLabel, showParamHandle: false },
             style: {
               padding: 14,
               borderRadius: 16,
@@ -419,33 +356,6 @@ export default function RunnerVisualizer({ data, showClosures = true, showRunner
           currentEntries.forEach((source) => createEdge(source, invokeId));
           currentEntries = [invokeId];
           currentY += Y_UNIT;
-
-          if (functionalParams.length > 0) {
-            let offsetUnits = 1;
-            functionalParams.forEach((descriptor) => {
-              const paramCenter = centerX + offsetUnits * X_UNIT;
-              const labelId = createNode(`${descriptor.key} (${descriptor.steps.length} step${descriptor.steps.length === 1 ? '' : 's'})`, { x: paramCenter, y: invokeY }, {
-                style: {
-                  padding: 10,
-                  borderRadius: 12,
-                  background: 'var(--mantine-color-yellow-2)',
-                  color: 'var(--mantine-color-yellow-9)',
-                  border: '1px dashed var(--mantine-color-yellow-6)',
-                  fontWeight: 600,
-                },
-                handles: { target: Position.Left, source: Position.Bottom },
-              });
-              createEdge(invokeId, labelId, {
-                animated: false,
-                style: { strokeDasharray: '4 4', stroke: 'var(--mantine-color-yellow-8)' },
-                sourceHandle: 'param',
-              });
-              const nested = layoutSequence(descriptor.steps, paramCenter, invokeY + Y_UNIT, [labelId]);
-              maxWidth = Math.max(maxWidth, offsetUnits + descriptor.width);
-              maxFlowDepth = Math.max(maxFlowDepth, nested.nextY);
-              offsetUnits += descriptor.width + 0.5;
-            });
-          }
         }
       });
 

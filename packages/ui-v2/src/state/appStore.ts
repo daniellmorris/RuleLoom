@@ -1,10 +1,22 @@
 import { create } from "zustand";
 import yaml from "js-yaml";
 import { nanoid } from "../utils/id";
+import { walkFlow, type StepVisit } from "./walk";
 
 export type UiMeta = { x?: number; y?: number; w?: number; h?: number; color?: string; collapsed?: boolean; id?: string };
 export type StepWithUi = any & { $ui?: UiMeta };
 export type FlowWithUi = { name: string; steps: StepWithUi[]; $ui?: { id?: string; x?: number; y?: number; disconnected?: { steps: StepWithUi[] }[] } };
+
+export type NodeIndexEntry = {
+  id: string;
+  path: string;
+  kind: "start" | "step";
+  arr?: StepWithUi[];
+  idx?: number;
+  discIdx?: number;
+};
+
+export type NodeIndex = { byId: Record<string, NodeIndexEntry>; pathById: Record<string, string>; idByPath: Record<string, string> };
 
 export interface AppState {
   version: number;
@@ -24,20 +36,21 @@ interface AppStore {
   renameClosure: (idx: number, name: string) => void;
   removeFlow: (idx: number) => void;
   removeClosure: (idx: number) => void;
-  updateStepUi: (flowName: string, stepPath: string, ui: UiMeta) => void;
-  updateStepCallTarget: (flowName: string, stepPath: string, paramName: string, targetPath: string | null) => void;
-  attachCallChain: (flowName: string, stepPath: string, paramName: string, targetPath: string) => void;
-  attachFlowStepsChain: (flowName: string, stepPath: string, paramName: string, targetPath: string) => void;
-  moveStepChainAfter: (flowName: string, sourceStepPath: string, targetStepPath: string) => void;
-  updateTriggerUi: (triggerPath: string, ui: UiMeta) => void;
-  updateNodeUi: (flowName: string, path: string, ui: UiMeta) => void;
+  attachCallChain: (flowName: string, fromId: string, paramName: string, targetId: string) => OperationResult;
+  attachFlowStepsChain: (flowName: string, fromId: string, paramName: string, targetId: string) => OperationResult;
+  moveStepChainAfter: (flowName: string, sourceId: string, targetId: string) => OperationResult;
+  removeConnection: (flowName: string, fromId: string, toId: string, label?: string) => OperationResult;
+  deleteNode: (flowName: string, nodeId: string) => OperationResult;
+  updateNodeUi: (flowName: string, nodeId: string, ui: UiMeta) => void;
   addDisconnected: (flowName: string, steps: StepWithUi[]) => void;
   addTrigger: (type: string, flowName: string) => void;
   addClosureStep: (collection: "flows" | "closures", idx: number, closureName: string) => void;
-  updateStepParam: (flowName: string, stepPath: string, key: string, value: any) => void;
-  updateTriggerField: (triggerPath: string, key: string, value: any) => void;
+  updateStepParam: (flowName: string, nodeId: string, key: string, value: any) => void;
+  updateTriggerField: (triggerId: string, key: string, value: any) => void;
   updateInputConfig: (inputIdx: number, key: string, value: any) => void;
 }
+
+type OperationResult = { ok: true } | { ok: false; error: string };
 
 const defaultState: AppState = {
   version: 1,
@@ -47,17 +60,57 @@ const defaultState: AppState = {
     {
       name: "Flow 1",
       steps: [],
-      $ui: { disconnected: [] }
+      $ui: { id: nanoid(), x: 60, y: 120, disconnected: [] }
     }
   ]
 };
+
+function ensureFlowUi(flow: FlowWithUi) {
+  flow.$ui = flow.$ui ?? { id: nanoid(), x: 60, y: 120, disconnected: [] };
+  flow.$ui.id = flow.$ui.id ?? nanoid();
+  flow.$ui.x = flow.$ui.x ?? 60;
+  flow.$ui.y = flow.$ui.y ?? 120;
+  flow.$ui.disconnected = flow.$ui.disconnected ?? [];
+}
+
+function ensureStepUi(step: StepWithUi) {
+  step.$ui = step.$ui ?? {};
+  step.$ui.id = step.$ui.id ?? nanoid();
+}
+
+export function buildNodeIndex(flow: FlowWithUi): NodeIndex {
+  ensureFlowUi(flow);
+  const ui = flow.$ui as NonNullable<FlowWithUi["$ui"]>;
+  const index: NodeIndex = { byId: {}, pathById: {}, idByPath: {} };
+  const record = (id: string, path: string, entry: NodeIndexEntry) => {
+    index.byId[id] = entry;
+    index.pathById[id] = path;
+    index.idByPath[path] = id;
+  };
+
+  record(ui.id as string, "start", { id: ui.id as string, path: "start", kind: "start", arr: flow.steps, idx: -1 });
+
+  const visits: StepVisit[] = walkFlow(flow).steps;
+  visits.forEach((v) => {
+    ensureStepUi(v.step);
+    record(v.step.$ui?.id as string, v.path, {
+      id: v.step.$ui?.id as string,
+      path: v.path,
+      kind: "step",
+      arr: v.arr,
+      idx: v.idx,
+      discIdx: v.discIdx
+    });
+  });
+
+  return index;
+}
 
 function parse(text: string): AppState {
   const obj = yaml.load(text) as any;
   const seedIds = (steps: StepWithUi[]) => {
     steps.forEach((s) => {
-      s.$ui = s.$ui ?? {};
-      s.$ui.id = s.$ui.id ?? nanoid();
+      ensureStepUi(s);
       if (Array.isArray(s.cases)) s.cases.forEach((c: any) => seedIds(c.steps ?? []));
       if (Array.isArray((s as any).otherwise)) seedIds((s as any).otherwise as any);
       Object.values(s.parameters ?? {}).forEach((p: any) => {
@@ -67,15 +120,21 @@ function parse(text: string): AppState {
     });
   };
   const seedFlow = (f: any) => {
-    f.$ui = f.$ui ?? { id: nanoid(), x: 60, y: 120, disconnected: [] };
-    f.$ui.id = f.$ui.id ?? nanoid();
-    f.$ui.x = f.$ui.x ?? 60;
-    f.$ui.y = f.$ui.y ?? 120;
+    ensureFlowUi(f);
     seedIds(f.steps ?? []);
     (f?.$ui?.disconnected ?? []).forEach((d: any) => seedIds(d.steps ?? []));
   };
   (obj?.flows ?? []).forEach(seedFlow);
   (obj?.closures ?? []).forEach(seedFlow);
+  (obj?.inputs ?? []).forEach((inp: any) => {
+    inp.triggers = inp.triggers ?? [];
+    inp.triggers.forEach((t: any, idx: number) => {
+      t.$ui = t.$ui ?? {};
+      t.$ui.id = t.$ui.id ?? nanoid();
+      t.$ui.x = t.$ui.x ?? 40;
+      t.$ui.y = t.$ui.y ?? 160 + idx * 90;
+    });
+  });
 
   return {
     version: obj?.version ?? 1,
@@ -90,31 +149,9 @@ function dump(app: AppState): string {
 }
 
 function getStep(flow: FlowWithUi, path: string): any {
-  const parts = path.split('.');
-  let cursor: any = flow as any;
-  for (const part of parts) {
-    const mSteps = part.match(/^steps\[(\d+)\]$/);
-    if (mSteps) { cursor = cursor?.steps?.[Number(mSteps[1])]; continue; }
-
-    const mCases = part.match(/^cases\[(\d+)\]$/);
-    if (mCases) { cursor = cursor?.cases?.[Number(mCases[1])]; continue; }
-
-    if (part === 'otherwise') { cursor = cursor?.otherwise; continue; }
-
-    const mDisc = part.match(/^\$ui\.disconnected\[(\d+)\]$/);
-    if (mDisc) { cursor = cursor?.$ui?.disconnected?.[Number(mDisc[1])]; continue; }
-
-    if (part === 'parameters') { cursor = cursor?.parameters ?? (cursor.parameters = {}); continue; }
-
-    if (cursor?.parameters && Object.prototype.hasOwnProperty.call(cursor.parameters, part)) { cursor = cursor.parameters[part]; continue; }
-    if (cursor && typeof cursor === 'object' && part in cursor && !Array.isArray(cursor)) { cursor = (cursor as any)[part]; continue; }
-    if (part === '$call') { cursor = cursor?.$call; continue; }
-    if (part === '$ui') { cursor = cursor?.$ui ?? (cursor.$ui = {}); continue; }
-
-    const arrIdx = part.match(/^\[(\d+)\]$/);
-    if (arrIdx && Array.isArray(cursor)) { cursor = cursor[Number(arrIdx[1])]; continue; }
-  }
-  return cursor ?? null;
+  if (path === "start") return flow;
+  const visit = walkFlow(flow).steps.find((v) => v.path === path);
+  return visit?.step ?? null;
 }
 
 function setStepUi(flow: FlowWithUi, path: string, ui: UiMeta) {
@@ -131,39 +168,47 @@ function setStepCall(flow: FlowWithUi, path: string, paramName: string, targetPa
   else delete step.parameters[paramName];
 }
 
-function resolveStepArray(flow: FlowWithUi, path: string): { arr: StepWithUi[]; idx: number; discIdx?: number; parentStepPath?: string; paramName?: string } | null {
+function resolveStepArray(flow: FlowWithUi, path: string): { arr: StepWithUi[]; idx: number; discIdx?: number } | null {
   if (path === "start") return { arr: flow.steps, idx: -1 };
-  const main = path.match(/^steps\[(\d+)\]$/);
-  if (main) return { arr: flow.steps, idx: Number(main[1]) };
-  const disc = path.match(/^\$ui\.disconnected\[(\d+)\]\.steps\[(\d+)\]$/);
-  if (disc) {
-    const di = Number(disc[1]);
-    const si = Number(disc[2]);
-    const arr = flow.$ui?.disconnected?.[di]?.steps;
-    if (!arr) return null;
-    return { arr, idx: si, discIdx: di };
+  const visit = walkFlow(flow).steps.find((v) => v.path === path);
+  if (!visit) return null;
+  return { arr: visit.arr, idx: visit.idx, discIdx: visit.discIdx };
+}
+
+function clearPathValue(root: any, path: string) {
+  const parts = path.split('.').filter(Boolean);
+  let cursor = root as any;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const keyIdx = part.match(/^([\w$]+)\[(\d+)\]$/);
+    const last = i === parts.length - 1;
+    if (keyIdx) {
+      const [, key, idxStr] = keyIdx;
+      const idx = Number(idxStr);
+      if (!cursor || typeof cursor !== "object" || !(key in cursor) || !Array.isArray(cursor[key])) return;
+      if (last) {
+        cursor[key].splice(idx, 1);
+        if (cursor[key].length === 0) delete cursor[key];
+      } else {
+        cursor = cursor[key][idx];
+      }
+      continue;
+    }
+    if (Array.isArray(cursor) && part.match(/^\d+$/)) {
+      const idx = Number(part);
+      if (last) {
+        cursor.splice(idx, 1);
+      } else {
+        cursor = cursor[idx];
+      }
+      continue;
+    }
+    if (last) {
+      delete cursor?.[part];
+    } else {
+      cursor = cursor?.[part];
+    }
   }
-  const paramSteps = path.match(/^(.*)\.parameters\.([^.]+)\.steps\[(\d+)\]$/);
-  if (paramSteps) {
-    const parentPath = paramSteps[1];
-    const paramName = paramSteps[2];
-    const idx = Number(paramSteps[3]);
-    const parent = getStep(flow, parentPath);
-    const arr = parent?.parameters?.[paramName]?.steps;
-    if (!Array.isArray(arr)) return null;
-    return { arr, idx, parentStepPath: parentPath, paramName };
-  }
-  const callSteps = path.match(/^(.*)\.parameters\.([^.]+)\.\$call\.steps\[(\d+)\]$/);
-  if (callSteps) {
-    const parentPath = callSteps[1];
-    const paramName = callSteps[2];
-    const idx = Number(callSteps[3]);
-    const parent = getStep(flow, parentPath);
-    const arr = parent?.parameters?.[paramName]?.$call?.steps;
-    if (!Array.isArray(arr)) return null;
-    return { arr, idx, parentStepPath: parentPath, paramName };
-  }
-  return null;
 }
 
 function detachChain(
@@ -204,13 +249,13 @@ function reseedUiIds(steps: StepWithUi[]) {
   });
 }
 
-function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string) {
+function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string): boolean {
   const src = resolveStepArray(flow, sourcePath);
   const tgt = resolveStepArray(flow, targetPath);
-  if (!src || !tgt || !flow.steps) return;
+  if (!src || !tgt || !flow.steps) return false;
   // prevent ancestor/descendant cycles
   const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".");
-  if (isBoundaryPrefix(sourcePath, targetPath) || isBoundaryPrefix(targetPath, sourcePath)) return;
+  if (isBoundaryPrefix(sourcePath, targetPath) || isBoundaryPrefix(targetPath, sourcePath)) return false;
 
   const isSrcMain = src.arr === flow.steps;
   const isTgtMain = tgt.arr === flow.steps;
@@ -219,7 +264,7 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string) {
   if (isSrcMain && isTgtMain) {
     const sIdx = src.idx;
     const tIdx = tgt.idx;
-    if (tIdx <= sIdx) return;
+    if (tIdx <= sIdx) return false;
     const steps = flow.steps;
     const head = sIdx === -1 ? [] : steps.slice(0, sIdx + 1);
     const orphan = steps.slice(sIdx + 1, tIdx);
@@ -230,7 +275,7 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string) {
       disc.push({ steps: orphan });
       flow.$ui = { ...(flow.$ui ?? {}), disconnected: disc };
     }
-    return;
+    return true;
   }
 
   // Case 2: source in disconnected, target in main -> splice chain before target
@@ -247,7 +292,7 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string) {
     const before = steps.slice(0, tIdx);
     const after = steps.slice(tIdx);
     flow.steps = [...before, ...chain, ...after];
-    return;
+    return true;
   }
 
   // Case 3: source main, target in disconnected -> attach that fragment after source, orphan everything after source
@@ -269,10 +314,46 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string) {
       disc.push({ steps: orphan });
       flow.$ui = { ...(flow.$ui ?? {}), disconnected: disc };
     }
+    return true;
   }
+
+  // Case 4: both disconnected -> splice source chain after target in target array
+  if (!isSrcMain && !isTgtMain && src.arr && tgt.arr) {
+    // Same fragment: reorder similar to main flow
+    if (src.arr === tgt.arr) {
+      const sIdx = src.idx;
+      const tIdx = tgt.idx;
+      if (tIdx <= sIdx) return false;
+      const head = src.arr.slice(0, sIdx + 1);
+      const orphan = src.arr.slice(sIdx + 1, tIdx);
+      const tail = src.arr.slice(tIdx);
+      src.arr.length = 0;
+      src.arr.push(...head, ...tail);
+      if (orphan.length) {
+        const disc = flow.$ui?.disconnected ?? [];
+        disc.push({ steps: orphan });
+        flow.$ui = { ...(flow.$ui ?? {}), disconnected: disc };
+      }
+      return true;
+    }
+
+    // Different fragments: splice source chain before target in target fragment
+    const chain = src.arr.slice(src.idx);
+    src.arr.splice(src.idx, chain.length);
+    if (typeof src.discIdx === "number" && src.arr.length === 0) {
+      const discList = flow.$ui?.disconnected ?? [];
+      discList.splice(src.discIdx, 1);
+      flow.$ui = { ...(flow.$ui ?? {}), disconnected: discList };
+    }
+    const insertPos = Math.max(0, Math.min(tgt.idx, tgt.arr.length));
+    tgt.arr.splice(insertPos, 0, ...chain);
+    return true;
+  }
+
+  return false;
 }
 
-function attachCallChain(flow: FlowWithUi, callerPath: string, paramName: string, targetPath: string) {
+function attachCallChainByPath(flow: FlowWithUi, callerPath: string, paramName: string, targetPath: string) {
   const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".") || a === b;
   if (isBoundaryPrefix(callerPath, targetPath) || isBoundaryPrefix(targetPath, callerPath)) return;
   const caller = getStep(flow, callerPath);
@@ -285,7 +366,7 @@ function attachCallChain(flow: FlowWithUi, callerPath: string, paramName: string
   caller.parameters[paramName] = { $call: { steps: detached.chain } };
 }
 
-function attachFlowStepsChain(flow: FlowWithUi, callerPath: string, paramName: string, targetPath: string) {
+function attachFlowStepsChainByPath(flow: FlowWithUi, callerPath: string, paramName: string, targetPath: string) {
   const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".") || a === b;
   if (isBoundaryPrefix(callerPath, targetPath) || isBoundaryPrefix(targetPath, callerPath)) return;
   const caller = getStep(flow, callerPath);
@@ -348,18 +429,29 @@ function findFlowOrClosure(app: AppState, name: string): { kind: "flows" | "clos
   return null;
 }
 
-function setTriggerUi(inputs: any[], path: string, ui: UiMeta) {
-  // path like inputs[0].triggers[1]
-  const match = path.match(/inputs\[(\d+)\]\.triggers\[(\d+)\]/);
-  if (!match) return;
-  const [, iStr, tStr] = match;
-  const i = Number(iStr);
-  const t = Number(tStr);
-  if (!inputs[i]) return;
-  const triggers = inputs[i].triggers ?? [];
-  if (!triggers[t]) return;
-  triggers[t] = { ...(triggers[t] ?? {}), $ui: { ...(triggers[t]?.$ui ?? {}), ...ui } };
-  inputs[i] = { ...inputs[i], triggers: [...triggers] };
+function findTriggerById(inputs: any[], triggerId: string): { inputIdx: number; triggerIdx: number } | null {
+  for (let i = 0; i < inputs.length; i++) {
+    const triggers = inputs[i]?.triggers ?? [];
+    for (let t = 0; t < triggers.length; t++) {
+      if (triggers[t]?.$ui?.id === triggerId) {
+        return { inputIdx: i, triggerIdx: t };
+      }
+    }
+  }
+  return null;
+}
+
+function findStepById(flow: FlowWithUi, id: string): { step: StepWithUi | null; path: string | null } {
+  const visit = walkFlow(flow).steps.find((v) => v.step?.$ui?.id === id);
+  return visit ? { step: visit.step, path: visit.path } : { step: null, path: null };
+}
+
+function disconnectedGuard(loc?: NodeIndexEntry): string | null {
+  if (!loc) return "Node not found";
+  if (typeof loc.discIdx === "number" && (loc.idx ?? 0) > 0) {
+    return "Node must be the first step in a disconnected chain before connecting.";
+  }
+  return null;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -402,86 +494,241 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const closures = state.app.closures.filter((_, i) => i !== idx);
       return { app: { ...state.app, closures } };
     }),
-  updateStepUi: (flowName, stepPath, ui) =>
+  attachCallChain: (flowName, fromId, paramName, targetId) => {
+    let outcome: OperationResult = { ok: false, error: "Node not found" };
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
       const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
         if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
-        setStepUi(copy, stepPath, ui);
+        const index = buildNodeIndex(copy);
+        const fromLoc = index.byId[fromId];
+        const tgtLoc = index.byId[targetId];
+        const guard = disconnectedGuard(tgtLoc);
+        if (!fromLoc || !tgtLoc || guard) {
+          outcome = { ok: false, error: guard ?? "Node not found" };
+          return f;
+        }
+        const fromStep = getStep(copy, fromLoc.path);
+        const existing = fromStep?.parameters?.[paramName];
+        if (existing && ((Array.isArray(existing.steps) && existing.steps.length) || (existing.$call && (typeof existing.$call === "string" || Array.isArray(existing.$call?.steps))))) {
+          outcome = { ok: false, error: "Remove existing connection first." };
+          return f;
+        }
+        attachCallChainByPath(copy, fromLoc.path, paramName, tgtLoc.path);
+        outcome = { ok: true };
         return copy;
       });
       return { app: { ...state.app, [where.kind]: list } as AppState };
-    }),
-  updateStepCallTarget: (flowName, stepPath, paramName, targetPath) =>
+    });
+    return outcome;
+  },
+  attachFlowStepsChain: (flowName, fromId, paramName, targetId) => {
+    let outcome: OperationResult = { ok: false, error: "Node not found" };
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
       const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
         if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
-        setStepCall(copy, stepPath, paramName, targetPath);
+        const index = buildNodeIndex(copy);
+        const fromLoc = index.byId[fromId];
+        const tgtLoc = index.byId[targetId];
+        const guard = disconnectedGuard(tgtLoc);
+        if (!fromLoc || !tgtLoc || guard) {
+          outcome = { ok: false, error: guard ?? "Node not found" };
+          return f;
+        }
+        const fromStep = getStep(copy, fromLoc.path);
+        const existing = fromStep?.parameters?.[paramName];
+        if (existing && ((Array.isArray(existing) && existing.length) || (Array.isArray(existing?.steps) && existing.steps.length))) {
+          outcome = { ok: false, error: "Remove existing connection first." };
+          return f;
+        }
+        attachFlowStepsChainByPath(copy, fromLoc.path, paramName, tgtLoc.path);
+        outcome = { ok: true };
         return copy;
       });
       return { app: { ...state.app, [where.kind]: list } as AppState };
-    }),
-  attachCallChain: (flowName, stepPath, paramName, targetPath) =>
+    });
+    return outcome;
+  },
+  moveStepChainAfter: (flowName, sourceId, targetId) => {
+    let outcome: OperationResult = { ok: false, error: "Node not found" };
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
       const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
         if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
-        attachCallChain(copy, stepPath, paramName, targetPath);
+        const index = buildNodeIndex(copy);
+        const srcLoc = index.byId[sourceId];
+        const tgtLoc = index.byId[targetId];
+        const guard = disconnectedGuard(tgtLoc);
+        if (!srcLoc || !tgtLoc || guard) {
+          outcome = { ok: false, error: guard ?? "Node not found" };
+          return f;
+        }
+        // prevent overriding existing "next" without removal
+        const walk = walkFlow(copy);
+        const arrMeta = walk.arrays.find((a) => a.stepPaths.includes(srcLoc.path));
+        const nextPath = arrMeta?.stepPaths[arrMeta.stepPaths.indexOf(srcLoc.path) + 1];
+        if (nextPath && nextPath !== tgtLoc.path) {
+          outcome = { ok: false, error: "Remove existing next connection first." };
+          return f;
+        }
+        const moved = moveChain(copy, srcLoc.path, tgtLoc.path);
+        outcome = moved ? { ok: true } : { ok: false, error: "Unable to move chain" };
         return copy;
       });
       return { app: { ...state.app, [where.kind]: list } as AppState };
-    }),
-  attachFlowStepsChain: (flowName, stepPath, paramName, targetPath) =>
+    });
+    return outcome;
+  },
+  removeConnection: (flowName, fromId, toId, label) => {
+    let outcome: OperationResult = { ok: false, error: "Connection not found" };
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
       const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
         if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
-        attachFlowStepsChain(copy, stepPath, paramName, targetPath);
-        return copy;
+        ensureFlowUi(copy);
+        const index = buildNodeIndex(copy);
+        const walk = walkFlow(copy);
+        const fromPath = index.pathById[fromId];
+        const toPath = index.pathById[toId];
+        const fromVisit = walk.steps.find((v) => v.path === fromPath);
+        const toVisit = walk.steps.find((v) => v.path === toPath);
+        // special case start -> first
+        if (fromPath === "start" && toVisit) {
+          const main = copy.steps ?? [];
+          const tail = main.splice(toVisit.idx);
+          if (tail.length) {
+            copy.$ui = { ...(copy.$ui ?? {}), disconnected: [...(copy.$ui?.disconnected ?? []), { steps: tail }] };
+            outcome = { ok: true };
+            return copy;
+          }
+        }
+        if (!fromVisit || !toVisit) {
+          outcome = { ok: false, error: "Connection not found" };
+          return f;
+        }
+
+        // find array meta containing the target
+        const arrMeta = walk.arrays.find((a) => a.stepPaths.includes(toPath));
+        if (arrMeta?.parentStepPath) {
+          // parameter flowSteps: detach entire array, clear param slot, push to disconnected
+          const parent = getStep(copy, arrMeta.parentStepPath);
+          if (!parent) {
+            outcome = { ok: false, error: "Parent not found" };
+            return f;
+          }
+          const detached = arrMeta.steps.splice(0, arrMeta.steps.length);
+          copy.$ui = { ...(copy.$ui ?? {}), disconnected: [...(copy.$ui?.disconnected ?? []), { steps: detached }] };
+          clearPathValue(parent, arrMeta.pathPrefix.replace(`${arrMeta.parentStepPath}.`, "").replace(/\.$/, ""));
+          outcome = { ok: true };
+          return copy;
+        }
+
+        // main flow: if consecutive in same array, detach tail starting at target into disconnected
+        if (fromVisit.arr === toVisit.arr && toVisit.idx === fromVisit.idx + 1) {
+          const tail = fromVisit.arr.splice(toVisit.idx);
+          if (tail.length) {
+            copy.$ui = { ...(copy.$ui ?? {}), disconnected: [...(copy.$ui?.disconnected ?? []), { steps: tail }] };
+            outcome = { ok: true };
+            return copy;
+          }
+        }
+
+        // fallback: detach target chain into disconnected
+        const chainCtx = detachChain(copy, toPath, { arr: fromVisit.arr, idx: fromVisit.idx });
+        if (chainCtx?.chain?.length) {
+          copy.$ui = { ...(copy.$ui ?? {}), disconnected: [...(copy.$ui?.disconnected ?? []), { steps: chainCtx.chain }] };
+          outcome = { ok: true };
+          return copy;
+        }
+
+        outcome = { ok: false, error: "Unable to remove connection" };
+        return f;
       });
       return { app: { ...state.app, [where.kind]: list } as AppState };
-    }),
-  moveStepChainAfter: (flowName, sourceStepPath, targetStepPath) =>
+    });
+    return outcome;
+  },
+  deleteNode: (flowName, nodeId) => {
+    let outcome: OperationResult = { ok: false, error: "Node not found" };
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
       const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
         if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
-        moveChain(copy, sourceStepPath, targetStepPath);
+        const index = buildNodeIndex(copy);
+        const path = index.pathById[nodeId];
+        if (!path || path === "start") {
+          outcome = { ok: false, error: "Cannot delete this node" };
+          return f;
+        }
+        const arrInfo = resolveStepArray(copy, path);
+        if (!arrInfo) {
+          outcome = { ok: false, error: "Unable to resolve node location" };
+          return f;
+        }
+        arrInfo.arr.splice(arrInfo.idx, 1);
+        // clean up empty disconnected fragment
+        if (typeof arrInfo.discIdx === "number" && arrInfo.arr.length === 0) {
+          const disc = copy.$ui?.disconnected ?? [];
+          disc.splice(arrInfo.discIdx, 1);
+          copy.$ui = { ...(copy.$ui ?? {}), disconnected: disc };
+        }
+        // if parameter array emptied, clear its holder
+        if (arrInfo.arr.length === 0) {
+          const arrayPath = path.replace(/\[\d+\]$/, "");
+          clearPathValue(copy, arrayPath);
+        }
+        outcome = { ok: true };
         return copy;
       });
       return { app: { ...state.app, [where.kind]: list } as AppState };
-    }),
-  updateTriggerUi: (triggerPath, ui) =>
+    });
+    return outcome;
+  },
+  updateNodeUi: (flowName, nodeId, ui) =>
     set((state) => {
       const inputs = JSON.parse(JSON.stringify(state.app.inputs ?? []));
-      setTriggerUi(inputs, triggerPath, ui);
-      return { app: { ...state.app, inputs } };
-    }),
-  updateNodeUi: (flowName, path, ui) => {
-    if (path === "$ui") {
-      return set((state) => {
-        const where = findFlowOrClosure(state.app, flowName);
-        if (!where) return state;
-        const list = state.app[where.kind].map((f: FlowWithUi) => (f.name === flowName ? { ...f, $ui: { ...(f.$ui ?? {}), ...ui } } : f));
-        return { app: { ...state.app, [where.kind]: list } as AppState };
+      const triggerLoc = findTriggerById(inputs, nodeId);
+      if (triggerLoc) {
+        const triggers = inputs[triggerLoc.inputIdx].triggers ?? [];
+        const current = triggers[triggerLoc.triggerIdx] ?? {};
+        triggers[triggerLoc.triggerIdx] = { ...current, $ui: { ...(current.$ui ?? {}), ...ui } };
+        inputs[triggerLoc.inputIdx] = { ...inputs[triggerLoc.inputIdx], triggers: [...triggers] };
+        return { app: { ...state.app, inputs } };
+      }
+
+      const where = findFlowOrClosure(state.app, flowName);
+      if (!where) return state;
+      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+        if (i !== where.idx) return f;
+        const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
+        const index = buildNodeIndex(copy);
+        const path = index.pathById[nodeId];
+        if (!path) {
+          const fallback = findStepById(copy, nodeId);
+          if (!fallback.path) return f;
+          setStepUi(copy, fallback.path, ui);
+          return copy;
+        }
+        if (path === "start") {
+          copy.$ui = { ...(copy.$ui ?? {}), ...ui };
+        } else {
+          setStepUi(copy, path, ui);
+        }
+        return copy;
       });
-    }
-    if (path.startsWith("inputs[")) {
-      return (useAppStore.getState() as any).updateTriggerUi(path, ui);
-    }
-    return (useAppStore.getState() as any).updateStepUi(flowName, path, ui);
-  },
+      return { app: { ...state.app, [where.kind]: list } as AppState };
+    }),
   addDisconnected: (flowName, steps) =>
     set((state) => {
       const flows = state.app.flows.map((f) => {
@@ -499,7 +746,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
         target = { type, config: {}, triggers: [] as any[] };
         inputs.push(target);
       }
-      target.triggers = [...(target.triggers ?? []), { flow: flowName, $ui: { x: 40, y: 160 + (target.triggers?.length ?? 0) * 90 } }];
+      target.triggers = [
+        ...(target.triggers ?? []),
+        { flow: flowName, $ui: { id: nanoid(), x: 40, y: 160 + (target.triggers?.length ?? 0) * 90 } }
+      ];
       return { app: { ...state.app, inputs } };
     }),
   addClosureStep: (collection, flowIdx, closureName) =>
@@ -508,35 +758,41 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const list = state.app[key].map((f: any) => ({ ...f, steps: [...(f.steps ?? [])] }));
       const flow = list[flowIdx] ?? list[0];
       if (!flow) return state;
-      flow.steps = [
-        ...(flow.steps ?? []),
-        { closure: closureName, parameters: {}, $ui: { id: nanoid(), x: 240, y: 200 + (flow.steps?.length ?? 0) * 120 } }
-      ];
+      ensureFlowUi(flow);
+      const disc = flow.$ui?.disconnected ?? [];
+      const step: StepWithUi = {
+        closure: closureName,
+        parameters: {},
+        $ui: { id: nanoid(), x: 240, y: 200 + (flow.steps?.length ?? 0) * 120 }
+      };
+      disc.push({ steps: [step] });
+      flow.$ui = { ...(flow.$ui ?? {}), disconnected: disc };
       list[flowIdx] = flow;
       return { app: { ...state.app, [key]: list } as AppState };
-    }),
-  updateStepParam: (flowName, stepPath, key, value) =>
+  }),
+  updateStepParam: (flowName, nodeId, key, value) =>
     set((state) => {
-      const flows = state.app.flows.map((f) => {
-        if (f.name !== flowName) return f;
+      const where = findFlowOrClosure(state.app, flowName);
+      if (!where) return state;
+      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+        if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
-        setStepParam(copy, stepPath, key, value);
+        const index = buildNodeIndex(copy);
+        const path = index.pathById[nodeId];
+        if (!path) return f;
+        setStepParam(copy, path, key, value);
         return copy;
       });
-      return { app: { ...state.app, flows } };
+      return { app: { ...state.app, [where.kind]: list } as AppState };
     }),
-  updateTriggerField: (triggerPath, key, value) =>
+  updateTriggerField: (triggerId, key, value) =>
     set((state) => {
       const inputs = JSON.parse(JSON.stringify(state.app.inputs ?? []));
-      const match = triggerPath.match(/inputs\[(\d+)\]\.triggers\[(\d+)\]/);
-      if (!match) return state;
-      const [, iStr, tStr] = match;
-      const i = Number(iStr);
-      const t = Number(tStr);
-      if (!inputs[i] || !inputs[i].triggers?.[t]) return state;
-      const trig = { ...(inputs[i].triggers[t] ?? {}) };
+      const loc = findTriggerById(inputs, triggerId);
+      if (!loc) return state;
+      const trig = { ...(inputs[loc.inputIdx].triggers?.[loc.triggerIdx] ?? {}) };
       trig[key] = value;
-      inputs[i].triggers[t] = trig;
+      inputs[loc.inputIdx].triggers[loc.triggerIdx] = trig;
       return { app: { ...state.app, inputs } };
     }),
   updateInputConfig: (inputIdx, key, value) =>

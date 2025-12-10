@@ -3,36 +3,25 @@ import { useFlowStore } from "../state/flowStore";
 import { useAppStore } from "../state/appStore";
 import { useCatalogStore } from "../state/catalogStore";
 import { buildGraph } from "../utils/graph";
+import { buildNodeIndex } from "../state/appStore";
 
 type ParamMeta = { name: string; type?: string; required?: boolean; enum?: string[]; children?: ParamMeta[]; skipTemplateResolution?: boolean };
 
-function resolveStep(flow: any, path: string | null): any | null {
-  if (!path) return null;
-  const parts = path.split('.');
-  let cur: any = { steps: flow.steps, $ui: flow.$ui, parameters: flow.parameters };
-  for (const part of parts) {
-    const mSteps = part.match(/^steps\[(\d+)\]$/);
-    if (mSteps) { cur = cur?.steps?.[Number(mSteps[1])]; continue; }
-    const mDisc = part.match(/^\$ui\.disconnected\[(\d+)\]$/);
-    if (mDisc) { cur = cur?.$ui?.disconnected?.[Number(mDisc[1])]; continue; }
-    const mCases = part.match(/^cases\[(\d+)\]$/);
-    if (mCases) { cur = cur?.cases?.[Number(mCases[1])]; continue; }
-    if (part === 'otherwise') { cur = cur?.otherwise; continue; }
-    if (part === 'parameters') { cur = cur?.parameters; continue; }
-    if (cur?.parameters && Object.prototype.hasOwnProperty.call(cur.parameters, part)) { cur = cur.parameters[part]; continue; }
-    if (part === '$call') { cur = cur?.$call; continue; }
+function findTriggerById(app: any, flowName: string | undefined, triggerId: string) {
+  if (!flowName) return null;
+  for (let i = 0; i < (app.inputs ?? []).length; i++) {
+    const triggers = app.inputs[i]?.triggers ?? [];
+    for (let t = 0; t < triggers.length; t++) {
+      if (triggers[t]?.flow === flowName && triggers[t]?.$ui?.id === triggerId) {
+        return { inputIdx: i, triggerIdx: t };
+      }
+    }
   }
-  return cur ?? null;
-}
-
-function inputPathPieces(path: string) {
-  const m = path.match(/inputs\[(\d+)\]\.triggers\[(\d+)\]/);
-  if (!m) return null;
-  return { inputIdx: Number(m[1]), triggerIdx: Number(m[2]) };
+  return null;
 }
 
 const Inspector: React.FC = () => {
-  const selection = useFlowStore((s) => s.selection.nodePath);
+  const selection = useFlowStore((s) => s.selection.nodeId);
   const app = useAppStore((s) => s.app);
   const mode = useFlowStore((s) => s.activeMode);
   const flowIdx = useFlowStore((s) => (s.activeMode === "flow" ? s.activeFlowId : s.activeClosureId));
@@ -42,6 +31,7 @@ const Inspector: React.FC = () => {
   const catalog = useCatalogStore((s) => s);
   const flow = mode === "flow" ? app.flows[flowIdx] ?? app.flows[0] : app.closures[flowIdx] ?? app.closures[0];
   const graph = flow ? buildGraph(flow as any, app.inputs) : { pathById: {} as Record<string, string>, nodes: [] as any[] };
+  const nodeIndex = flow ? buildNodeIndex(flow as any) : { byId: {}, idByPath: {}, pathById: {} };
 
   if (!selection || !flow) {
     return (
@@ -53,9 +43,9 @@ const Inspector: React.FC = () => {
   }
 
   // Input trigger editing
-  const inputPieces = inputPathPieces(selection);
-  if (inputPieces) {
-    const { inputIdx, triggerIdx } = inputPieces;
+  const triggerLoc = findTriggerById(app, flow?.name, selection);
+  if (triggerLoc) {
+    const { inputIdx, triggerIdx } = triggerLoc;
     const input = app.inputs[inputIdx];
     const trigger = input?.triggers?.[triggerIdx];
     const meta = catalog.inputsMeta[input?.type ?? ""] ?? {};
@@ -97,11 +87,19 @@ const Inspector: React.FC = () => {
   }
 
   // Step editing
-  const step = resolveStep(flow, selection);
-  const node =
-    selection &&
-    (graph.nodes as any[]).find((n) => (graph.pathById as Record<string, string>)[n.id] === selection || n.id === selection);
+  const stepLoc = nodeIndex.byId?.[selection];
+  const step =
+    stepLoc && stepLoc.kind === "step" && Array.isArray(stepLoc.arr) && typeof stepLoc.idx === "number" ? stepLoc.arr[stepLoc.idx] : null;
+  const node = selection && (graph.nodes as any[]).find((n) => n.id === selection);
   const nodeLabel = node?.label;
+  if (!step) {
+    return (
+      <div className="panel">
+        <h3>Inspector</h3>
+        <p style={{ color: "var(--muted)" }}>Select a step to edit its parameters.</p>
+      </div>
+    );
+  }
   const closureName =
     step?.closure ??
     (typeof step?.type === "string" ? step.type : undefined) ??

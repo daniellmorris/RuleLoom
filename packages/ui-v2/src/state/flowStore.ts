@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type Selection = { nodePath: string | null };
+type Selection = { nodeId: string | null };
 
 interface FlowState {
   activeMode: "flow" | "closure";
@@ -10,16 +10,16 @@ interface FlowState {
   setActiveFlow: (idx: number) => void;
   setActiveClosure: (idx: number) => void;
   setActiveMode: (mode: "flow" | "closure") => void;
-  selectNode: (path: string | null) => void;
+  selectNode: (nodeId: string | null) => void;
 }
 
 export const useFlowStore = create<FlowState>((set) => ({
   activeMode: "flow",
   activeFlowId: 0,
   activeClosureId: 0,
-  selection: { nodePath: null },
-  setActiveFlow: (idx) => set({ activeMode: "flow", activeFlowId: idx, selection: { nodePath: null } }),
-  setActiveClosure: (idx) => set({ activeMode: "closure", activeClosureId: idx, selection: { nodePath: null } }),
-  setActiveMode: (mode) => set({ activeMode: mode, selection: { nodePath: null } }),
-  selectNode: (path) => set({ selection: { nodePath: path } }),
+  selection: { nodeId: null },
+  setActiveFlow: (idx) => set({ activeMode: "flow", activeFlowId: idx, selection: { nodeId: null } }),
+  setActiveClosure: (idx) => set({ activeMode: "closure", activeClosureId: idx, selection: { nodeId: null } }),
+  setActiveMode: (mode) => set({ activeMode: mode, selection: { nodeId: null } }),
+  selectNode: (nodeId) => set({ selection: { nodeId } }),
 }));

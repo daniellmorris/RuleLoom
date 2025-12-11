@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import clsx from "clsx";
 import { useFlowStore } from "../state/flowStore";
 import { useAppStore } from "../state/appStore";
@@ -8,32 +8,49 @@ import { getNodeColor } from "../styles/palette";
 import { Connector, Edge, Node } from "../types";
 
 const NODE_WIDTH = 180;
-const NODE_HEIGHT = 80;
+const NODE_MIN_HEIGHT = 80;
 const CONNECTOR_COLORS = ["#7dd3fc", "#fbbf24", "#a78bfa", "#34d399", "#f87171", "#38bdf8"];
 
 const Canvas: React.FC = () => {
   const app = useAppStore((s) => s.app);
-  const setFlowStartUi = useAppStore((s) => s.updateNodeUi); // reuse node UI updater for start via flow $ui path
   const mode = useFlowStore((s) => s.activeMode);
   const activeFlowIdx = useFlowStore((s) => s.activeFlowId);
   const activeClosureIdx = useFlowStore((s) => s.activeClosureId);
   const flow = mode === "flow" ? app.flows[activeFlowIdx] ?? app.flows[0] : app.closures[activeClosureIdx] ?? app.closures[0];
-  const { nodes, edges, pathById } = flow ? buildGraph(flow as any, mode === "flow" ? app.inputs : []) : { nodes: [], edges: [], pathById: {} };
-  const selection = useFlowStore((s) => s.selection.nodePath);
+  const { nodes, edges } = flow ? buildGraph(flow as any, mode === "flow" ? app.inputs : []) : { nodes: [], edges: [] as Edge[] };
+  const selection = useFlowStore((s) => s.selection.nodeId);
   const selectNode = useFlowStore((s) => s.selectNode);
   const updateNodeUi = useAppStore((s) => s.updateNodeUi);
   const attachCallChain = useAppStore((s) => s.attachCallChain);
   const attachFlowStepsChain = useAppStore((s) => s.attachFlowStepsChain);
   const moveStepChainAfter = useAppStore((s) => s.moveStepChainAfter);
+  const removeConnection = useAppStore((s) => s.removeConnection);
+  const deleteNode = useAppStore((s) => s.deleteNode);
   const closuresMeta = useCatalogStore((s) => s.closuresMeta);
 
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
   const [ghost, setGhost] = useState<{ fromX: number; fromY: number; toX: number; toY: number; color: string } | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const errorTimer = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ id: string; path: string; offsetX: number; offsetY: number } | null>(null);
+  const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
   const panningRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
-  const linkRef = useRef<{ fromPath: string; connectorId: string; color: string }>({ fromPath: "", connectorId: "", color: "" });
+  const linkRef = useRef<{ fromId: string; connectorId: string; color: string }>({ fromId: "", connectorId: "", color: "" });
+
+  const showError = useCallback((msg: string) => {
+    setErrorMsg(msg);
+    if (errorTimer.current) {
+      window.clearTimeout(errorTimer.current);
+    }
+    errorTimer.current = window.setTimeout(() => setErrorMsg(null), 2500);
+  }, []);
+
+  const handleResult = (res: any) => {
+    if (res && typeof res === "object" && "ok" in res && !res.ok && "error" in res) {
+      showError(res.error as string);
+    }
+  };
 
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -66,18 +83,14 @@ const Canvas: React.FC = () => {
 
   const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (dragRef.current) {
-      const { id, path, offsetX, offsetY } = dragRef.current;
+      const { id, offsetX, offsetY } = dragRef.current;
       const wp = worldPos(e.clientX, e.clientY);
       const x = wp.x - offsetX;
       const y = wp.y - offsetY;
-      if (id === "start") {
-        setFlowStartUi(flow.name, "$ui", { x, y });
-      } else {
-        updateNodeUi(flow.name, path, { x, y });
-      }
+      updateNodeUi(flow.name, id, { x, y });
       return;
     }
-    if (linkRef.current.fromPath) {
+    if (linkRef.current.fromId) {
       const wp = worldPos(e.clientX, e.clientY);
       setGhost((g) => (g ? { ...g, toX: wp.x, toY: wp.y } : g));
     }
@@ -91,18 +104,34 @@ const Canvas: React.FC = () => {
   const onMouseUp = () => {
     dragRef.current = null;
     panningRef.current = null;
-    linkRef.current = { fromPath: "", connectorId: "", color: "" };
+    linkRef.current = { fromId: "", connectorId: "", color: "" };
     setGhost(null);
   };
 
   const width = Math.max(...nodes.map((n) => n.x + NODE_WIDTH), 1200);
-  const height = Math.max(...nodes.map((n) => n.y + NODE_HEIGHT), 720);
+  const height = Math.max(...nodes.map((n) => n.y + NODE_MIN_HEIGHT), 720);
 
   // Precompute connectors per node for edge anchoring
   const connectorsByNode: Record<string, Connector[]> = {};
   nodes.forEach((n) => {
     connectorsByNode[n.id] = buildConnectors(n, closuresMeta[n.data?.closureName ?? ""]);
   });
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const currentSelection = useFlowStore.getState().selection.nodeId;
+      const flowName =
+        mode === "flow"
+          ? app.flows[useFlowStore.getState().activeFlowId]?.name ?? app.flows[0]?.name
+          : app.closures[useFlowStore.getState().activeClosureId]?.name ?? app.closures[0]?.name;
+      if (!currentSelection || !flowName) return;
+      const res = deleteNode(flowName, currentSelection);
+      if (!res.ok) showError(res.error);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [app.flows, app.closures, mode, deleteNode, showError]);
 
   return (
     <div
@@ -126,7 +155,18 @@ const Canvas: React.FC = () => {
             ))}
           </defs>
           {edges.map((edge) => (
-            <EdgeLine key={edge.id} edge={edge} nodes={nodes} connectorsByNode={connectorsByNode} selected={selection === pathById[edge.id]} />
+            <EdgeLine
+              key={edge.id}
+              edge={edge}
+              nodes={nodes}
+              connectorsByNode={connectorsByNode}
+              selected={selection === edge.from || selection === edge.to}
+              onDelete={() => {
+                if (!flow) return;
+                const res = removeConnection(flow.name, edge.from, edge.to, edge.label);
+                if (!res.ok) showError(res.error);
+              }}
+            />
           ))}
           {ghost && (
             <path
@@ -141,70 +181,53 @@ const Canvas: React.FC = () => {
         </svg>
         {nodes.map((node) => {
           const connectors = connectorsByNode[node.id] ?? [];
+          const nodeHeight = Math.max(NODE_MIN_HEIGHT, 60 + connectors.length * 28);
           return (
             <div
               key={node.id}
               data-node-id={node.id}
-              className={clsx("node-card", selection === pathById[node.id] && "selected")}
+              className={clsx("node-card", selection === node.id && "selected")}
               onMouseDown={(e) => {
                 e.stopPropagation();
-                const path = pathById[node.id];
-                if (linkRef.current.fromPath) {
-                  const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".");
-                  if (path && (isBoundaryPrefix(linkRef.current.fromPath, path) || isBoundaryPrefix(path, linkRef.current.fromPath))) {
-                    linkRef.current = { fromPath: "", connectorId: "", color: "" };
-                    setGhost(null);
-                    return;
-                  }
+                const nodeId = node.id;
+                if (linkRef.current.fromId) {
+                  const fromConnectors = connectorsByNode[linkRef.current.fromId] ?? [];
+                  const connector = fromConnectors.find((c) => c.id === linkRef.current.connectorId);
                   if (linkRef.current.connectorId === "next") {
-                    moveStepChainAfter(flow.name, linkRef.current.fromPath, path ?? "");
+                    handleResult(moveStepChainAfter(flow.name, linkRef.current.fromId, nodeId));
+                  } else if (connector?.direction === "dynamic") {
+                    handleResult(attachFlowStepsChain(flow.name, linkRef.current.fromId, linkRef.current.connectorId, nodeId));
                   } else {
-                    const fromNodeId = nodes.find((n) => pathById[n.id] === linkRef.current.fromPath)?.id;
-                    const fromConnectors = fromNodeId ? connectorsByNode[fromNodeId] ?? [] : [];
-                    const connector = fromConnectors.find((c) => c.id === linkRef.current.connectorId);
-                    if (connector?.direction === "dynamic") {
-                      attachFlowStepsChain(flow.name, linkRef.current.fromPath, linkRef.current.connectorId, path ?? "");
-                    } else {
-                      attachCallChain(flow.name, linkRef.current.fromPath, linkRef.current.connectorId, path ?? "");
-                    }
+                    handleResult(attachCallChain(flow.name, linkRef.current.fromId, linkRef.current.connectorId, nodeId));
                   }
-                  linkRef.current = { fromPath: "", connectorId: "", color: "" };
+                  linkRef.current = { fromId: "", connectorId: "", color: "" };
                   setGhost(null);
                   return;
                 }
-                selectNode(path ?? null);
+                selectNode(nodeId ?? null);
                 const wp = worldPos(e.clientX, e.clientY);
                 dragRef.current = {
                   id: node.id,
-                  path: path ?? "",
                   offsetX: wp.x - node.x,
                   offsetY: wp.y - node.y
                 };
               }}
               onMouseUp={(e) => {
-                if (!linkRef.current.fromPath) return;
+                if (!linkRef.current.fromId) return;
                 e.stopPropagation();
-                const path = pathById[node.id];
-                if (!path) return;
-                const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".");
-                if (isBoundaryPrefix(linkRef.current.fromPath, path) || isBoundaryPrefix(path, linkRef.current.fromPath)) {
-                  linkRef.current = { fromPath: "", connectorId: "", color: "" };
-                  setGhost(null);
-                  return;
-                }
+                const nodeId = node.id;
                 if (linkRef.current.connectorId === "next") {
-                  moveStepChainAfter(flow.name, linkRef.current.fromPath, path);
+                  handleResult(moveStepChainAfter(flow.name, linkRef.current.fromId, nodeId));
                 } else {
-                  const fromNodeId = nodes.find((n) => pathById[n.id] === linkRef.current.fromPath)?.id;
-                  const fromConnectors = fromNodeId ? connectorsByNode[fromNodeId] ?? [] : [];
+                  const fromConnectors = connectorsByNode[linkRef.current.fromId] ?? [];
                   const connector = fromConnectors.find((c) => c.id === linkRef.current.connectorId);
                   if (connector?.direction === "dynamic") {
-                    attachFlowStepsChain(flow.name, linkRef.current.fromPath, linkRef.current.connectorId, path);
+                    handleResult(attachFlowStepsChain(flow.name, linkRef.current.fromId, linkRef.current.connectorId, nodeId));
                   } else {
-                    attachCallChain(flow.name, linkRef.current.fromPath, linkRef.current.connectorId, path);
+                    handleResult(attachCallChain(flow.name, linkRef.current.fromId, linkRef.current.connectorId, nodeId));
                   }
                 }
-                linkRef.current = { fromPath: "", connectorId: "", color: "" };
+                linkRef.current = { fromId: "", connectorId: "", color: "" };
                 setGhost(null);
               }}
               style={{
@@ -212,23 +235,38 @@ const Canvas: React.FC = () => {
                 left: node.x,
                 top: node.y,
                 width: NODE_WIDTH,
-                minHeight: NODE_HEIGHT,
+                minHeight: nodeHeight,
                 borderRadius: 14,
                 border: "1px solid var(--panel-border)",
                 background: "rgba(255,255,255,0.03)",
                 boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
-                overflow: "visible"
+                overflow: "visible",
+                paddingRight: 10
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", alignItems: "center", gap: 8, marginBottom: 6, paddingRight: 4 }}>
                 <div style={{ width: 12, height: 12, borderRadius: 6, background: getNodeColor(node.kind), boxShadow: `0 0 0 4px ${getNodeColor(node.kind)}22` }} />
-                <div style={{ fontWeight: 700 }}>{node.label}</div>
-                <span className="badge" style={{ marginLeft: "auto" }}>{node.kind}</span>
+                <div style={{ fontWeight: 700, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{node.label}</div>
+                <span className="badge" style={{ justifySelf: "end" }}>{node.kind}</span>
+                <button
+                  className="button tertiary"
+                  style={{ padding: "2px 6px", justifySelf: "end" }}
+                  title="Delete node"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const res = deleteNode(flow.name, node.id);
+                    if (!res.ok) showError(res.error);
+                    else selectNode(null);
+                  }}
+                >
+                  ✕
+                </button>
               </div>
               {/* connector dots along right edge */}
-              <div style={{ position: "absolute", right: -6, top: 36, display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ position: "absolute", right: -8, top: 40, display: "flex", flexDirection: "column", gap: 14, alignItems: "flex-start" }}>
                 {connectors.map((c, idx) => {
                   const color = CONNECTOR_COLORS[idx % CONNECTOR_COLORS.length];
+                  const dotY = node.y + 40 + idx * 28 + 7;
                   return (
                     <div key={`${c.id}-${idx}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ color, fontSize: 12, fontWeight: 600 }}>{c.label}</span>
@@ -244,14 +282,12 @@ const Canvas: React.FC = () => {
                         }}
                         onMouseDown={(e) => {
                           e.stopPropagation();
-                          const path = pathById[node.id];
-                          if (!path) return;
-                          linkRef.current = { fromPath: path, connectorId: c.id, color };
+                          linkRef.current = { fromId: node.id, connectorId: c.id, color };
                           setGhost({
-                            fromX: node.x + NODE_WIDTH + 2,
-                            fromY: node.y + 32 + idx * 24,
+                            fromX: node.x + NODE_WIDTH + 8,
+                            fromY: dotY,
                             toX: node.x + NODE_WIDTH + 40,
-                            toY: node.y + 32 + idx * 24,
+                            toY: dotY,
                             color
                           });
                         }}
@@ -264,24 +300,42 @@ const Canvas: React.FC = () => {
           );
         })}
       </div>
+      {errorMsg && (
+        <div style={{ position: "absolute", top: 12, right: 16, background: "rgba(248,113,113,0.9)", color: "#fff", padding: "8px 12px", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.3)", zIndex: 20 }}>
+          {errorMsg}
+        </div>
+      )}
     </div>
   );
 };
 
-const EdgeLine: React.FC<{ edge: Edge; nodes: Node[]; connectorsByNode: Record<string, Connector[]>; selected?: boolean }> = ({ edge, nodes, connectorsByNode, selected }) => {
+const EdgeLine: React.FC<{
+  edge: Edge;
+  nodes: Node[];
+  connectorsByNode: Record<string, Connector[]>;
+  selected?: boolean;
+  onDelete?: () => void;
+}> = ({ edge, nodes, connectorsByNode, selected, onDelete }) => {
   const from = nodes.find((n) => n.id === edge.from);
   const to = nodes.find((n) => n.id === edge.to);
   if (!from || !to) return null;
   const fromConnectors = connectorsByNode[from.id] ?? [];
   const connIdx = Math.max(0, fromConnectors.findIndex((c) => c.id === edge.label));
   const color = CONNECTOR_COLORS[connIdx % CONNECTOR_COLORS.length];
-  const startX = from.x + NODE_WIDTH + 2;
-  const startY = from.y + 22 + connIdx * 22;
+  const startX = from.x + NODE_WIDTH + 8;
+  const startY = from.y + 40 + connIdx * 28 + 7;
+  const endHeight = Math.max(NODE_MIN_HEIGHT, 60 + (connectorsByNode[to.id]?.length ?? 0) * 28);
   const endX = to.x - 6;
-  const endY = to.y + NODE_HEIGHT / 2;
+  const endY = to.y + endHeight / 2;
   const midX = (startX + endX) / 2;
   return (
-    <g style={{ pointerEvents: "stroke", cursor: "pointer" }}>
+    <g
+      style={{ pointerEvents: "stroke", cursor: "pointer" }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onDelete?.();
+      }}
+    >
       <path
         d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`}
         stroke={selected ? "var(--accent-2)" : color}

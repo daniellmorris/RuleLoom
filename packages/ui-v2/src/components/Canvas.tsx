@@ -8,6 +8,9 @@ import { getNodeColor } from "../styles/palette";
 import { Connector, Edge, Node } from "../types";
 
 const NODE_WIDTH = 180;
+const NODE_MAX_WIDTH = 360;
+const NODE_CHAR_PX = 8;
+const CANVAS_PADDING = 800;
 const NODE_MIN_HEIGHT = 80;
 const CONNECTOR_COLORS = ["#7dd3fc", "#fbbf24", "#a78bfa", "#34d399", "#f87171", "#38bdf8"];
 
@@ -28,7 +31,7 @@ const Canvas: React.FC = () => {
   const deleteNode = useAppStore((s) => s.deleteNode);
   const closuresMeta = useCatalogStore((s) => s.closuresMeta);
 
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [pan, setPan] = useState({ x: -900, y: -900 });
   const [scale, setScale] = useState(1);
   const [ghost, setGhost] = useState<{ fromX: number; fromY: number; toX: number; toY: number; color: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -52,33 +55,19 @@ const Canvas: React.FC = () => {
     }
   };
 
-  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const worldX = (mouseX - pan.x) / scale;
-    const worldY = (mouseY - pan.y) / scale;
-    const factor = Math.exp(-e.deltaY * 0.001);
-    const nextScale = Math.min(2.5, Math.max(0.5, scale * factor));
-    const nextPan = { x: mouseX - worldX * nextScale, y: mouseY - worldY * nextScale };
-    setScale(nextScale);
-    setPan(nextPan);
-  };
-
   const worldPos = (clientX: number, clientY: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
-    return { x: (clientX - rect.left - pan.x) / scale, y: (clientY - rect.top - pan.y) / scale };
+    return {
+      x: (clientX - rect.left - pan.x) / scale - offsetX,
+      y: (clientY - rect.top - pan.y) / scale - offsetY
+    };
   };
 
   const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // pan when background drag (no node) or holding space
+    // pan when background drag (no node)
     if ((e.target as HTMLElement).dataset.nodeId) return;
-    if (e.button === 1 || e.altKey || e.metaKey || e.shiftKey || e.ctrlKey || (e.target as HTMLElement).dataset.canvas) {
-      panningRef.current = { startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y };
-    }
+    panningRef.current = { startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y };
   };
 
   const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -92,12 +81,12 @@ const Canvas: React.FC = () => {
     }
     if (linkRef.current.fromId) {
       const wp = worldPos(e.clientX, e.clientY);
-      setGhost((g) => (g ? { ...g, toX: wp.x, toY: wp.y } : g));
+      setGhost((g) => (g ? { ...g, toX: wp.x + offsetX, toY: wp.y + offsetY } : g));
     }
     if (panningRef.current) {
       const dX = e.clientX - panningRef.current.startX;
       const dY = e.clientY - panningRef.current.startY;
-      setPan({ x: panningRef.current.panX + dX, y: panningRef.current.panY + dY });
+      setPan(clampPan({ x: panningRef.current.panX + dX, y: panningRef.current.panY + dY }));
     }
   };
 
@@ -108,8 +97,50 @@ const Canvas: React.FC = () => {
     setGhost(null);
   };
 
-  const width = Math.max(...nodes.map((n) => n.x + NODE_WIDTH), 1200);
-  const height = Math.max(...nodes.map((n) => n.y + NODE_MIN_HEIGHT), 720);
+  const widthByNode: Record<string, number> = {};
+  nodes.forEach((n) => {
+    const len = (n.label ?? "").length;
+    widthByNode[n.id] = Math.min(NODE_MAX_WIDTH, Math.max(NODE_WIDTH, 32 + len * NODE_CHAR_PX));
+  });
+
+  const minX = Math.min(0, ...nodes.map((n) => n.x - 40));
+  const minY = Math.min(0, ...nodes.map((n) => n.y - 40));
+  const offsetX = -minX;
+  const offsetY = -minY;
+  const width = Math.max(...nodes.map((n) => n.x + (widthByNode[n.id] ?? NODE_WIDTH)), 1200) + offsetX + CANVAS_PADDING;
+  const height = Math.max(...nodes.map((n) => n.y + NODE_MIN_HEIGHT), 720) + offsetY + CANVAS_PADDING;
+
+  function clampPan(next: { x: number; y: number }, customScale?: number) {
+    const viewportW = containerRef.current?.clientWidth ?? 0;
+    const viewportH = containerRef.current?.clientHeight ?? 0;
+    const canvasW = width * (customScale ?? scale);
+    const canvasH = height * (customScale ?? scale);
+    const minPx = Math.min(0, viewportW - canvasW);
+    const minPy = Math.min(0, viewportH - canvasH);
+    return {
+      x: Math.min(20, Math.max(minPx, next.x)),
+      y: Math.min(20, Math.max(minPy, next.y))
+    };
+  }
+
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const worldX = (mouseX - pan.x) / scale;
+    const worldY = (mouseY - pan.y) / scale;
+    const factor = Math.exp(-e.deltaY * 0.001);
+    const nextScale = Math.min(2.5, Math.max(0.5, scale * factor));
+    const nextPan = clampPan({ x: mouseX - worldX * nextScale, y: mouseY - worldY * nextScale }, nextScale);
+    setScale(nextScale);
+    setPan(nextPan);
+  };
+
+  useEffect(() => {
+    setPan((p) => clampPan(p));
+  }, [width, height]);
 
   // Precompute connectors per node for edge anchoring
   const connectorsByNode: Record<string, Connector[]> = {};
@@ -137,7 +168,7 @@ const Canvas: React.FC = () => {
     <div
       className="panel"
       ref={containerRef}
-      style={{ position: "relative", minHeight: "calc(100vh - 120px)", overflow: "hidden", backgroundSize: "var(--grid-size) var(--grid-size)", backgroundImage:
+      style={{ position: "relative", height: "100%", minHeight: 0, overflow: "hidden", backgroundSize: "var(--grid-size) var(--grid-size)", backgroundImage:
         "linear-gradient(var(--panel-border) 1px, transparent 1px), linear-gradient(90deg, var(--panel-border) 1px, transparent 1px)" }}
       onWheel={onWheel}
       onMouseDown={onMouseDown}
@@ -160,6 +191,8 @@ const Canvas: React.FC = () => {
               edge={edge}
               nodes={nodes}
               connectorsByNode={connectorsByNode}
+              widthByNode={widthByNode}
+              offset={{ x: offsetX, y: offsetY }}
               selected={selection === edge.from || selection === edge.to}
               onDelete={() => {
                 if (!flow) return;
@@ -180,6 +213,7 @@ const Canvas: React.FC = () => {
           )}
         </svg>
         {nodes.map((node) => {
+          const nodeWidth = widthByNode[node.id] ?? NODE_WIDTH;
           const connectors = connectorsByNode[node.id] ?? [];
           const nodeHeight = Math.max(NODE_MIN_HEIGHT, 60 + connectors.length * 28);
           return (
@@ -232,9 +266,9 @@ const Canvas: React.FC = () => {
               }}
               style={{
                 position: "absolute",
-                left: node.x,
-                top: node.y,
-                width: NODE_WIDTH,
+                left: node.x + offsetX,
+                top: node.y + offsetY,
+                width: nodeWidth,
                 minHeight: nodeHeight,
                 borderRadius: 14,
                 border: "1px solid var(--panel-border)",
@@ -244,13 +278,22 @@ const Canvas: React.FC = () => {
                 paddingRight: 10
               }}
             >
-              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", alignItems: "center", gap: 8, marginBottom: 6, paddingRight: 4 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 10, marginBottom: 6 }}>
                 <div style={{ width: 12, height: 12, borderRadius: 6, background: getNodeColor(node.kind), boxShadow: `0 0 0 4px ${getNodeColor(node.kind)}22` }} />
-                <div style={{ fontWeight: 700, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{node.label}</div>
-                <span className="badge" style={{ justifySelf: "end" }}>{node.kind}</span>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    minWidth: 0,
+                    wordBreak: "break-word",
+                    whiteSpace: "normal",
+                    lineHeight: 1.25
+                  }}
+                >
+                  {node.label}
+                </div>
                 <button
                   className="button tertiary"
-                  style={{ padding: "2px 6px", justifySelf: "end" }}
+                  style={{ padding: "2px 6px", justifySelf: "end", marginRight: -6, marginTop: -4 }}
                   title="Delete node"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -266,10 +309,10 @@ const Canvas: React.FC = () => {
               <div style={{ position: "absolute", right: -8, top: 40, display: "flex", flexDirection: "column", gap: 14, alignItems: "flex-start" }}>
                 {connectors.map((c, idx) => {
                   const color = CONNECTOR_COLORS[idx % CONNECTOR_COLORS.length];
-                  const dotY = node.y + 40 + idx * 28 + 7;
+                  const dotY = node.y + offsetY + 40 + idx * 28 + 7;
                   return (
                     <div key={`${c.id}-${idx}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ color, fontSize: 12, fontWeight: 600 }}>{c.label}</span>
+                      <span style={{ color, fontSize: 12, fontWeight: 600, minWidth: 48, textAlign: "right" }}>{c.label}</span>
                       <div
                         title={`${c.label} (${c.direction})`}
                         style={{
@@ -284,9 +327,9 @@ const Canvas: React.FC = () => {
                           e.stopPropagation();
                           linkRef.current = { fromId: node.id, connectorId: c.id, color };
                           setGhost({
-                            fromX: node.x + NODE_WIDTH + 8,
+                            fromX: node.x + offsetX + nodeWidth + 8,
                             fromY: dotY,
-                            toX: node.x + NODE_WIDTH + 40,
+                            toX: node.x + offsetX + nodeWidth + 40,
                             toY: dotY,
                             color
                           });
@@ -305,6 +348,15 @@ const Canvas: React.FC = () => {
           {errorMsg}
         </div>
       )}
+      <Overview
+        width={width}
+        height={height}
+        nodes={nodes}
+        offset={{ x: offsetX, y: offsetY }}
+        pan={pan}
+        scale={scale}
+        containerRef={containerRef}
+      />
     </div>
   );
 };
@@ -313,20 +365,22 @@ const EdgeLine: React.FC<{
   edge: Edge;
   nodes: Node[];
   connectorsByNode: Record<string, Connector[]>;
+  widthByNode: Record<string, number>;
+  offset: { x: number; y: number };
   selected?: boolean;
   onDelete?: () => void;
-}> = ({ edge, nodes, connectorsByNode, selected, onDelete }) => {
+}> = ({ edge, nodes, connectorsByNode, widthByNode, offset, selected, onDelete }) => {
   const from = nodes.find((n) => n.id === edge.from);
   const to = nodes.find((n) => n.id === edge.to);
   if (!from || !to) return null;
   const fromConnectors = connectorsByNode[from.id] ?? [];
   const connIdx = Math.max(0, fromConnectors.findIndex((c) => c.id === edge.label));
   const color = CONNECTOR_COLORS[connIdx % CONNECTOR_COLORS.length];
-  const startX = from.x + NODE_WIDTH + 8;
-  const startY = from.y + 40 + connIdx * 28 + 7;
+  const startX = from.x + offset.x + (widthByNode[from.id] ?? NODE_WIDTH) + 8;
+  const startY = from.y + offset.y + 40 + connIdx * 28 + 7;
   const endHeight = Math.max(NODE_MIN_HEIGHT, 60 + (connectorsByNode[to.id]?.length ?? 0) * 28);
-  const endX = to.x - 6;
-  const endY = to.y + endHeight / 2;
+  const endX = to.x + offset.x - 6;
+  const endY = to.y + offset.y + endHeight / 2;
   const midX = (startX + endX) / 2;
   return (
     <g
@@ -392,3 +446,69 @@ function buildConnectors(node: Node, meta?: any): Connector[] {
 }
 
 export default Canvas;
+
+const Overview: React.FC<{
+  width: number;
+  height: number;
+  nodes: Node[];
+  offset: { x: number; y: number };
+  pan: { x: number; y: number };
+  scale: number;
+  containerRef: React.RefObject<HTMLDivElement>;
+}> = ({ width, height, nodes, offset, pan, scale, containerRef }) => {
+  const viewportW = containerRef.current?.clientWidth ?? 0;
+  const viewportH = containerRef.current?.clientHeight ?? 0;
+  const viewX = (-pan.x) / scale;
+  const viewY = (-pan.y) / scale;
+  const viewW = viewportW / scale;
+  const viewH = viewportH / scale;
+
+  const miniW = 220;
+  const miniScale = Math.min(miniW / width, 140 / height);
+  const miniH = height * miniScale;
+
+  return (
+    <div style={{ position: "absolute", right: 12, bottom: 12, zIndex: 15 }}>
+      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>Overview</div>
+      <div
+        style={{
+          position: "relative",
+          width: miniW,
+          height: miniH,
+          border: "1px solid var(--panel-border)",
+          borderRadius: 10,
+          background: "rgba(0,0,0,0.35)",
+          overflow: "hidden"
+        }}
+      >
+        {nodes.map((n) => (
+          <div
+            key={n.id}
+            style={{
+              position: "absolute",
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              background: "var(--accent)",
+              left: (n.x + offset.x) * miniScale - 3,
+              top: (n.y + offset.y) * miniScale - 3,
+              opacity: 0.8
+            }}
+          />
+        ))}
+        <div
+          style={{
+            position: "absolute",
+            left: viewX * miniScale,
+            top: viewY * miniScale,
+            width: viewW * miniScale,
+            height: viewH * miniScale,
+            border: "1px solid var(--accent)",
+            boxShadow: "0 0 0 1px rgba(125,211,252,0.4)",
+            pointerEvents: "none"
+          }}
+        />
+      </div>
+    </div>
+  );
+};

@@ -2,7 +2,8 @@ import yaml from "js-yaml";
 import { Edge, Flow, Node, Connector } from "../types";
 // Legacy helpers kept for reference; autoLayout is stubbed to a no-op that returns the input graph.
 const autoLayout = (flow: any) => flow;
-import coreManifest from "../data/coreManifest.json";
+import coreManifestRaw from "rule-loom-core/ruleloom.manifest.yaml?raw";
+const coreManifest = (yaml.load(coreManifestRaw as string) as any) ?? {};
 import { nanoid } from "../utils/id";
 
 const closureMetaMap: Record<string, any> = Object.fromEntries(

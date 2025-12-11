@@ -10,6 +10,7 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
+    "rule-loom-core": "workspace:*",
     "clsx": "^2.1.0",
     "js-yaml": "^4.1.0",
     "react": "^18.3.1",

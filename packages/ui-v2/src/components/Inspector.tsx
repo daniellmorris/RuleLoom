@@ -4,6 +4,7 @@ import { useAppStore } from "../state/appStore";
 import { useCatalogStore } from "../state/catalogStore";
 import { buildGraph } from "../utils/graph";
 import { buildNodeIndex } from "../state/appStore";
+import yaml from "js-yaml";
 
 type ParamMeta = { name: string; type?: string; required?: boolean; enum?: string[]; children?: ParamMeta[]; skipTemplateResolution?: boolean };
 
@@ -151,6 +152,7 @@ const ParamRow: React.FC<{
 }> = ({ param, value, onValue, onCallToggle, onInitFlowSteps, allowCall, readOnly, lockedValue }) => {
   const isFlowSteps = param.type === "flowSteps";
   const isArray = param.type === "array";
+  const isAny = param.type === "any";
   const isCall = typeof value === "object" && value !== null && "$call" in value;
   const baseValue = lockedValue ?? (isCall ? (value as any).$call : value);
 
@@ -226,6 +228,8 @@ const ParamRow: React.FC<{
   const field =
     isFlowSteps || isCall || readOnly ? (
       <input className="input" value={baseValue ?? "(connected)"} readOnly disabled />
+    ) : isAny ? (
+      <AnyEditor value={baseValue} onChange={onValue} />
     ) : param.enum && param.enum.length ? (
       <select className="input" value={baseValue ?? ""} onChange={(e) => onValue(e.target.value)}>
         <option value="">(select)</option>
@@ -278,4 +282,177 @@ function createDefaultArrayItem(children: ParamMeta[]): any {
     }
   });
   return obj;
+}
+
+const AnyEditor: React.FC<{ value: any; onChange: (v: any) => void }> = ({ value, onChange }) => {
+  const [mode, setMode] = React.useState<"json" | "yaml" | "tree">("json");
+  const [raw, setRaw] = React.useState(() => safeStringify(value));
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setRaw(mode === "yaml" ? yaml.dump(value ?? {}) : safeStringify(value));
+  }, [mode, value]);
+
+  const applyRaw = (text: string) => {
+    try {
+      const parsed = mode === "yaml" ? yaml.load(text) : JSON.parse(text || "null");
+      onChange(parsed);
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  return (
+    <div className="panel" style={{ background: "rgba(255,255,255,0.02)", padding: 10 }}>
+      <div className="row" style={{ gap: 6, marginBottom: 8 }}>
+        {["json", "yaml", "tree"].map((m) => (
+          <button
+            key={m}
+            className={`button tertiary${mode === m ? " seg-active" : ""}`}
+            style={{ padding: "6px 10px" }}
+            onClick={() => setMode(m as any)}
+          >
+            {m.toUpperCase()}
+          </button>
+        ))}
+        {mode !== "tree" && (
+          <button className="button secondary" style={{ marginLeft: "auto", padding: "6px 10px" }} onClick={() => applyRaw(raw)}>
+            Apply
+          </button>
+        )}
+      </div>
+
+      {mode === "tree" ? (
+        <TreeEditor value={value} onChange={onChange} />
+      ) : (
+        <>
+          <textarea
+            className="input"
+            style={{ minHeight: 180, width: "100%", fontFamily: "ui-monospace", fontSize: 12, resize: "vertical" }}
+            value={raw}
+            onChange={(e) => setRaw(e.target.value)}
+          />
+          {error && <div style={{ color: "var(--danger)", fontSize: 12 }}>{error}</div>}
+        </>
+      )}
+    </div>
+  );
+};
+
+const TreeEditor: React.FC<{ value: any; onChange: (v: any) => void }> = ({ value, onChange }) => {
+  const val = value === undefined ? {} : value;
+  const isObj = typeof val === "object" && val !== null;
+
+  const update = (next: any) => onChange(next);
+
+  const renderNode = (node: any, path: (string | number)[]) => {
+    const isObject = typeof node === "object" && node !== null && !Array.isArray(node);
+    const isArray = Array.isArray(node);
+
+    const setAtPath = (newVal: any) => {
+      const clone = structuredClone(val ?? {});
+      assignAtPath(clone, path, newVal);
+      update(clone);
+    };
+
+    const removeAtPath = () => {
+      const clone = structuredClone(val ?? {});
+      deleteAtPath(clone, path);
+      update(clone);
+    };
+
+    if (!isObject && !isArray) {
+      return (
+        <div className="row" style={{ gap: 6, marginBottom: 6 }}>
+          <input
+            className="input"
+            value={node ?? ""}
+            onChange={(e) => setAtPath(e.target.value)}
+          />
+          <button className="button tertiary" onClick={removeAtPath}>✕</button>
+        </div>
+      );
+    }
+
+    const entries = isArray ? node.map((v: any, i: number) => [i, v] as const) : Object.entries(node ?? {});
+
+    return (
+      <div style={{ border: "1px solid var(--panel-border)", borderRadius: 8, padding: 8, marginBottom: 8 }}>
+        {entries.map(([k, v]) => (
+          <div key={k} style={{ marginBottom: 6 }}>
+            <div className="row" style={{ gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "var(--muted)", minWidth: 60 }}>{String(k)}</span>
+              <div style={{ flex: 1 }}>{renderNode(v, [...path, k])}</div>
+            </div>
+          </div>
+        ))}
+        <div className="row" style={{ gap: 6 }}>
+          {!isArray && (
+            <button
+              className="button secondary"
+              onClick={() => {
+                const key = prompt("Key name?");
+                if (!key) return;
+                const clone = structuredClone(val ?? {});
+                assignAtPath(clone, [...path, key], "");
+                update(clone);
+              }}
+            >
+              + field
+            </button>
+          )}
+          <button
+            className="button secondary"
+            onClick={() => {
+              const clone = structuredClone(val ?? {});
+              const targetPath = [...path, isArray ? (node.length ?? 0) : "new"];
+              assignAtPath(clone, targetPath, "");
+              update(clone);
+            }}
+          >
+            + item
+          </button>
+          {path.length > 0 && <button className="button tertiary" onClick={removeAtPath}>remove</button>}
+        </div>
+      </div>
+    );
+  };
+
+  return <div>{renderNode(isObj ? val : {}, [])}</div>;
+};
+
+function assignAtPath(obj: any, path: (string | number)[], val: any) {
+  if (path.length === 0) return val;
+  const [head, ...rest] = path;
+  if (rest.length === 0) {
+    if (Array.isArray(obj)) obj[Number(head)] = val;
+    else obj[head as any] = val;
+    return obj;
+  }
+  if (Array.isArray(obj)) obj[Number(head)] = assignAtPath(obj[Number(head)] ?? {}, rest, val);
+  else obj[head as any] = assignAtPath(obj?.[head] ?? {}, rest, val);
+  return obj;
+}
+
+function deleteAtPath(obj: any, path: (string | number)[]) {
+  if (!obj || path.length === 0) return;
+  const [head, ...rest] = path;
+  if (rest.length === 0) {
+    if (Array.isArray(obj)) obj.splice(Number(head), 1);
+    else delete obj[head as any];
+    return;
+  }
+  deleteAtPath(obj[head as any], rest);
+  if (Array.isArray(obj[head as any]) && obj[head as any].length === 0) delete obj[head as any];
+  if (typeof obj[head as any] === "object" && obj[head as any] && !Array.isArray(obj[head as any]) && Object.keys(obj[head as any]).length === 0)
+    delete obj[head as any];
+}
+
+function safeStringify(val: any) {
+  try {
+    return JSON.stringify(val ?? {}, null, 2);
+  } catch {
+    return "{}";
+  }
 }

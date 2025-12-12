@@ -60,7 +60,7 @@ const defaultState: AppState = {
     {
       name: "Flow 1",
       steps: [],
-      $ui: { id: nanoid(), x: 60, y: 120, disconnected: [] }
+      $ui: { id: nanoid(), x: 1000, y: 1000, disconnected: [] }
     }
   ]
 };
@@ -68,8 +68,8 @@ const defaultState: AppState = {
 function ensureFlowUi(flow: FlowWithUi) {
   flow.$ui = flow.$ui ?? { id: nanoid(), x: 60, y: 120, disconnected: [] };
   flow.$ui.id = flow.$ui.id ?? nanoid();
-  flow.$ui.x = flow.$ui.x ?? 60;
-  flow.$ui.y = flow.$ui.y ?? 120;
+  flow.$ui.x = flow.$ui.x ?? 1000;
+  flow.$ui.y = flow.$ui.y ?? 1000;
   flow.$ui.disconnected = flow.$ui.disconnected ?? [];
 }
 
@@ -665,31 +665,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
         if (i !== where.idx) return f;
         const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
-        const index = buildNodeIndex(copy);
-        const path = index.pathById[nodeId];
-        if (!path || path === "start") {
-          outcome = { ok: false, error: "Cannot delete this node" };
-          return f;
-        }
-        const arrInfo = resolveStepArray(copy, path);
-        if (!arrInfo) {
-          outcome = { ok: false, error: "Unable to resolve node location" };
-          return f;
-        }
-        arrInfo.arr.splice(arrInfo.idx, 1);
-        // clean up empty disconnected fragment
-        if (typeof arrInfo.discIdx === "number" && arrInfo.arr.length === 0) {
-          const disc = copy.$ui?.disconnected ?? [];
-          disc.splice(arrInfo.discIdx, 1);
-          copy.$ui = { ...(copy.$ui ?? {}), disconnected: disc };
-        }
-        // if parameter array emptied, clear its holder
-        if (arrInfo.arr.length === 0) {
-          const arrayPath = path.replace(/\[\d+\]$/, "");
-          clearPathValue(copy, arrayPath);
-        }
-        outcome = { ok: true };
-        return copy;
+        const removed = removeStepById(copy, nodeId);
+        outcome = removed ? { ok: true } : { ok: false, error: "Cannot delete this node" };
+        return removed ? copy : f;
       });
       return { app: { ...state.app, [where.kind]: list } as AppState };
     });
@@ -755,15 +733,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
   addClosureStep: (collection, flowIdx, closureName) =>
     set((state) => {
       const key = collection === "closures" ? "closures" : "flows";
-      const list = state.app[key].map((f: any) => ({ ...f, steps: [...(f.steps ?? [])] }));
+      const list = state.app[key].map((f: any) => JSON.parse(JSON.stringify(f)) as FlowWithUi);
       const flow = list[flowIdx] ?? list[0];
       if (!flow) return state;
       ensureFlowUi(flow);
       const disc = flow.$ui?.disconnected ?? [];
+      const { x, y } = findOpenSlot(flow);
       const step: StepWithUi = {
         closure: closureName,
         parameters: {},
-        $ui: { id: nanoid(), x: 240, y: 200 + (flow.steps?.length ?? 0) * 120 }
+        $ui: { id: nanoid(), x, y }
       };
       disc.push({ steps: [step] });
       flow.$ui = { ...(flow.$ui ?? {}), disconnected: disc };
@@ -805,3 +784,88 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return { app: { ...state.app, inputs } };
     }),
 }));
+
+const SLOT_X = 240;
+const SLOT_Y = 160;
+const MIN_COORD = 20;
+
+function findOpenSlot(flow: FlowWithUi): { x: number; y: number } {
+  ensureFlowUi(flow);
+  const occupied = collectPositions(flow);
+  const baseX = flow.$ui?.x ?? 1000;
+  const baseY = flow.$ui?.y ?? 1000;
+
+  for (let radius = 0; radius < 12; radius++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue; // perimeter positions first
+        const x = Math.max(MIN_COORD, baseX + dx * SLOT_X);
+        const y = Math.max(MIN_COORD, baseY + dy * SLOT_Y);
+        const collides = occupied.some((p) => Math.abs(p.x - x) < SLOT_X * 0.6 && Math.abs(p.y - y) < SLOT_Y * 0.6);
+        if (!collides) return { x, y };
+      }
+    }
+  }
+
+  return { x: baseX + SLOT_X, y: baseY + SLOT_Y };
+}
+
+function collectPositions(flow: FlowWithUi): { x: number; y: number }[] {
+  const positions: { x: number; y: number }[] = [];
+  if (flow.$ui?.x != null && flow.$ui?.y != null) positions.push({ x: flow.$ui.x, y: flow.$ui.y });
+
+  const addFromSteps = (steps?: StepWithUi[]) => {
+    (steps ?? []).forEach((s) => {
+      ensureStepUi(s);
+      if (s.$ui?.x != null && s.$ui?.y != null) positions.push({ x: s.$ui.x, y: s.$ui.y });
+      if (Array.isArray((s as any).cases)) (s as any).cases.forEach((c: any) => addFromSteps(c.steps));
+      if (Array.isArray((s as any).otherwise)) addFromSteps((s as any).otherwise as any);
+      Object.values(s.parameters ?? {}).forEach((p: any) => {
+        if (p?.steps) addFromSteps(p.steps);
+        if (p?.$call?.steps) addFromSteps(p.$call.steps);
+      });
+    });
+  };
+
+  addFromSteps(flow.steps);
+  (flow.$ui?.disconnected ?? []).forEach((d) => addFromSteps(d.steps));
+  return positions;
+}
+
+function removeStepById(flow: FlowWithUi, nodeId: string): boolean {
+  let removed = false;
+
+  const removeFromArray = (arr: StepWithUi[] | undefined): StepWithUi[] | undefined => {
+    if (!Array.isArray(arr)) return arr;
+    const next = arr.filter((s) => {
+      ensureStepUi(s);
+      return s.$ui?.id !== nodeId;
+    });
+    if (next.length !== arr.length) removed = true;
+
+    next.forEach((s) => {
+      if (Array.isArray((s as any).cases)) (s as any).cases.forEach((c: any) => c.steps = removeFromArray(c.steps) ?? []);
+      if (Array.isArray((s as any).otherwise)) (s as any).otherwise = removeFromArray((s as any).otherwise) ?? [];
+      Object.entries(s.parameters ?? {}).forEach(([key, val]: [string, any]) => {
+        if (val?.steps) val.steps = removeFromArray(val.steps) ?? [];
+        if (val?.$call?.steps) val.$call.steps = removeFromArray(val.$call.steps) ?? [];
+        if (Array.isArray(val)) {
+          val.forEach((item: any) => {
+            if (item?.steps) item.steps = removeFromArray(item.steps) ?? [];
+            if (item?.$call?.steps) item.$call.steps = removeFromArray(item.$call.steps) ?? [];
+          });
+        }
+      });
+    });
+
+    return next;
+  };
+
+  flow.steps = removeFromArray(flow.steps) ?? [];
+
+  const disc = (flow.$ui?.disconnected ?? []).map((frag) => ({ ...frag, steps: removeFromArray(frag.steps) ?? [] }))
+    .filter((frag) => frag.steps.length > 0);
+  if (flow.$ui) flow.$ui.disconnected = disc;
+
+  return removed;
+}

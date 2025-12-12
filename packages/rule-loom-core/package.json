@@ -17,10 +17,12 @@
       "types": "./src/inputs/*.ts",
       "import": "./dist/inputs/*.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./ruleloom.manifest.yaml": "./ruleloom.manifest.yaml"
   },
   "files": [
-    "dist"
+    "dist",
+    "ruleloom.manifest.yaml"
   ],
   "scripts": {
     "build": "tsc -b tsconfig.json",

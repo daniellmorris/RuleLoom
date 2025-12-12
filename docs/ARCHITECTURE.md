@@ -89,3 +89,23 @@ Supplies reusable closures (assign/respond/log/comparisons/iterators) that follo
 - When creating custom closures in applications, set the parameter type to `flowSteps` if the closure should handle raw step arrays (iterators, retries, transactions, etc.).
 - Enhance the engine’s resolution logic in `resolveDynamicValues`, `prepareParameters`, or `$call` handlers when introducing new parameter conventions.
 - Use the runner schema (`packages/rule-loom-runner/src/config.ts`) as the canonical place to describe YAML structure; any new closure metadata should be reflected there for validation.
+
+## UI v2 (packages/ui-v2)
+
+UI v2 is a Vite/React + Zustand single-page app that edits YAML flows visually. Key pieces:
+
+- State
+  - `src/state/appStore.ts`: Source of truth for the loaded YAML (flows, closures, inputs). All mutations (add/remove nodes, connect/disconnect chains, move, param updates) go through here and are keyed by `ui.id`, not YAML paths. Connections are validated here.
+  - `src/state/flowStore.ts`: UI-only view state (active flow/closure, selection).
+  - `src/state/catalogStore.ts`: In-memory manifest (`coreManifest.json`) describing closure/input signatures used for rendering connectors and inspector fields.
+  - `src/state/walk.ts`: Single traversal helper that walks a flow and returns step visits + array metadata; shared by the store and graph builder.
+- Rendering / interaction
+  - `src/components/Canvas.tsx`: Renders nodes/edges, handles drag, connect, delete (edges + nodes), zoom/pan. Delegates all mutations to `appStore`.
+  - `src/components/Inspector.tsx`: Edits parameters/inputs for the selected node using catalog metadata.
+  - `src/components/Palette.tsx`: Adds triggers or new closure steps (initially placed in disconnected).
+  - `src/components/ImportExport.tsx`: Loads/saves YAML via `appStore.toYaml`/`loadYaml`.
+- Graph building
+  - `src/utils/graph.ts`: Builds nodes/edges for canvas from a flow using `buildNodeIndex` + `walkFlow` so IDs stay in sync with `appStore`.
+  - `src/types/index.ts`: Shared graph types (Node, Edge, Connector).
+
+Data flow: Canvas interactions (drag, connect, delete) call `appStore` mutations using node `ui.id`s. The store mutates the YAML model, then `buildGraph` re-runs from state, so canvas/inspector stay in sync. Disconnected fragments live under `flow.$ui.disconnected`. All traversal-sensitive logic (indexing, find-by-id, detach/move/connect) relies on `walkFlow` to avoid duplicated tree walking.

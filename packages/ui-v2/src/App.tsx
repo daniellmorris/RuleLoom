@@ -2,6 +2,7 @@ import Canvas from "./components/Canvas";
 import Inspector from "./components/Inspector";
 import Palette from "./components/Palette";
 import ImportExport from "./components/ImportExport";
+import PluginLibrary from "./components/PluginLibrary";
 import { useFlowStore } from "./state/flowStore";
 import { useAppStore } from "./state/appStore";
 import "./styles/global.css";
@@ -97,19 +98,24 @@ const App = () => {
         </div>
       </header>
 
-      <aside style={{ gridArea: "sidebar", padding: 12 }}>
-        <div className="stack">
-          <Palette />
-          <ImportExport />
+      <aside className="rail sidebar">
+        <div className="scroll-column">
+          <div className="stack">
+            <Palette />
+            <PluginLibrary />
+            <ImportExport />
+          </div>
         </div>
       </aside>
 
-      <main style={{ gridArea: "canvas", padding: 12 }}>
+      <main className="canvas-area">
         <Canvas />
       </main>
 
-      <aside style={{ gridArea: "inspector", padding: 12 }}>
-        <Inspector />
+      <aside className="rail inspector-rail">
+        <div className="scroll-column">
+          <Inspector />
+        </div>
       </aside>
     </div>
   );

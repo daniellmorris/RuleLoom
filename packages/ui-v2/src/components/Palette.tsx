@@ -6,6 +6,7 @@ import { useFlowStore } from "../state/flowStore";
 const Palette: React.FC = () => {
   const availableClosures = useCatalogStore((s) => s.availableClosures);
   const availableInputs = useCatalogStore((s) => s.availableInputs);
+  const userClosures = useAppStore((s) => s.app.closures);
   const addTriggerToStore = useAppStore((s) => s.addTrigger);
   const addClosureStepToStore = useAppStore((s) => s.addClosureStep);
   const mode = useFlowStore((s) => s.activeMode);
@@ -21,6 +22,11 @@ const Palette: React.FC = () => {
     addClosureStepToStore(mode === "closure" ? "closures" : "flows", flowIdx, name);
   };
 
+  const closureNames = Array.from(new Set([
+    ...availableClosures,
+    ...userClosures.map((c) => c.name).filter(Boolean)
+  ]));
+
   return (
     <div className="panel stack">
       <h3>Palette</h3>
@@ -31,7 +37,7 @@ const Palette: React.FC = () => {
               Add {inp} trigger
             </button>
           ))}
-        {availableClosures.map((c) => (
+        {closureNames.map((c) => (
           <button key={c} className="button secondary" onClick={() => addClosure(c)}>
             Add {c}
           </button>

@@ -1,14 +1,6 @@
-import type {
-  ClosureDefinition,
-  ClosureSignature,
-  FlowBranchStep,
-  FlowDefinition,
-  FlowInvokeStep,
-  FlowStep,
-  ConditionDefinition,
-} from 'rule-loom-engine';
+import type { ClosureDefinition, ClosureSignature, FlowDefinition, FlowInvokeStep, ConditionDefinition } from 'rule-loom-engine';
 import type { RunnerConfig } from './config.js';
-import type { HttpInputConfig, SchedulerInputConfig, InitInputConfig, BaseInputConfig } from 'rule-loom-core/inputs';
+import type { BaseInputConfig } from './pluginApi.js';
 
 export type ValidationIssueLevel = 'error' | 'warning';
 
@@ -99,21 +91,8 @@ function validateFlow(
   implicitClosures: ClosureDefinition[],
   issues: ValidationIssue[],
 ) {
-  const visitSteps = (steps: FlowStep[], path: string) => {
+  const visitSteps = (steps: FlowInvokeStep[], path: string) => {
     steps.forEach((step, index) => {
-      if (isBranchStep(step)) {
-        const branchPath = `${path}.steps[${index}]`;
-        step.cases.forEach((branchCase, caseIndex) => {
-          const caseBase = `${branchPath}.cases[${caseIndex}]`;
-          visitSteps(branchCase.when, `${caseBase}.when`);
-          visitSteps(branchCase.then, `${caseBase}.then`);
-        });
-        if (step.otherwise) {
-          visitSteps(step.otherwise, `${branchPath}.otherwise`);
-        }
-        return;
-      }
-
       validateInvokeStep(step, flow.name, `${path}.steps[${index}]`, signatureByClosure, implicitClosures, issues);
       if (step.when) {
         validateConditions(step.when, flow.name, `${path}.steps[${index}].when`, signatureByClosure, issues);
@@ -266,8 +245,4 @@ function validateParameters(
       });
     }
   }
-}
-
-function isBranchStep(step: FlowStep): step is FlowBranchStep {
-  return (step as FlowBranchStep).cases !== undefined;
 }

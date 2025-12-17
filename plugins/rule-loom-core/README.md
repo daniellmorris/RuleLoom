@@ -1,6 +1,6 @@
 # rule-loom-core
 
-`rule-loom-core` ships a growing catalog of closures you can drop into any RuleLoom flow. Import `createCoreClosures()` directly or rely on the built-in `corePlugin` (auto-loaded by the runner) to register `core.*`, `http.request`, and the built-in input plugins (`http`, `scheduler`, `init`) for you—no bundle or input wiring needed.
+`rule-loom-core` ships a growing catalog of closures you can drop into any RuleLoom flow. Import `createCoreClosures()` directly or load the `corePlugin` like any other plugin to register `core.*` closures. HTTP and scheduler inputs/closures now live in their own plugins.
 
 ## Available Closures
 

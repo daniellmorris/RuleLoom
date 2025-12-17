@@ -1,12 +1,11 @@
 import type RuleLoomEngine from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
-import type { HttpInputApp, InputPluginContext, RunnerScheduler, BaseInputConfig } from 'rule-loom-core/inputs';
-import { getInputPlugins } from 'rule-loom-core/inputs';
+import type { InputPluginContext, BaseInputConfig } from './pluginApi.js';
+import { getInputPlugins } from './pluginApi.js';
 import type { EventEmitter } from 'node:events';
 
 export interface InitializedInputs {
-  httpApp?: HttpInputApp;
-  scheduler?: RunnerScheduler;
+  services: Record<string, unknown>;
   cleanup: () => Promise<void>;
 }
 
@@ -19,8 +18,7 @@ export async function initializeInputs(
 ): Promise<InitializedInputs> {
   const cleanupFns: Array<() => Promise<void> | void> = [];
   const pluginMap = new Map(getInputPlugins().map((plugin) => [plugin.type, plugin]));
-  let httpApp: HttpInputApp | undefined;
-  let scheduler: RunnerScheduler | undefined;
+  const services: Record<string, unknown> = {};
 
   for (const input of inputs) {
     const plugin = pluginMap.get((input as any).type);
@@ -29,17 +27,8 @@ export async function initializeInputs(
     }
     const context: InputPluginContext = { logger, engine, metadata, events };
     const result = await plugin.initialize(input as any, context);
-    if (result?.http) {
-      if (httpApp) {
-        throw new Error('Only a single HTTP input is currently supported.');
-      }
-      httpApp = result.http.app;
-    }
-    if (result?.scheduler) {
-      if (scheduler) {
-        throw new Error('Only a single scheduler input is currently supported.');
-      }
-      scheduler = result.scheduler;
+    if (result?.services) {
+      Object.assign(services, result.services);
     }
     if (result?.cleanup) {
       cleanupFns.push(result.cleanup);
@@ -47,8 +36,7 @@ export async function initializeInputs(
   }
 
   return {
-    httpApp,
-    scheduler,
+    services,
     cleanup: async () => {
       for (const cleanup of cleanupFns.reverse()) {
         await Promise.resolve(cleanup()).catch(() => undefined);

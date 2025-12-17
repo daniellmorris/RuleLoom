@@ -108,6 +108,7 @@ const Inspector: React.FC = () => {
     (typeof step?.label === "string" ? step.label : undefined) ??
     nodeLabel;
   const title = closureName || selection || "";
+  const source = catalog.closureSources[closureName ?? ""] ?? "unknown";
   const meta = catalog.closuresMeta[closureName ?? ""] ?? {};
   const metaParams: ParamMeta[] = meta.signature?.parameters ?? [];
   const fallbackParams: ParamMeta[] = Object.keys(step?.parameters ?? {}).map((name) => {
@@ -121,7 +122,10 @@ const Inspector: React.FC = () => {
   return (
     <div className="panel">
       <h3>Inspector</h3>
-      <p style={{ color: "var(--muted)" }}>{title}</p>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <p style={{ color: "var(--muted)", margin: 0 }}>{title}</p>
+        <span className="badge" title={`Source: ${source}`}>{source}</span>
+      </div>
       <div className="stack" style={{ gap: 8 }}>
         {params.map((p) => (
           <ParamRow

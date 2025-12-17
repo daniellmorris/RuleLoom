@@ -16,8 +16,7 @@ describe('Scheduler integration', () => {
 itHttp('executes scheduled flows via Bree', async () => {
     const runner = await createRunner(path.join(CONFIG_DIR, 'scheduler.yaml'));
     try {
-      await runner.listen(0, '127.0.0.1');
-      const scheduler = runner.scheduler;
+      const scheduler = (runner.services as any).scheduler as any;
       expect(scheduler).toBeDefined();
       await delay(1500);
       const jobState = scheduler?.jobStates.get('heartbeat');

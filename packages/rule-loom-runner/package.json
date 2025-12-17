@@ -19,7 +19,6 @@
     "commander": "^11.1.0",
     "js-yaml": "^4.1.0",
     "lodash": "^4.17.21",
-    "rule-loom-core": "file:../rule-loom-core",
     "rule-loom-lib": "file:../rule-loom-lib",
     "rule-loom-engine": "file:../rule-loom-engine",
     "zod": "^3.23.8",

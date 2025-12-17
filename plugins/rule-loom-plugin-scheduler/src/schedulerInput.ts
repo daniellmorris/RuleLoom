@@ -4,13 +4,37 @@ import _ from 'lodash';
 import { z } from 'zod';
 import type { RuleLoomEngine, ExecutionResult } from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
-import type {
-  SchedulerInputConfig,
-  SchedulerTriggerConfig,
-  RunnerScheduler,
-  SchedulerJobState,
-  InputPlugin,
-} from './types.js';
+import type { BaseInputConfig, InputPlugin, InputPluginContext } from 'rule-loom-runner/src/pluginApi.js';
+
+export interface SchedulerTriggerConfig {
+  id?: string;
+  type?: 'cron' | 'interval' | 'timeout';
+  name?: string;
+  flow: string;
+  interval?: number | string;
+  cron?: string;
+  timeout?: number | string | boolean;
+  initialState?: Record<string, unknown>;
+  runtime?: Record<string, unknown>;
+  enabled?: boolean;
+}
+
+export interface SchedulerInputConfig extends BaseInputConfig {
+  type: 'scheduler';
+  triggers: SchedulerTriggerConfig[];
+}
+
+export interface SchedulerJobState {
+  runs: number;
+  lastRun?: Date;
+  lastResult?: ExecutionResult;
+  lastError?: unknown;
+}
+
+export interface RunnerScheduler {
+  jobStates: Map<string, SchedulerJobState>;
+  stop: () => Promise<void>;
+}
 
 export interface SchedulerInputOptions {
   engine: RuleLoomEngine;
@@ -49,10 +73,14 @@ function buildSchedulerSchema() {
   });
   return z.object({
     type: z.literal('scheduler'),
-    triggers: z.array(z.object(triggerShape).refine((job) => job.interval !== undefined || job.cron !== undefined || job.timeout !== undefined, {
-      message: 'Scheduler trigger requires interval, cron, or timeout',
-      path: ['interval'],
-    })).min(1),
+    triggers: z.array(
+      z
+        .object(triggerShape)
+        .refine((job) => job.interval !== undefined || job.cron !== undefined || job.timeout !== undefined, {
+          message: 'Scheduler trigger requires interval, cron, or timeout',
+          path: ['interval'],
+        }),
+    ).min(1),
   });
 }
 
@@ -63,13 +91,19 @@ export const schedulerInputPlugin: InputPlugin<SchedulerInputConfig> = {
   schema: schedulerInputSchema,
   configParameters: schedulerConfigParameters,
   triggerParameters: schedulerTriggerParameters,
-  initialize: async (config: SchedulerInputConfig, context) => {
+  initialize: async (config: SchedulerInputConfig, context: InputPluginContext) => {
     const scheduler = await createSchedulerInput(config, {
       engine: context.engine,
       logger: context.logger,
       events: context.events,
     });
-    return scheduler ? { scheduler } : undefined;
+    if (!scheduler) return;
+    return {
+      services: {
+        scheduler,
+      },
+      cleanup: async () => scheduler.stop(),
+    };
   },
 };
 
@@ -110,7 +144,7 @@ export async function createSchedulerInput(
   if (!input.triggers?.length) return undefined;
 
   const bree = await createBree(input, options);
-  return startScheduler(bree, options.logger);
+  return startScheduler(bree, options.logger, options.events);
 }
 
 async function createBree(input: SchedulerInputConfig, options: SchedulerInputOptions) {
@@ -127,14 +161,27 @@ async function createBree(input: SchedulerInputConfig, options: SchedulerInputOp
         const runtime = _.cloneDeep(jobConfig.runtime ?? {});
         _.set(runtime, 'scheduler.job', jobConfig.name);
         _.set(runtime, 'scheduler.triggeredAt', new Date().toISOString());
-        await options.engine.execute(flowName, state, runtime);
+        const start = Date.now();
+        try {
+          await options.engine.execute(flowName, state, runtime);
+          options.events.emit('scheduler:job:completed', {
+            job: flowName,
+            durationSeconds: (Date.now() - start) / 1000,
+          });
+        } catch (error) {
+          options.events.emit('scheduler:job:failed', {
+            job: flowName,
+            durationSeconds: (Date.now() - start) / 1000,
+            error,
+          });
+        }
       }
     },
   });
   return bree as unknown as SchedulerInternal;
 }
 
-async function startScheduler(bree: SchedulerInternal, logger: RuleLoomLogger): Promise<RunnerScheduler> {
+async function startScheduler(bree: SchedulerInternal, logger: RuleLoomLogger, events: EventEmitter): Promise<RunnerScheduler> {
   const jobStates = new Map<string, SchedulerJobState>();
 
   bree.on('worker created', (name: string) => {
@@ -142,6 +189,7 @@ async function startScheduler(bree: SchedulerInternal, logger: RuleLoomLogger): 
     state.runs += 1;
     state.lastRun = new Date();
     jobStates.set(name, state);
+    events.emit('scheduler:job:started', { job: name });
   });
 
   bree.on('worker message', (name: string, message: any) => {

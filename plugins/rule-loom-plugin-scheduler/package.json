@@ -1,0 +1,29 @@
+{
+  "name": "rule-loom-plugin-scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "ruleloom.manifest.yaml"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "manifest": "npm -w rule-loom-runner run build --if-present && node ../../packages/rule-loom-runner/dist/cli.js manifest .",
+    "postbuild": "npm run manifest"
+  },
+  "dependencies": {
+    "bree": "^9.2.4",
+    "lodash": "^4.17.21",
+    "zod": "^3.23.8",
+    "rule-loom-engine": "file:../../packages/rule-loom-engine",
+    "rule-loom-lib": "file:../../packages/rule-loom-lib"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2",
+    "rule-loom-runner": "file:../../packages/rule-loom-runner",
+    "vitest": "^2.0.5"
+  }
+}

@@ -9,7 +9,7 @@
   "exclude": ["dist", "node_modules"],
   "references": [
     { "path": "../rule-loom-lib" },
-    { "path": "../rule-loom-core" },
+    { "path": "../../plugins/rule-loom-core" },
     { "path": "../rule-loom-engine" }
   ]
 }

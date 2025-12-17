@@ -9,18 +9,10 @@ program
   .name("ruleloom-runner")
   .description("Run RuleLoom configuration files")
   .option("-c, --config <path>", "Path to configuration file", "config.yaml")
-  .option("-p, --port <number>", "Port override", (value) => {
-    const parsed = Number(value);
-    if (Number.isNaN(parsed)) {
-      throw new Error(`Invalid port: ${value}`);
-    }
-    return parsed;
-  })
   .action(async (options) => {
     try {
       const { instance } = await startRunner({
         configPath: options.config,
-        portOverride: options.port,
       });
 
       const shutdown = async (signal: string) => {

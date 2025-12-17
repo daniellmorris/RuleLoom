@@ -4,7 +4,7 @@ import createHttpError from 'http-errors';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { createRunner, getHttpInput, type RunnerInstance } from 'rule-loom-runner';
+import { createRunner, type RunnerInstance } from 'rule-loom-runner';
 import type { RuleLoomLogger } from 'rule-loom-lib';
 import { Counter, Histogram, MetricsRegistry } from './metrics.js';
 
@@ -79,8 +79,7 @@ export class RunnerRegistry {
       }
       throw error;
     }
-    const httpInput = getHttpInput(instance.config);
-    const basePath = sanitizeBasePath(options.basePath, httpInput?.config?.basePath);
+    const basePath = sanitizeBasePath(options.basePath, (instance.services as any)?.httpBasePath as string | undefined);
 
     if (this.findByBasePath(basePath)) {
       await instance.close().catch(() => undefined);
@@ -290,7 +289,16 @@ export class RunnerRegistry {
         };
         res.on('finish', finalize);
         res.on('close', finalize);
-        record.instance.app(req, res, (err?: any) => {
+        const handler = (record.instance.services as any)?.httpApp as express.RequestHandler | undefined;
+        if (!handler) {
+          restore();
+          res.off('finish', restore);
+          res.off('close', restore);
+          res.off('finish', finalize);
+          res.off('close', finalize);
+          return false;
+        }
+        handler(req, res, (err?: any) => {
           finalize();
           restore();
           res.off('finish', restore);

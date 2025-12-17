@@ -1,0 +1,49 @@
+version: 1
+repo:
+  name: "RuleLoom Local Workspace"
+  description: "Local plugin catalog for this monorepo."
+plugins:
+  - id: core
+    name: "RuleLoom Core"
+    description: "Core closures and init input."
+    manifest: plugins/rule-loom-core/ruleloom.manifest.yaml
+  - id: http
+    name: "HTTP Input & Closures"
+    description: "Express-based HTTP input plugin plus http.request closure."
+    manifest: plugins/rule-loom-plugin-http/ruleloom.manifest.yaml
+  - id: scheduler
+    name: "Scheduler Input"
+    description: "Bree-backed scheduler input plugin."
+    manifest: plugins/rule-loom-plugin-scheduler/ruleloom.manifest.yaml
+  - id: openai
+    name: "OpenAI"
+    description: "OpenAI API closures."
+    manifest: plugins/rule-loom-plugin-openai/ruleloom.manifest.yaml
+  - id: slack
+    name: "Slack"
+    description: "Slack message closures."
+    manifest: plugins/rule-loom-plugin-slack/ruleloom.manifest.yaml
+  - id: s3
+    name: "S3"
+    description: "AWS S3 plugin."
+    manifest: plugins/rule-loom-plugin-s3/ruleloom.manifest.yaml
+  - id: postgres
+    name: "Postgres"
+    description: "Postgres plugin."
+    manifest: plugins/rule-loom-plugin-postgres/ruleloom.manifest.yaml
+  - id: mysql
+    name: "MySQL"
+    description: "MySQL plugin."
+    manifest: plugins/rule-loom-plugin-mysql/ruleloom.manifest.yaml
+  - id: mqtt
+    name: "MQTT"
+    description: "MQTT plugin."
+    manifest: plugins/rule-loom-plugin-mqtt/ruleloom.manifest.yaml
+  - id: notion
+    name: "Notion"
+    description: "Notion plugin."
+    manifest: plugins/rule-loom-plugin-notion/ruleloom.manifest.yaml
+  - id: google
+    name: "Google"
+    description: "Google plugin."
+    manifest: plugins/rule-loom-plugin-google/ruleloom.manifest.yaml

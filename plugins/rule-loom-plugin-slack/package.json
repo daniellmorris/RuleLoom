@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@slack/web-api": "^7.3.0",
-    "rule-loom-core": "file:../packages/rule-loom-core",
     "rule-loom-lib": "file:../packages/rule-loom-lib",
     "rule-loom-engine": "file:../packages/rule-loom-engine"
   },

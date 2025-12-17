@@ -1,4 +1,11 @@
 version: 1
+plugins:
+  - source: file
+    path: ../../plugins/rule-loom-core
+  - source: file
+    path: ../../plugins/rule-loom-plugin-http
+  - source: file
+    path: ../../plugins/rule-loom-plugin-scheduler
 logger:
   level: warn
 inputs:

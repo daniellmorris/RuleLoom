@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "pg": "^8.12.0",
-    "rule-loom-core": "file:../packages/rule-loom-core",
     "rule-loom-lib": "file:../packages/rule-loom-lib",
     "rule-loom-engine": "file:../packages/rule-loom-engine"
   },

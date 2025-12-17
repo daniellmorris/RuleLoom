@@ -5,7 +5,33 @@ import _ from 'lodash';
 import { z } from 'zod';
 import type { RuleLoomEngine, ExecutionRuntime } from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
-import type { HttpInputConfig, HttpTriggerConfig, HttpInputApp, InputPlugin } from './types.js';
+import type { BaseInputConfig, InputPlugin, InputPluginContext } from 'rule-loom-runner/src/pluginApi.js';
+
+export interface HttpRouteRespondWith {
+  status?: number;
+  headers?: Record<string, string>;
+  body?: unknown;
+}
+
+export interface HttpTriggerConfig {
+  id?: string;
+  type?: 'httpRoute';
+  method?: 'get' | 'post' | 'put' | 'patch' | 'delete';
+  path: string;
+  flow: string;
+  respondWith?: HttpRouteRespondWith;
+}
+
+export interface HttpInputConfig extends BaseInputConfig {
+  type: 'http';
+  config?: {
+    basePath?: string;
+    bodyLimit?: string | number;
+  };
+  triggers: HttpTriggerConfig[];
+}
+
+export type HttpInputApp = express.Express;
 
 function buildInitialState(req: Request) {
   return {
@@ -123,22 +149,6 @@ function buildHttpSchema() {
 
 export const httpInputSchema = buildHttpSchema();
 
-export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
-  type: 'http',
-  schema: httpInputSchema,
-  configParameters: httpConfigParameters,
-  triggerParameters: httpTriggerParameters,
-  initialize: async (config: HttpInputConfig, { logger, engine, metadata }) => {
-    const httpInput = createHttpInputApp(engine, config, { logger, metadata });
-    return {
-      http: { app: httpInput, basePath: config.config?.basePath ?? '/' },
-      cleanup: async () => {
-        httpInput.removeAllListeners();
-      },
-    };
-  },
-};
-
 export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions): HttpInputApp {
   const app = express();
   const limit = input.config?.bodyLimit ?? '1mb';
@@ -150,7 +160,7 @@ export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfi
     const method = (route.method ?? 'post').toLowerCase();
     const handler = routeHandler(engine, route, options.logger, options.metadata);
     (app as any)[method](route.path, handler);
-    options.logger.info(`Registered route [${method.toUpperCase()}] ${route.path} -> flow "${route.flow}"`);
+    options.logger.info?.(`Registered route [${method.toUpperCase()}] ${route.path} -> flow "${route.flow}"`);
   }
 
   app.use((req, res, next) => {
@@ -174,15 +184,21 @@ export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfi
   return app;
 }
 
-export function createPlaceholderHttpApp(logger?: RuleLoomLogger): HttpInputApp {
-  const app = express();
-  app.use((_req, res) => {
-    logger?.warn?.('Request received but no HTTP inputs are configured.');
-    res.status(404).json({
-      error: {
-        message: 'No HTTP inputs configured for this runner.',
+export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
+  type: 'http',
+  schema: httpInputSchema,
+  configParameters: httpConfigParameters,
+  triggerParameters: httpTriggerParameters,
+  initialize: async (config: HttpInputConfig, { logger, engine, metadata }: InputPluginContext) => {
+    const httpApp = createHttpInputApp(engine, config, { logger, metadata });
+    return {
+      services: {
+        httpApp,
+        httpBasePath: config.config?.basePath ?? '/',
       },
-    });
-  });
-  return app;
-}
+      cleanup: async () => {
+        httpApp.removeAllListeners();
+      },
+    };
+  },
+};

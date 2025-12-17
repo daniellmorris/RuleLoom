@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "skipLibCheck": true,
+    "paths": {
+      "rule-loom-engine": ["../../packages/rule-loom-engine/dist/index.d.ts"],
+      "rule-loom-lib": ["../../packages/rule-loom-lib/dist/index.d.ts"],
+      "rule-loom-runner": ["../../packages/rule-loom-runner/dist/index.d.ts"],
+      "rule-loom-runner/*": ["../../packages/rule-loom-runner/dist/*.d.ts"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["dist", "node_modules", "tests"]
+}

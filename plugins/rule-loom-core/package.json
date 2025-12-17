@@ -26,10 +26,10 @@
   ],
   "scripts": {
     "build": "tsc -b tsconfig.json",
-    "manifest": "npm run build && node ./scripts/generate-manifest.js"
+    "manifest": "npm -w rule-loom-runner run build --if-present && node ../../packages/rule-loom-runner/dist/cli.js manifest .",
+    "postbuild": "npm run manifest"
   },
   "dependencies": {
-    "bree": "^9.2.4",
     "lodash": "^4.17.21",
     "rule-loom-engine": "file:../rule-loom-engine",
     "rule-loom-lib": "file:../rule-loom-lib"

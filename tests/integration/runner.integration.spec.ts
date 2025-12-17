@@ -30,7 +30,8 @@ describe('RuleLoom Runner configuration features', () => {
 
   itHttp('Branching & Core Closures', async () => {
     await withRunner('branching.yaml', async (instance) => {
-      const request = supertest(instance.app);
+      const app = instance.services.httpApp as any;
+      const request = supertest(app);
       const positive = await request
         .post('/orders')
         .send({ items: ['A', 'B'] })
@@ -48,7 +49,8 @@ describe('RuleLoom Runner configuration features', () => {
 
   itHttp('$call Inline Closure Execution', async () => {
     await withRunner('call-inline.yaml', async (instance) => {
-      const res = await supertest(instance.app)
+      const app = instance.services.httpApp as any;
+      const res = await supertest(app)
         .post('/format')
         .send({ id: 'O-1', total: 99 })
         .set('Content-Type', 'application/json');
@@ -60,7 +62,8 @@ describe('RuleLoom Runner configuration features', () => {
 
   itHttp('Functional Parameters (core.for-each)', async () => {
     await withRunner('functional.yaml', async (instance) => {
-      const res = await supertest(instance.app)
+      const app = instance.services.httpApp as any;
+      const res = await supertest(app)
         .post('/items')
         .send({ items: ['x', 'y', 'z'] })
         .set('Content-Type', 'application/json');
@@ -75,7 +78,8 @@ describe('RuleLoom Runner configuration features', () => {
 
   itHttp('Flow Closures reuse', async () => {
     await withRunner('flow-closure.yaml', async (instance) => {
-      const res = await supertest(instance.app)
+      const app = instance.services.httpApp as any;
+      const res = await supertest(app)
         .post('/flow')
         .send({ id: 'USER-1', total: 123 })
         .set('Content-Type', 'application/json');
@@ -86,7 +90,8 @@ describe('RuleLoom Runner configuration features', () => {
 
   itHttp('Flow closure parameters interpolate', async () => {
     await withRunner('flow-closure-params.yaml', async (instance) => {
-      const res = await supertest(instance.app)
+      const app = instance.services.httpApp as any;
+      const res = await supertest(app)
         .post('/flow-params')
         .send({ message: 'hi-from-test' })
         .set('Content-Type', 'application/json');
@@ -98,7 +103,8 @@ describe('RuleLoom Runner configuration features', () => {
 
   itHttp('Module closures via $call', async () => {
     await withRunner('module.yaml', async (instance) => {
-      const res = await supertest(instance.app)
+      const app = instance.services.httpApp as any;
+      const res = await supertest(app)
         .post('/module')
         .send({ amount: 100, rate: 0.2 })
         .set('Content-Type', 'application/json');

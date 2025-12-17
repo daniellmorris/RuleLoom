@@ -3,12 +3,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import createHttpError from 'http-errors';
-import { getHttpInput, getSchedulerInput, RunnerValidationError, validateConfig } from 'rule-loom-runner';
+import { RunnerValidationError, validateConfig } from 'rule-loom-runner';
 import { RunnerRegistry, type RunnerRecord } from '../../registry.js';
 import { RunnerStore } from '../../persistence/runnerStore.js';
 
 function serializeRoutes(record: ReturnType<RunnerRegistry['get']>): Array<{ method: string; path: string; flow: string }> {
-  const httpInput = record ? getHttpInput(record.instance.config) : undefined;
+  const httpInput = record?.instance.config.inputs.find((i: any) => i.type === 'http') as any;
   const triggers = httpInput?.triggers ?? [];
   return triggers.map((trigger: any) => ({
     method: trigger.method ?? 'post',
@@ -68,7 +68,7 @@ function serializeClosures(
 }
 
 function serializeJobs(record: ReturnType<RunnerRegistry['get']>) {
-  const schedulerConfig = record ? getSchedulerInput(record.instance.config) : undefined;
+  const schedulerConfig = record?.instance.config.inputs.find((i: any) => i.type === 'scheduler') as any;
   const triggers = schedulerConfig?.triggers ?? [];
   return triggers.map((job: any, idx: number) => ({
     name: job.name ?? job.id ?? `job-${idx + 1}`,
@@ -81,7 +81,7 @@ function serializeJobs(record: ReturnType<RunnerRegistry['get']>) {
 }
 
 function serializeJobStates(record: ReturnType<RunnerRegistry['get']>) {
-  const states = record?.instance.scheduler?.jobStates ?? new Map<string, any>();
+  const states = (record?.instance.services as any)?.scheduler?.jobStates ?? new Map<string, any>();
   const entries = Array.from(states.entries()) as Array<[string, any]>;
   return entries.map(([name, state]) => ({
     name,

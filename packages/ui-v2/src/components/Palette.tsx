@@ -6,6 +6,8 @@ import { useFlowStore } from "../state/flowStore";
 const Palette: React.FC = () => {
   const availableClosures = useCatalogStore((s) => s.availableClosures);
   const availableInputs = useCatalogStore((s) => s.availableInputs);
+  const closureSources = useCatalogStore((s) => s.closureSources);
+  const inputSources = useCatalogStore((s) => s.inputSources);
   const userClosures = useAppStore((s) => s.app.closures);
   const addTriggerToStore = useAppStore((s) => s.addTrigger);
   const addClosureStepToStore = useAppStore((s) => s.addClosureStep);
@@ -27,6 +29,21 @@ const Palette: React.FC = () => {
     ...userClosures.map((c) => c.name).filter(Boolean)
   ]));
 
+  const groupLabel = (source?: string) => {
+    if (!source) return "Unknown";
+    if (source === "core") return "Core";
+    if (source.startsWith("runtime:")) return "Runtime";
+    if (source.startsWith("repo:")) return "Repo";
+    return source;
+  };
+
+  const groupedClosures = closureNames.reduce((acc, name) => {
+    const label = groupLabel(closureSources[name]);
+    acc[label] = acc[label] ?? [];
+    acc[label].push(name);
+    return acc;
+  }, {} as Record<string, string[]>);
+
   return (
     <div className="panel stack">
       <h3>Palette</h3>
@@ -34,13 +51,19 @@ const Palette: React.FC = () => {
         {mode === "flow" &&
           availableInputs.map((inp) => (
             <button key={inp} className="button" onClick={() => addTrigger(inp)}>
-              Add {inp} trigger
+              Add {inp} trigger{" "}
+              <span className="badge" title={`Source: ${inputSources[inp] ?? "unknown"}`}>{groupLabel(inputSources[inp] ?? "unknown")}</span>
             </button>
           ))}
-        {closureNames.map((c) => (
-          <button key={c} className="button secondary" onClick={() => addClosure(c)}>
-            Add {c}
-          </button>
+        {Object.keys(groupedClosures).sort().map((label) => (
+          <div key={label} className="stack" style={{ gap: 6 }}>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>{label}</div>
+            {(groupedClosures[label] ?? []).map((c) => (
+              <button key={c} className="button secondary" onClick={() => addClosure(c)} title={`Source: ${closureSources[c] ?? "unknown"}`}>
+                Add {c} <span className="badge">{label}</span>
+              </button>
+            ))}
+          </div>
         ))}
       </div>
     </div>

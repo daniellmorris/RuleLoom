@@ -1,0 +1,30 @@
+version: 1
+inputs:
+  - type: http
+    routes:
+      - method: post
+        path: /flow
+        flow: process-user
+closures:
+  - type: flow
+    name: enrich-user
+    steps:
+      - closure: core.assign
+        parameters:
+          target: metadata.status
+          value: processed
+flows:
+  - name: process-user
+    steps:
+      - closure: core.assign
+        parameters:
+          target: user
+          value: ${request.body}
+      - closure: enrich-user
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            id: ${state.user.id}
+            total: ${state.user.total}
+            status: ${state.metadata.status}

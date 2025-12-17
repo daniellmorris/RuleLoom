@@ -1,4 +1,9 @@
 version: 1
+plugins:
+  - source: file
+    path: ../../plugins/rule-loom-core
+  - source: file
+    path: ../../plugins/rule-loom-plugin-http
 logger:
   level: info
 inputs:

@@ -78,6 +78,11 @@ export interface FlowInvokeStep {
 
 export type FlowStep = FlowInvokeStep;
 
+export interface FlowBranchCase {
+  when: FlowStep[];
+  then: FlowStep[];
+}
+
 export interface FlowDefinition {
   name: string;
   description?: string;

@@ -3,7 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { describe, it, expect, afterAll } from 'vitest';
 import { createRunner, validateConfig } from '../../packages/rule-loom-runner/src/index.js';
-import { resetLoadedPlugins } from '../../packages/rule-loom-runner/src/pluginLoader.js';
+import { resetLoadedPlugins, getLoadedPlugins } from '../../packages/rule-loom-runner/src/pluginLoader.js';
 import { resetClosureRegistry } from '../../packages/rule-loom-runner/src/closureRegistry.js';
 
 const exampleConfig = path.resolve('examples/plugin-runner.yml');
@@ -49,5 +49,18 @@ describe('plugin loader', () => {
     }
 
     expect(result.lastResult).toBe(5);
+  });
+
+  it('records runtime plugin inventory', async () => {
+    const configPath = await prepareConfig();
+    const instance = await createRunner(configPath);
+    try {
+      const plugins = getLoadedPlugins();
+      expect(Array.isArray(plugins)).toBe(true);
+      expect(plugins.some((p) => typeof p.id === 'string')).toBe(true);
+      expect(plugins.some((p) => typeof p.manifestRaw === 'string' && p.manifestRaw.includes('version:'))).toBe(true);
+    } finally {
+      await instance?.close();
+    }
   });
 });

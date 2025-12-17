@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FlowDefinition, FlowInvokeStep, FlowBranchStep } from 'rule-loom-engine';
+import type { FlowDefinition, FlowInvokeStep } from 'rule-loom-engine';
 import type { LogLevel } from 'rule-loom-lib';
 
 export const logLevelSchema = z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']) as z.ZodType<LogLevel>;
@@ -74,6 +74,12 @@ const rawBranchStepSchema = z
       });
     }
   });
+
+type FlowBranchStep = {
+  type?: 'branch';
+  cases: Array<{ when: FlowInvokeStep[]; then: FlowInvokeStep[] }>;
+  otherwise?: FlowInvokeStep[];
+};
 
 const branchStepSchema = rawBranchStepSchema.transform((step) => ({
   type: 'branch' as const,

@@ -258,7 +258,7 @@ export function coreForEachClosure(): ClosureDefinition {
 export function coreBranchClosure(): ClosureDefinition {
   return {
     name: 'core.branch',
-    implicitFields: ['cases', 'otherwise'],
+    implicitFields: ['cases'],
     handler: async (state: any, context: any) => {
       const engine = context.runtime.engine as RuleLoomEngine | undefined;
       if (!engine) {

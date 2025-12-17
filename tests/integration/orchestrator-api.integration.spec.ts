@@ -94,6 +94,11 @@ describe('Orchestrator API', () => {
     await withOrchestrator('orchestrator-empty.yaml', async (app) => {
       const request = supertest(app);
       const invalidConfig = `version: 1
+plugins:
+  - source: file
+    path: ../../plugins/rule-loom-core
+  - source: file
+    path: ../../plugins/rule-loom-plugin-http
 inputs:
   - type: http
     config: {}

@@ -10,8 +10,7 @@ import { promisify } from 'node:util';
 import os from 'node:os';
 import yaml from 'js-yaml';
 import type { RuleLoomLogger } from 'rule-loom-lib';
-import { registerInputPlugin, resetInputPlugins } from 'rule-loom-core/inputs';
-import { corePlugin } from 'rule-loom-core';
+import { registerInputPlugin, resetInputPlugins } from './pluginApi.js';
 import type { ClosureDefinition } from 'rule-loom-engine';
 import { registerClosure } from './closureRegistry.js';
 import type { PluginSpec } from './pluginSpecs.js';
@@ -20,11 +19,22 @@ import { buildClosures } from './closures.js';
 
 const execFileAsync = promisify(execFile);
 const loadedPlugins = new Set<string>();
+const loadedPluginInventory = new Map<string, LoadedPluginInfo>();
 
 export interface RuleLoomPlugin {
   name?: string;
   version?: string;
   register?: (ctx: PluginRegistrationContext) => Promise<void> | void;
+}
+
+export interface LoadedPluginInfo {
+  id: string;
+  source: PluginSpec['source'] | 'builtin';
+  modulePath: string;
+  name?: string;
+  version?: string;
+  manifestPath?: string;
+  manifestRaw?: string;
 }
 
 export interface PluginRegistrationContext {
@@ -44,16 +54,6 @@ const DEFAULT_CACHE_DIR = path.join(os.homedir(), '.rule-loom', 'plugins');
 export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLoaderOptions) {
   const cacheDir = options.cacheDir ?? DEFAULT_CACHE_DIR;
   await fs.mkdir(cacheDir, { recursive: true }).catch(() => undefined);
-
-  // Always load built-in core plugin first so core/http closures are available without config entries.
-  if (!loadedPlugins.has('builtin:core-plugin')) {
-    await corePlugin.register({
-      registerInputPlugin,
-      registerClosure,
-      logger: options.logger,
-    } as PluginRegistrationContext);
-    loadedPlugins.add('builtin:core-plugin');
-  }
 
   if (!specs.length) return;
 
@@ -77,6 +77,12 @@ export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLo
       const closures = await buildClosures(closureConfigs, path.dirname(sourcePath), options.logger);
       closures.forEach((c) => registerClosure(c));
       loadedPlugins.add(modulePath);
+      await recordLoadedPlugin({
+        id: inventoryIdForSpec(spec, modulePath),
+        source: spec.source,
+        modulePath,
+        name: specName(spec),
+      });
       continue;
     }
     const pluginModule = await import(modulePath);
@@ -93,12 +99,24 @@ export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLo
       logger: options.logger,
     });
     loadedPlugins.add(modulePath);
+    await recordLoadedPlugin({
+      id: inventoryIdForSpec(spec, modulePath),
+      source: spec.source,
+      modulePath,
+      name,
+      version: plugin.version,
+    });
   }
 }
 
 export function resetLoadedPlugins() {
   loadedPlugins.clear();
+  loadedPluginInventory.clear();
   resetInputPlugins();
+}
+
+export function getLoadedPlugins(): LoadedPluginInfo[] {
+  return Array.from(loadedPluginInventory.values());
 }
 
 function specName(spec: PluginSpec): string | undefined {
@@ -195,6 +213,37 @@ async function locateManifest(resolvedModulePath: string): Promise<string | unde
   } catch (error) {
     return undefined;
   }
+}
+
+function inventoryIdForSpec(spec: PluginSpec, modulePath: string): string {
+  if (spec.source === 'file') return `file:${modulePath}`;
+  if (spec.source === 'config') return `config:${modulePath}`;
+  if (spec.source === 'github') return `github:${spec.repo}@${spec.ref}${spec.path ? `:${spec.path}` : ''}`;
+  if (spec.source === 'npm') return `npm:${spec.name}${spec.version ? `@${spec.version}` : ''}`;
+  return `store:${spec.name}${spec.version ? `@${spec.version}` : ''}`;
+}
+
+async function recordLoadedPlugin(info: Omit<LoadedPluginInfo, 'manifestPath' | 'manifestRaw'>) {
+  if (loadedPluginInventory.has(info.id)) return;
+
+  const { manifestPath, manifestRaw } = await readManifestForInventory(info.modulePath);
+  loadedPluginInventory.set(info.id, {
+    ...info,
+    manifestPath,
+    manifestRaw,
+  });
+}
+
+async function readManifestForInventory(modulePath: string): Promise<{ manifestPath?: string; manifestRaw?: string }> {
+  const manifestPath = await locateManifest(modulePath);
+  if (!manifestPath) return {};
+  const exists = await fs
+    .stat(manifestPath)
+    .then((s) => s.isFile())
+    .catch(() => false);
+  if (!exists) return {};
+  const manifestRaw = await fs.readFile(manifestPath, 'utf8').catch(() => undefined);
+  return { manifestPath, manifestRaw };
 }
 
 async function downloadGithubRepo(spec: Extract<PluginSpec, { source: 'github' }>, targetDir: string, options: ResolveOptions) {

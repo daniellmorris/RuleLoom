@@ -1,9 +1,9 @@
-import type { FlowWithUi, StepWithUi } from "./appStore";
+import type { FlowWithMeta, StepWithMeta } from "./appStore";
 
 export type StepVisit = {
-  step: StepWithUi;
+  step: StepWithMeta;
   path: string;
-  arr: StepWithUi[];
+  arr: StepWithMeta[];
   idx: number;
   discIdx?: number;
   parentStepPath?: string;
@@ -17,18 +17,18 @@ export type StepsArrayMeta = {
   parentStepPath?: string;
   parentEdgeLabel?: string;
   stepPaths: string[];
-  steps: StepWithUi[];
+  steps: StepWithMeta[];
 };
 
 export type WalkResult = { steps: StepVisit[]; arrays: StepsArrayMeta[] };
 
-const isStepLike = (val: any) => val && typeof val === "object" && (val.$ui || val.closure || val.type);
+const isStepLike = (val: any) => val && typeof val === "object" && (val.$meta || val.closure || val.type);
 
-export function walkFlow(flow: FlowWithUi): WalkResult {
+export function walkFlow(flow: FlowWithMeta): WalkResult {
   const steps: StepVisit[] = [];
   const arrays: StepsArrayMeta[] = [];
 
-  const ensureArrayMeta = (meta: Omit<StepsArrayMeta, "stepPaths" | "steps">, stepsArr: StepWithUi[]): StepsArrayMeta => {
+  const ensureArrayMeta = (meta: Omit<StepsArrayMeta, "stepPaths" | "steps">, stepsArr: StepWithMeta[]): StepsArrayMeta => {
     const existing = arrays.find(
       (a) =>
         a.pathPrefix === meta.pathPrefix &&
@@ -44,7 +44,7 @@ export function walkFlow(flow: FlowWithUi): WalkResult {
   };
 
   const visitSteps = (
-    stepsArr: StepWithUi[] | undefined,
+    stepsArr: StepWithMeta[] | undefined,
     opts: { pathPrefix: string; inline: boolean; discIdx?: number; parentStepPath?: string; parentEdgeLabel?: string }
   ) => {
     if (!Array.isArray(stepsArr)) return;
@@ -89,7 +89,9 @@ export function walkFlow(flow: FlowWithUi): WalkResult {
   };
 
   visitSteps(flow.steps, { pathPrefix: "", inline: false });
-  (flow.$ui?.disconnected ?? []).forEach((frag, di) => visitSteps(frag?.steps, { pathPrefix: `$ui.disconnected[${di}].`, inline: false, discIdx: di }));
+  (flow.$meta?.disconnected ?? []).forEach((frag, di) =>
+    visitSteps(frag?.steps, { pathPrefix: `$meta.disconnected[${di}].`, inline: false, discIdx: di })
+  );
 
   return { steps, arrays };
 }

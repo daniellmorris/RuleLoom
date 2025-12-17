@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Run Vitest",
+      "program": "${workspaceRoot}/node_modules/vitest/vitest.mjs",
+      "console": "integratedTerminal",
+      "args": [
+        "--inspect-brk",
+        "--no-file-parallelism",
+        "run",
+        "--config",
+        "vitest.config.ts"
+      ]
+    },
+    {
+      "type": "chrome",
+      "request": "attach",
+      "name": "Attach to Vitest",
+      "port": 9229
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug Vitest Browser",
+      "configurations": ["Attach to Vitest Browser", "Run Vitest Browser"],
+      "stopAll": true
+    }
+  ]
+}

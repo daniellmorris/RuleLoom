@@ -13,7 +13,8 @@ function findTriggerById(app: any, flowName: string | undefined, triggerId: stri
   for (let i = 0; i < (app.inputs ?? []).length; i++) {
     const triggers = app.inputs[i]?.triggers ?? [];
     for (let t = 0; t < triggers.length; t++) {
-      if (triggers[t]?.flow === flowName && triggers[t]?.$ui?.id === triggerId) {
+      const meta = triggers[t]?.$meta;
+      if (triggers[t]?.flow === flowName && meta?.id === triggerId) {
         return { inputIdx: i, triggerIdx: t };
       }
     }

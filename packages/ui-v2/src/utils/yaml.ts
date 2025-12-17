@@ -28,7 +28,8 @@ function nodeStep(node: Node) {
     const params = { ...(node.data?.params ?? {}) };
     const step: any = { closure: node.data?.closureName ?? node.label };
     if (Object.keys(params).length) step.parameters = params;
-    if ((node.data as any)?.ui) step.$ui = (node.data as any).ui;
+    const meta = (node.data as any)?.ui ?? (node.data as any)?.meta;
+    if (meta) step.$meta = meta;
     return step;
   }
   return null;
@@ -158,23 +159,23 @@ export function validateFlow(flow: Flow): string[] {
 export function exportFlowToYaml(flow: Flow): string {
   const entryNode = flow.nodes.find((n) => n.id === flow.entryId) ?? flow.nodes[0];
   const steps = traverse(entryNode, flow.nodes, flow.edges);
-  // attach $ui positions from node coordinates where missing
-  const attachUi = (stepsArr: any[], parentNode?: Node) => {
+  // attach $meta positions from node coordinates where missing
+  const attachMeta = (stepsArr: any[], parentNode?: Node) => {
     stepsArr?.forEach((s, idx) => {
       const node = flow.nodes.find((n) => (n.data as any)?.closureName === s.closure) ?? flow.nodes[idx];
       if (node) {
-        s.$ui = s.$ui ?? { x: node.x, y: node.y, w: 180, h: 80 };
+        s.$meta = s.$meta ?? { x: node.x, y: node.y, w: 180, h: 80 };
       }
       if (s.cases) {
-        s.cases.forEach((c: any) => attachUi(c.steps, node));
+        s.cases.forEach((c: any) => attachMeta(c.steps, node));
       }
-      if (s.otherwise) attachUi(s.otherwise, node);
+      if (s.otherwise) attachMeta(s.otherwise, node);
       Object.entries(s.parameters ?? {}).forEach(([key, val]) => {
-        if (Array.isArray(val)) attachUi(val as any[], node);
+        if (Array.isArray(val)) attachMeta(val as any[], node);
       });
     });
   };
-  attachUi(steps);
+  attachMeta(steps);
 
   const inputNodes = flow.nodes.filter((n) => n.kind === "input");
   const grouped: Record<string, { config: any; triggers: any[] }> = {};
@@ -223,7 +224,7 @@ export function exportFlowToYaml(flow: Flow): string {
       {
         name: flow.name,
         steps,
-        ...(flow as any)._uiDisconnected ? { $ui: { disconnected: (flow as any)._uiDisconnected } } : {}
+        ...(flow as any)._uiDisconnected ? { $meta: { disconnected: (flow as any)._uiDisconnected } } : {}
       }
     ]
   };
@@ -290,7 +291,7 @@ export function importFlowFromYaml(text: string, pkgInputs?: any[], asClosure = 
   const build = (steps: any[], parent?: Node): Node | undefined => {
     let firstCreated: Node | undefined;
     for (const step of steps) {
-      const ui = step?.$ui ?? {};
+    const ui = step?.$meta ?? {};
       if (step.cases) {
         const branchNode = addNode({ kind: "branch", label: "Branch", connectors: [] });
         const branchConnectors: Connector[] = [{ id: "prev", label: "prev", direction: "prev" }];
@@ -370,7 +371,7 @@ export function importFlowFromYaml(text: string, pkgInputs?: any[], asClosure = 
     const trigList = inp.triggers ?? [];
     trigList.forEach((tr: any, tIdx: number) => {
       const meta = inputMetaMap[inp.type ?? ""];
-      const ui = tr?.$ui ?? {};
+    const ui = tr?.$meta ?? {};
       nodes.push({
         id: `input-${idx + 1}-${tIdx + 1}`,
         kind: "input",
@@ -395,7 +396,7 @@ export function importFlowFromYaml(text: string, pkgInputs?: any[], asClosure = 
   }
 
   // disconnected UI steps: render as loose subgraphs
-  const disconnected = parsed?.flows?.[0]?.$ui?.disconnected ?? [];
+  const disconnected = parsed?.flows?.[0]?.$meta?.disconnected ?? [];
   disconnected.forEach((disc: any, di: number) => {
     const sub = build(disc.steps ?? [], undefined);
     if (sub) {

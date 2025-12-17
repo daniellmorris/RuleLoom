@@ -1,6 +1,6 @@
 import { nanoid } from "../utils/id";
 import { Node, Edge } from "../types";
-import type { FlowWithUi } from "../state/appStore";
+import type { FlowWithMeta } from "../state/appStore";
 import { buildNodeIndex } from "../state/appStore";
 import { walkFlow } from "../state/walk";
 
@@ -10,20 +10,21 @@ export interface GraphBuild {
   pathById: Record<string, string>;
 }
 
-export function buildGraph(flow: FlowWithUi, inputs: any[] = []): GraphBuild {
+export function buildGraph(flow: FlowWithMeta, inputs: any[] = []): GraphBuild {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
   const index = buildNodeIndex(flow);
   const pathById: Record<string, string> = { ...index.pathById };
   const walk = walkFlow(flow);
 
-  const startId = index.idByPath["start"] ?? flow.$ui?.id ?? "start";
+  const flowMeta = flow.$meta ?? {};
+  const startId = index.idByPath["start"] ?? flowMeta.id ?? "start";
   nodes.push({
     id: startId,
     kind: "start",
     label: "START",
-    x: flow.$ui?.x ?? 60,
-    y: flow.$ui?.y ?? 120,
+    x: flowMeta.x ?? 60,
+    y: flowMeta.y ?? 120,
     connectors: [{ id: "next", label: "next", direction: "next" }]
   });
 
@@ -35,10 +36,10 @@ export function buildGraph(flow: FlowWithUi, inputs: any[] = []): GraphBuild {
       id,
       kind: "closure",
       label: step.closure ?? step.type ?? path,
-      x: step.$ui?.x ?? 200,
-      y: step.$ui?.y ?? 200,
+      x: (step as any).$meta?.x ?? 200,
+      y: (step as any).$meta?.y ?? 200,
       connectors: [{ id: "next", label: "next", direction: "next" }],
-      data: { closureName: step.closure, params: step.parameters ?? {}, ui: step.$ui }
+      data: { closureName: step.closure, params: step.parameters ?? {}, ui: (step as any).$meta }
     });
   });
 
@@ -77,23 +78,24 @@ export function buildGraph(flow: FlowWithUi, inputs: any[] = []): GraphBuild {
     (inp.triggers ?? []).forEach((tr: any, ti: number) => {
       if (tr.flow !== flow.name) return;
       const path = `inputs[${ii}].triggers[${ti}]`;
-      const id = tr.$ui?.id ?? path;
+      const trigMeta = tr.$meta ?? {};
+      const id = trigMeta.id ?? path;
       pathById[id] = path;
       nodes.push({
         id,
         kind: "input",
         label: inp.type,
-        x: tr.$ui?.x ?? 40,
-        y: tr.$ui?.y ?? 160 + ti * 80,
+        x: trigMeta.x ?? 40,
+        y: trigMeta.y ?? 160 + ti * 80,
         connectors: [{ id: "next", label: "next", direction: "next" }],
-        data: { config: inp.config ?? {}, trigger: tr, ui: tr.$ui }
+        data: { config: inp.config ?? {}, trigger: tr, ui: trigMeta }
       });
       edges.push({ id: nanoid(), from: id, to: startId, kind: "control", label: "next" });
     });
   });
 
   // disconnected
-  const disc = flow.$ui?.disconnected ?? [];
+  const disc = flowMeta.disconnected ?? [];
   disc.forEach((frag, di) => {
     // already handled via walkFlow arrays
     return frag;

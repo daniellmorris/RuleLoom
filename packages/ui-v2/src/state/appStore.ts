@@ -3,15 +3,15 @@ import yaml from "js-yaml";
 import { nanoid } from "../utils/id";
 import { walkFlow, type StepVisit } from "./walk";
 
-export type UiMeta = { x?: number; y?: number; w?: number; h?: number; color?: string; collapsed?: boolean; id?: string };
-export type StepWithUi = any & { $ui?: UiMeta };
-export type FlowWithUi = { name: string; steps: StepWithUi[]; $ui?: { id?: string; x?: number; y?: number; disconnected?: { steps: StepWithUi[] }[] } };
+export type Meta = { x?: number; y?: number; w?: number; h?: number; color?: string; collapsed?: boolean; id?: string };
+export type StepWithMeta = any & { $meta?: Meta };
+export type FlowWithMeta = { name: string; steps: StepWithMeta[]; $meta?: { id?: string; x?: number; y?: number; disconnected?: { steps: StepWithMeta[] }[] } };
 
 export type NodeIndexEntry = {
   id: string;
   path: string;
   kind: "start" | "step";
-  arr?: StepWithUi[];
+  arr?: StepWithMeta[];
   idx?: number;
   discIdx?: number;
 };
@@ -21,15 +21,15 @@ export type NodeIndex = { byId: Record<string, NodeIndexEntry>; pathById: Record
 export interface AppState {
   version: number;
   inputs: any[];
-  closures: FlowWithUi[];
-  flows: FlowWithUi[];
+  closures: FlowWithMeta[];
+  flows: FlowWithMeta[];
 }
 
 interface AppStore {
   app: AppState;
   loadYaml: (text: string) => void;
   toYaml: () => string;
-  setFlows: (flows: FlowWithUi[]) => void;
+  setFlows: (flows: FlowWithMeta[]) => void;
   addFlow: (name?: string) => void;
   addClosure: (name?: string) => void;
   renameFlow: (idx: number, name: string) => void;
@@ -41,8 +41,8 @@ interface AppStore {
   moveStepChainAfter: (flowName: string, sourceId: string, targetId: string) => OperationResult;
   removeConnection: (flowName: string, fromId: string, toId: string, label?: string) => OperationResult;
   deleteNode: (flowName: string, nodeId: string) => OperationResult;
-  updateNodeUi: (flowName: string, nodeId: string, ui: UiMeta) => void;
-  addDisconnected: (flowName: string, steps: StepWithUi[]) => void;
+  updateNodeUi: (flowName: string, nodeId: string, ui: Meta) => void;
+  addDisconnected: (flowName: string, steps: StepWithMeta[]) => void;
   addTrigger: (type: string, flowName: string) => void;
   addClosureStep: (collection: "flows" | "closures", idx: number, closureName: string) => void;
   updateStepParam: (flowName: string, nodeId: string, key: string, value: any) => void;
@@ -60,27 +60,27 @@ const defaultState: AppState = {
     {
       name: "Flow 1",
       steps: [],
-      $ui: { id: nanoid(), x: 1000, y: 1000, disconnected: [] }
+      $meta: { id: nanoid(), x: 1000, y: 1000, disconnected: [] }
     }
   ]
 };
 
-function ensureFlowUi(flow: FlowWithUi) {
-  flow.$ui = flow.$ui ?? { id: nanoid(), x: 60, y: 120, disconnected: [] };
-  flow.$ui.id = flow.$ui.id ?? nanoid();
-  flow.$ui.x = flow.$ui.x ?? 1000;
-  flow.$ui.y = flow.$ui.y ?? 1000;
-  flow.$ui.disconnected = flow.$ui.disconnected ?? [];
+function ensureFlowMeta(flow: FlowWithMeta) {
+  flow.$meta = flow.$meta ?? { id: nanoid(), x: 1000, y: 1000, disconnected: [] };
+  flow.$meta.id = flow.$meta.id ?? nanoid();
+  flow.$meta.x = flow.$meta.x ?? 1000;
+  flow.$meta.y = flow.$meta.y ?? 1000;
+  flow.$meta.disconnected = flow.$meta.disconnected ?? [];
 }
 
-function ensureStepUi(step: StepWithUi) {
-  step.$ui = step.$ui ?? {};
-  step.$ui.id = step.$ui.id ?? nanoid();
+function ensureStepMeta(step: StepWithMeta) {
+  step.$meta = step.$meta ?? {};
+  step.$meta.id = step.$meta.id ?? nanoid();
 }
 
-export function buildNodeIndex(flow: FlowWithUi): NodeIndex {
-  ensureFlowUi(flow);
-  const ui = flow.$ui as NonNullable<FlowWithUi["$ui"]>;
+export function buildNodeIndex(flow: FlowWithMeta): NodeIndex {
+  ensureFlowMeta(flow);
+  const meta = flow.$meta as NonNullable<FlowWithMeta["$meta"]>;
   const index: NodeIndex = { byId: {}, pathById: {}, idByPath: {} };
   const record = (id: string, path: string, entry: NodeIndexEntry) => {
     index.byId[id] = entry;
@@ -88,13 +88,13 @@ export function buildNodeIndex(flow: FlowWithUi): NodeIndex {
     index.idByPath[path] = id;
   };
 
-  record(ui.id as string, "start", { id: ui.id as string, path: "start", kind: "start", arr: flow.steps, idx: -1 });
+  record(meta.id as string, "start", { id: meta.id as string, path: "start", kind: "start", arr: flow.steps, idx: -1 });
 
   const visits: StepVisit[] = walkFlow(flow).steps;
   visits.forEach((v) => {
-    ensureStepUi(v.step);
-    record(v.step.$ui?.id as string, v.path, {
-      id: v.step.$ui?.id as string,
+    ensureStepMeta(v.step);
+    record(v.step.$meta?.id as string, v.path, {
+      id: v.step.$meta?.id as string,
       path: v.path,
       kind: "step",
       arr: v.arr,
@@ -108,9 +108,9 @@ export function buildNodeIndex(flow: FlowWithUi): NodeIndex {
 
 function parse(text: string): AppState {
   const obj = yaml.load(text) as any;
-  const seedIds = (steps: StepWithUi[]) => {
+  const seedIds = (steps: StepWithMeta[]) => {
     steps.forEach((s) => {
-      ensureStepUi(s);
+      ensureStepMeta(s);
       if (Array.isArray(s.cases)) s.cases.forEach((c: any) => seedIds(c.steps ?? []));
       if (Array.isArray((s as any).otherwise)) seedIds((s as any).otherwise as any);
       Object.values(s.parameters ?? {}).forEach((p: any) => {
@@ -120,19 +120,19 @@ function parse(text: string): AppState {
     });
   };
   const seedFlow = (f: any) => {
-    ensureFlowUi(f);
+    ensureFlowMeta(f);
     seedIds(f.steps ?? []);
-    (f?.$ui?.disconnected ?? []).forEach((d: any) => seedIds(d.steps ?? []));
+    (f?.$meta?.disconnected ?? []).forEach((d: any) => seedIds(d.steps ?? []));
   };
   (obj?.flows ?? []).forEach(seedFlow);
   (obj?.closures ?? []).forEach(seedFlow);
   (obj?.inputs ?? []).forEach((inp: any) => {
     inp.triggers = inp.triggers ?? [];
     inp.triggers.forEach((t: any, idx: number) => {
-      t.$ui = t.$ui ?? {};
-      t.$ui.id = t.$ui.id ?? nanoid();
-      t.$ui.x = t.$ui.x ?? 40;
-      t.$ui.y = t.$ui.y ?? 160 + idx * 90;
+      t.$meta = t.$meta ?? {};
+      t.$meta.id = t.$meta.id ?? nanoid();
+      t.$meta.x = t.$meta.x ?? 40;
+      t.$meta.y = t.$meta.y ?? 160 + idx * 90;
     });
   });
 
@@ -148,19 +148,19 @@ function dump(app: AppState): string {
   return yaml.dump(app, { lineWidth: 120 });
 }
 
-function getStep(flow: FlowWithUi, path: string): any {
+function getStep(flow: FlowWithMeta, path: string): any {
   if (path === "start") return flow;
   const visit = walkFlow(flow).steps.find((v) => v.path === path);
   return visit?.step ?? null;
 }
 
-function setStepUi(flow: FlowWithUi, path: string, ui: UiMeta) {
+function setStepMeta(flow: FlowWithMeta, path: string, ui: Meta) {
   const step = getStep(flow, path);
   if (!step) return;
-  step.$ui = { ...(step.$ui ?? {}), ...ui };
+  step.$meta = { ...(step.$meta ?? {}), ...ui };
 }
 
-function setStepCall(flow: FlowWithUi, path: string, paramName: string, targetPath: string | null) {
+function setStepCall(flow: FlowWithMeta, path: string, paramName: string, targetPath: string | null) {
   const step = getStep(flow, path);
   if (!step) return;
   if (!step.parameters) step.parameters = {};
@@ -168,7 +168,7 @@ function setStepCall(flow: FlowWithUi, path: string, paramName: string, targetPa
   else delete step.parameters[paramName];
 }
 
-function resolveStepArray(flow: FlowWithUi, path: string): { arr: StepWithUi[]; idx: number; discIdx?: number } | null {
+function resolveStepArray(flow: FlowWithMeta, path: string): { arr: StepWithMeta[]; idx: number; discIdx?: number } | null {
   if (path === "start") return { arr: flow.steps, idx: -1 };
   const visit = walkFlow(flow).steps.find((v) => v.path === path);
   if (!visit) return null;
@@ -212,10 +212,10 @@ function clearPathValue(root: any, path: string) {
 }
 
 function detachChain(
-  flow: FlowWithUi,
+  flow: FlowWithMeta,
   targetPath: string,
-  callerCtx?: { arr: StepWithUi[]; idx: number }
-): { chain: StepWithUi[]; flow: FlowWithUi } | null {
+  callerCtx?: { arr: StepWithMeta[]; idx: number }
+): { chain: StepWithMeta[]; flow: FlowWithMeta } | null {
   const tgt = resolveStepArray(flow, targetPath);
   if (!tgt) return null;
   if (tgt.idx < 0) return null;
@@ -227,29 +227,32 @@ function detachChain(
   }
   const chain = tgt.arr.splice(tgt.idx, len);
   if (typeof tgt.discIdx === "number" && tgt.arr.length === 0) {
-    const disc = flow.$ui?.disconnected ?? [];
+    ensureFlowMeta(flow);
+    const disc = flow.$meta!.disconnected ?? [];
     disc.splice(tgt.discIdx, 1);
-    flow.$ui = { ...(flow.$ui ?? {}), disconnected: disc };
+    flow.$meta = { ...(flow.$meta ?? {}), disconnected: disc };
   }
   return { chain, flow };
 }
 
-function reseedUiIds(steps: StepWithUi[]) {
+function reseedMetaIds(steps: StepWithMeta[]) {
   steps.forEach((s) => {
-    s.$ui = s.$ui ?? {};
-    s.$ui.id = nanoid();
+    s.$meta = s.$meta ?? {};
+    s.$meta.id = nanoid();
     // ensure embedded steps keep closure/type if present
     if (!s.closure && s.type) s.closure = s.type;
-    if (Array.isArray(s.cases)) s.cases.forEach((c: any) => reseedUiIds(c.steps ?? []));
-    if (Array.isArray((s as any).otherwise)) reseedUiIds((s as any).otherwise as any);
+    if (Array.isArray(s.cases)) s.cases.forEach((c: any) => reseedMetaIds(c.steps ?? []));
+    if (Array.isArray((s as any).otherwise)) reseedMetaIds((s as any).otherwise as any);
     Object.values(s.parameters ?? {}).forEach((p: any) => {
-      if (p?.steps) reseedUiIds(p.steps);
-      if (p?.$call?.steps) reseedUiIds(p.$call.steps);
+      if (p?.steps) reseedMetaIds(p.steps);
+      if (p?.$call?.steps) reseedMetaIds(p.$call.steps);
     });
   });
 }
 
-function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string): boolean {
+function moveChain(flow: FlowWithMeta, sourcePath: string, targetPath: string): boolean {
+  ensureFlowMeta(flow);
+  const meta = flow.$meta!;
   const src = resolveStepArray(flow, sourcePath);
   const tgt = resolveStepArray(flow, targetPath);
   if (!src || !tgt || !flow.steps) return false;
@@ -271,9 +274,9 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string): bo
     const tail = steps.slice(tIdx);
     flow.steps = [...head, ...tail];
     if (orphan.length) {
-      const disc = flow.$ui?.disconnected ?? [];
+      const disc = meta.disconnected ?? [];
       disc.push({ steps: orphan });
-      flow.$ui = { ...(flow.$ui ?? {}), disconnected: disc };
+      flow.$meta = { ...(meta ?? {}), disconnected: disc };
     }
     return true;
   }
@@ -283,9 +286,9 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string): bo
     const chain = src.arr.slice(src.idx);
     src.arr.splice(src.idx, chain.length);
     if (typeof src.discIdx === "number" && src.arr.length === 0) {
-      const discList = flow.$ui?.disconnected ?? [];
+      const discList = meta.disconnected ?? [];
       discList.splice(src.discIdx, 1);
-      flow.$ui = { ...(flow.$ui ?? {}), disconnected: discList };
+      flow.$meta = { ...(meta ?? {}), disconnected: discList };
     }
     const tIdx = tgt.idx;
     const steps = flow.steps;
@@ -304,15 +307,15 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string): bo
     const attach = tgt.arr.slice(tgt.idx);
     tgt.arr.splice(tgt.idx, attach.length);
     if (typeof tgt.discIdx === "number" && tgt.arr.length === 0) {
-      const discList = flow.$ui?.disconnected ?? [];
+      const discList = meta.disconnected ?? [];
       discList.splice(tgt.discIdx, 1);
-      flow.$ui = { ...(flow.$ui ?? {}), disconnected: discList };
+      flow.$meta = { ...(meta ?? {}), disconnected: discList };
     }
     flow.steps = [...head, ...attach];
     if (orphan.length) {
-      const disc = flow.$ui?.disconnected ?? [];
+      const disc = meta.disconnected ?? [];
       disc.push({ steps: orphan });
-      flow.$ui = { ...(flow.$ui ?? {}), disconnected: disc };
+      flow.$meta = { ...(meta ?? {}), disconnected: disc };
     }
     return true;
   }
@@ -330,9 +333,9 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string): bo
       src.arr.length = 0;
       src.arr.push(...head, ...tail);
       if (orphan.length) {
-        const disc = flow.$ui?.disconnected ?? [];
+        const disc = meta.disconnected ?? [];
         disc.push({ steps: orphan });
-        flow.$ui = { ...(flow.$ui ?? {}), disconnected: disc };
+        flow.$meta = { ...(meta ?? {}), disconnected: disc };
       }
       return true;
     }
@@ -341,9 +344,9 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string): bo
     const chain = src.arr.slice(src.idx);
     src.arr.splice(src.idx, chain.length);
     if (typeof src.discIdx === "number" && src.arr.length === 0) {
-      const discList = flow.$ui?.disconnected ?? [];
+      const discList = meta.disconnected ?? [];
       discList.splice(src.discIdx, 1);
-      flow.$ui = { ...(flow.$ui ?? {}), disconnected: discList };
+      flow.$meta = { ...(meta ?? {}), disconnected: discList };
     }
     const insertPos = Math.max(0, Math.min(tgt.idx, tgt.arr.length));
     tgt.arr.splice(insertPos, 0, ...chain);
@@ -353,7 +356,7 @@ function moveChain(flow: FlowWithUi, sourcePath: string, targetPath: string): bo
   return false;
 }
 
-function attachCallChainByPath(flow: FlowWithUi, callerPath: string, paramName: string, targetPath: string) {
+function attachCallChainByPath(flow: FlowWithMeta, callerPath: string, paramName: string, targetPath: string) {
   const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".") || a === b;
   if (isBoundaryPrefix(callerPath, targetPath) || isBoundaryPrefix(targetPath, callerPath)) return;
   const caller = getStep(flow, callerPath);
@@ -361,12 +364,12 @@ function attachCallChainByPath(flow: FlowWithUi, callerPath: string, paramName: 
   if (!caller) return;
   const detached = detachChain(flow, targetPath, callerCtx ?? undefined);
   if (!detached) return;
-  reseedUiIds(detached.chain);
+  reseedMetaIds(detached.chain);
   caller.parameters = caller.parameters ?? {};
   caller.parameters[paramName] = { $call: { steps: detached.chain } };
 }
 
-function attachFlowStepsChainByPath(flow: FlowWithUi, callerPath: string, paramName: string, targetPath: string) {
+function attachFlowStepsChainByPath(flow: FlowWithMeta, callerPath: string, paramName: string, targetPath: string) {
   const isBoundaryPrefix = (a: string, b: string) => b === a || b.startsWith(a + ".") || a === b;
   if (isBoundaryPrefix(callerPath, targetPath) || isBoundaryPrefix(targetPath, callerPath)) return;
   const caller = getStep(flow, callerPath);
@@ -374,7 +377,7 @@ function attachFlowStepsChainByPath(flow: FlowWithUi, callerPath: string, paramN
   if (!caller) return;
   const detached = detachChain(flow, targetPath, callerCtx ?? undefined);
   if (!detached) return;
-  reseedUiIds(detached.chain);
+  reseedMetaIds(detached.chain);
 
   const segments: (string | number)[] = [];
   paramName.split('.').forEach((part) => {
@@ -415,7 +418,7 @@ function attachFlowStepsChainByPath(flow: FlowWithUi, callerPath: string, paramN
   }
 }
 
-function setStepParam(flow: FlowWithUi, path: string, key: string, value: any) {
+function setStepParam(flow: FlowWithMeta, path: string, key: string, value: any) {
   const step = getStep(flow, path);
   if (!step) return;
   step.parameters = { ...(step.parameters ?? {}), [key]: value };
@@ -433,7 +436,8 @@ function findTriggerById(inputs: any[], triggerId: string): { inputIdx: number; 
   for (let i = 0; i < inputs.length; i++) {
     const triggers = inputs[i]?.triggers ?? [];
     for (let t = 0; t < triggers.length; t++) {
-      if (triggers[t]?.$ui?.id === triggerId) {
+      const meta = triggers[t]?.$meta;
+      if (meta?.id === triggerId) {
         return { inputIdx: i, triggerIdx: t };
       }
     }
@@ -441,8 +445,8 @@ function findTriggerById(inputs: any[], triggerId: string): { inputIdx: number; 
   return null;
 }
 
-function findStepById(flow: FlowWithUi, id: string): { step: StepWithUi | null; path: string | null } {
-  const visit = walkFlow(flow).steps.find((v) => v.step?.$ui?.id === id);
+function findStepById(flow: FlowWithMeta, id: string): { step: StepWithMeta | null; path: string | null } {
+  const visit = walkFlow(flow).steps.find((v) => v.step?.$meta?.id === id);
   return visit ? { step: visit.step, path: visit.path } : { step: null, path: null };
 }
 
@@ -461,12 +465,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setFlows: (flows) => set((state) => ({ app: { ...state.app, flows } })),
   addFlow: (name = "New Flow") =>
     set((state) => {
-      const flows = [...state.app.flows, { name, steps: [], $ui: { id: nanoid(), x: 60, y: 120, disconnected: [] } }];
+      const flows = [...state.app.flows, { name, steps: [], $meta: { id: nanoid(), x: 60, y: 120, disconnected: [] } }];
       return { app: { ...state.app, flows } };
     }),
   addClosure: (name = "New Closure") =>
     set((state) => {
-      const closures = [...state.app.closures, { name, steps: [], $ui: { id: nanoid(), x: 60, y: 120, disconnected: [] } }];
+      const closures = [...state.app.closures, { name, steps: [], $meta: { id: nanoid(), x: 60, y: 120, disconnected: [] } }];
       return { app: { ...state.app, closures } };
     }),
   renameFlow: (idx, name) =>
@@ -499,9 +503,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
-      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+      const list = state.app[where.kind].map((f: FlowWithMeta, i: number) => {
         if (i !== where.idx) return f;
-        const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
+        const copy: FlowWithMeta = JSON.parse(JSON.stringify(f));
         const index = buildNodeIndex(copy);
         const fromLoc = index.byId[fromId];
         const tgtLoc = index.byId[targetId];
@@ -529,9 +533,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
-      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+      const list = state.app[where.kind].map((f: FlowWithMeta, i: number) => {
         if (i !== where.idx) return f;
-        const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
+        const copy: FlowWithMeta = JSON.parse(JSON.stringify(f));
         const index = buildNodeIndex(copy);
         const fromLoc = index.byId[fromId];
         const tgtLoc = index.byId[targetId];
@@ -559,9 +563,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
-      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+      const list = state.app[where.kind].map((f: FlowWithMeta, i: number) => {
         if (i !== where.idx) return f;
-        const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
+        const copy: FlowWithMeta = JSON.parse(JSON.stringify(f));
         const index = buildNodeIndex(copy);
         const srcLoc = index.byId[sourceId];
         const tgtLoc = index.byId[targetId];
@@ -591,10 +595,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
-      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+      const list = state.app[where.kind].map((f: FlowWithMeta, i: number) => {
         if (i !== where.idx) return f;
-        const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
-        ensureFlowUi(copy);
+        const copy: FlowWithMeta = JSON.parse(JSON.stringify(f));
+        ensureFlowMeta(copy);
         const index = buildNodeIndex(copy);
         const walk = walkFlow(copy);
         const fromPath = index.pathById[fromId];
@@ -606,7 +610,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
           const main = copy.steps ?? [];
           const tail = main.splice(toVisit.idx);
           if (tail.length) {
-            copy.$ui = { ...(copy.$ui ?? {}), disconnected: [...(copy.$ui?.disconnected ?? []), { steps: tail }] };
+            const meta = copy.$meta ?? {};
+            copy.$meta = { ...meta, disconnected: [...(meta.disconnected ?? []), { steps: tail }] };
             outcome = { ok: true };
             return copy;
           }
@@ -626,7 +631,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
             return f;
           }
           const detached = arrMeta.steps.splice(0, arrMeta.steps.length);
-          copy.$ui = { ...(copy.$ui ?? {}), disconnected: [...(copy.$ui?.disconnected ?? []), { steps: detached }] };
+          const meta = copy.$meta ?? {};
+          copy.$meta = { ...meta, disconnected: [...(meta.disconnected ?? []), { steps: detached }] };
           clearPathValue(parent, arrMeta.pathPrefix.replace(`${arrMeta.parentStepPath}.`, "").replace(/\.$/, ""));
           outcome = { ok: true };
           return copy;
@@ -636,7 +642,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         if (fromVisit.arr === toVisit.arr && toVisit.idx === fromVisit.idx + 1) {
           const tail = fromVisit.arr.splice(toVisit.idx);
           if (tail.length) {
-            copy.$ui = { ...(copy.$ui ?? {}), disconnected: [...(copy.$ui?.disconnected ?? []), { steps: tail }] };
+            const meta = copy.$meta ?? {};
+            copy.$meta = { ...meta, disconnected: [...(meta.disconnected ?? []), { steps: tail }] };
             outcome = { ok: true };
             return copy;
           }
@@ -645,7 +652,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         // fallback: detach target chain into disconnected
         const chainCtx = detachChain(copy, toPath, { arr: fromVisit.arr, idx: fromVisit.idx });
         if (chainCtx?.chain?.length) {
-          copy.$ui = { ...(copy.$ui ?? {}), disconnected: [...(copy.$ui?.disconnected ?? []), { steps: chainCtx.chain }] };
+          const meta = copy.$meta ?? {};
+          copy.$meta = { ...meta, disconnected: [...(meta.disconnected ?? []), { steps: chainCtx.chain }] };
           outcome = { ok: true };
           return copy;
         }
@@ -662,9 +670,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
-      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+      const list = state.app[where.kind].map((f: FlowWithMeta, i: number) => {
         if (i !== where.idx) return f;
-        const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
+        const copy: FlowWithMeta = JSON.parse(JSON.stringify(f));
         const removed = removeStepById(copy, nodeId);
         outcome = removed ? { ok: true } : { ok: false, error: "Cannot delete this node" };
         return removed ? copy : f;
@@ -680,28 +688,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
       if (triggerLoc) {
         const triggers = inputs[triggerLoc.inputIdx].triggers ?? [];
         const current = triggers[triggerLoc.triggerIdx] ?? {};
-        triggers[triggerLoc.triggerIdx] = { ...current, $ui: { ...(current.$ui ?? {}), ...ui } };
+        const meta = current.$meta ?? {};
+        triggers[triggerLoc.triggerIdx] = { ...current, $meta: { ...meta, ...ui } };
         inputs[triggerLoc.inputIdx] = { ...inputs[triggerLoc.inputIdx], triggers: [...triggers] };
         return { app: { ...state.app, inputs } };
       }
 
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
-      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+      const list = state.app[where.kind].map((f: FlowWithMeta, i: number) => {
         if (i !== where.idx) return f;
-        const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
+        const copy: FlowWithMeta = JSON.parse(JSON.stringify(f));
         const index = buildNodeIndex(copy);
         const path = index.pathById[nodeId];
         if (!path) {
           const fallback = findStepById(copy, nodeId);
           if (!fallback.path) return f;
-          setStepUi(copy, fallback.path, ui);
+          setStepMeta(copy, fallback.path, ui);
           return copy;
         }
         if (path === "start") {
-          copy.$ui = { ...(copy.$ui ?? {}), ...ui };
+          const meta = copy.$meta ?? {};
+          copy.$meta = { ...meta, ...ui };
         } else {
-          setStepUi(copy, path, ui);
+          setStepMeta(copy, path, ui);
         }
         return copy;
       });
@@ -711,8 +721,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => {
       const flows = state.app.flows.map((f) => {
         if (f.name !== flowName) return f;
-        const disc = f.$ui?.disconnected ?? [];
-        return { ...f, $ui: { ...(f.$ui ?? {}), disconnected: [...disc, { steps }] } } as FlowWithUi;
+        ensureFlowMeta(f as FlowWithMeta);
+        const meta = f.$meta ?? {};
+        const disc = meta.disconnected ?? [];
+        return { ...f, $meta: { ...meta, disconnected: [...(meta.disconnected ?? []), { steps }] } } as FlowWithMeta;
       });
       return { app: { ...state.app, flows } };
     }),
@@ -726,26 +738,26 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
       target.triggers = [
         ...(target.triggers ?? []),
-        { flow: flowName, $ui: { id: nanoid(), x: 40, y: 160 + (target.triggers?.length ?? 0) * 90 } }
+        { flow: flowName, $meta: { id: nanoid(), x: 40, y: 160 + (target.triggers?.length ?? 0) * 90 } }
       ];
       return { app: { ...state.app, inputs } };
     }),
   addClosureStep: (collection, flowIdx, closureName) =>
     set((state) => {
       const key = collection === "closures" ? "closures" : "flows";
-      const list = state.app[key].map((f: any) => JSON.parse(JSON.stringify(f)) as FlowWithUi);
+      const list = state.app[key].map((f: any) => JSON.parse(JSON.stringify(f)) as FlowWithMeta);
       const flow = list[flowIdx] ?? list[0];
       if (!flow) return state;
-      ensureFlowUi(flow);
-      const disc = flow.$ui?.disconnected ?? [];
+      ensureFlowMeta(flow);
+      const disc = flow.$meta?.disconnected ?? [];
       const { x, y } = findOpenSlot(flow);
-      const step: StepWithUi = {
+      const step: StepWithMeta = {
         closure: closureName,
         parameters: {},
-        $ui: { id: nanoid(), x, y }
+        $meta: { id: nanoid(), x, y }
       };
       disc.push({ steps: [step] });
-      flow.$ui = { ...(flow.$ui ?? {}), disconnected: disc };
+      flow.$meta = { ...(flow.$meta ?? {}), disconnected: disc };
       list[flowIdx] = flow;
       return { app: { ...state.app, [key]: list } as AppState };
   }),
@@ -753,9 +765,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => {
       const where = findFlowOrClosure(state.app, flowName);
       if (!where) return state;
-      const list = state.app[where.kind].map((f: FlowWithUi, i: number) => {
+      const list = state.app[where.kind].map((f: FlowWithMeta, i: number) => {
         if (i !== where.idx) return f;
-        const copy: FlowWithUi = JSON.parse(JSON.stringify(f));
+        const copy: FlowWithMeta = JSON.parse(JSON.stringify(f));
         const index = buildNodeIndex(copy);
         const path = index.pathById[nodeId];
         if (!path) return f;
@@ -789,11 +801,11 @@ const SLOT_X = 240;
 const SLOT_Y = 160;
 const MIN_COORD = 20;
 
-function findOpenSlot(flow: FlowWithUi): { x: number; y: number } {
-  ensureFlowUi(flow);
+function findOpenSlot(flow: FlowWithMeta): { x: number; y: number } {
+  ensureFlowMeta(flow);
   const occupied = collectPositions(flow);
-  const baseX = flow.$ui?.x ?? 1000;
-  const baseY = flow.$ui?.y ?? 1000;
+  const baseX = flow.$meta?.x ?? 1000;
+  const baseY = flow.$meta?.y ?? 1000;
 
   for (let radius = 0; radius < 12; radius++) {
     for (let dx = -radius; dx <= radius; dx++) {
@@ -810,14 +822,15 @@ function findOpenSlot(flow: FlowWithUi): { x: number; y: number } {
   return { x: baseX + SLOT_X, y: baseY + SLOT_Y };
 }
 
-function collectPositions(flow: FlowWithUi): { x: number; y: number }[] {
+function collectPositions(flow: FlowWithMeta): { x: number; y: number }[] {
   const positions: { x: number; y: number }[] = [];
-  if (flow.$ui?.x != null && flow.$ui?.y != null) positions.push({ x: flow.$ui.x, y: flow.$ui.y });
+  if (flow.$meta?.x != null && flow.$meta?.y != null) positions.push({ x: flow.$meta.x, y: flow.$meta.y });
 
-  const addFromSteps = (steps?: StepWithUi[]) => {
+  const addFromSteps = (steps?: StepWithMeta[]) => {
     (steps ?? []).forEach((s) => {
-      ensureStepUi(s);
-      if (s.$ui?.x != null && s.$ui?.y != null) positions.push({ x: s.$ui.x, y: s.$ui.y });
+      ensureStepMeta(s);
+      const meta = s.$meta;
+      if (meta?.x != null && meta?.y != null) positions.push({ x: meta.x, y: meta.y });
       if (Array.isArray((s as any).cases)) (s as any).cases.forEach((c: any) => addFromSteps(c.steps));
       if (Array.isArray((s as any).otherwise)) addFromSteps((s as any).otherwise as any);
       Object.values(s.parameters ?? {}).forEach((p: any) => {
@@ -828,18 +841,18 @@ function collectPositions(flow: FlowWithUi): { x: number; y: number }[] {
   };
 
   addFromSteps(flow.steps);
-  (flow.$ui?.disconnected ?? []).forEach((d) => addFromSteps(d.steps));
+  (flow.$meta?.disconnected ?? []).forEach((d) => addFromSteps(d.steps));
   return positions;
 }
 
-function removeStepById(flow: FlowWithUi, nodeId: string): boolean {
+function removeStepById(flow: FlowWithMeta, nodeId: string): boolean {
   let removed = false;
 
-  const removeFromArray = (arr: StepWithUi[] | undefined): StepWithUi[] | undefined => {
+  const removeFromArray = (arr: StepWithMeta[] | undefined): StepWithMeta[] | undefined => {
     if (!Array.isArray(arr)) return arr;
     const next = arr.filter((s) => {
-      ensureStepUi(s);
-      return s.$ui?.id !== nodeId;
+      ensureStepMeta(s);
+      return s.$meta?.id !== nodeId;
     });
     if (next.length !== arr.length) removed = true;
 
@@ -863,9 +876,9 @@ function removeStepById(flow: FlowWithUi, nodeId: string): boolean {
 
   flow.steps = removeFromArray(flow.steps) ?? [];
 
-  const disc = (flow.$ui?.disconnected ?? []).map((frag) => ({ ...frag, steps: removeFromArray(frag.steps) ?? [] }))
+  const disc = (flow.$meta?.disconnected ?? []).map((frag) => ({ ...frag, steps: removeFromArray(frag.steps) ?? [] }))
     .filter((frag) => frag.steps.length > 0);
-  if (flow.$ui) flow.$ui.disconnected = disc;
+  if (flow.$meta) flow.$meta.disconnected = disc;
 
   return removed;
 }

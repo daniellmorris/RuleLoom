@@ -76,20 +76,7 @@ export interface FlowInvokeStep {
   when?: ConditionDefinition | ConditionDefinition[];
 }
 
-export interface FlowBranchCase {
-  /** Steps whose last result is treated as the condition. */
-  when: FlowStep[];
-  /** Steps to execute when `when` evaluates truthy. */
-  then: FlowStep[];
-}
-
-export interface FlowBranchStep {
-  type: 'branch';
-  cases: FlowBranchCase[];
-  otherwise?: FlowStep[];
-}
-
-export type FlowStep = FlowInvokeStep | FlowBranchStep;
+export type FlowStep = FlowInvokeStep;
 
 export interface FlowDefinition {
   name: string;
@@ -116,7 +103,47 @@ export interface ExecutionRuntime {
   };
   engine?: RuleLoomEngine;
   parameters?: Record<string, unknown>;
+  /** Optional recorder(s) to capture execution events, usable in live runs or simulations. */
+  recorder?: Recorder | Recorder[];
+  /** Optional recording level to trim payloads ("none" | "timing" | "params" | "state" | "full"). */
+  recordLevel?: RecordingLevel;
   [key: string]: unknown;
+}
+
+export type RecordingLevel = 'none' | 'timing' | 'params' | 'state' | 'full';
+
+export type RecorderEventKind = 'enter' | 'exit' | 'error';
+
+export interface RecorderEventBase {
+  kind: RecorderEventKind;
+  flow?: string;
+  step?: string;
+  closure?: string;
+  timestamp: number;
+  durationMs?: number;
+}
+
+export interface RecorderEnterEvent extends RecorderEventBase {
+  kind: 'enter';
+  params?: Record<string, unknown>;
+  stateBefore?: Record<string, unknown>;
+}
+
+export interface RecorderExitEvent extends RecorderEventBase {
+  kind: 'exit';
+  output?: unknown;
+  stateAfter?: Record<string, unknown>;
+}
+
+export interface RecorderErrorEvent extends RecorderEventBase {
+  kind: 'error';
+  error: string;
+}
+
+export type RecorderEvent = RecorderEnterEvent | RecorderExitEvent | RecorderErrorEvent;
+
+export interface Recorder {
+  onEvent?: (event: RecorderEvent) => void;
 }
 
 export class RuleLoomEngine {
@@ -188,7 +215,7 @@ export class RuleLoomEngine {
     const state: Record<string, unknown> = _.cloneDeep(initialState);
     runtime.engine = runtime.engine ?? this;
 
-    const lastResult = await this.runSteps(flow.steps, state, runtime);
+    const lastResult = await this.runSteps(flow.steps, state, { ...runtime, flow: flow.name });
     return { state, lastResult };
   }
 
@@ -200,14 +227,9 @@ export class RuleLoomEngine {
   ): Promise<unknown> {
     let result: unknown;
     for (const step of steps) {
-      if (this.isInvokeStep(step)) {
-        if (!(await this.shouldExecute(step, state, runtime))) {
-          continue;
-        }
-        result = await this.invokeStep(step, state, runtime, inheritedParameters);
+      if (!(await this.shouldExecute(step, state, runtime))) {
         continue;
       }
-
       const implicit = await this.resolveImplicitClosure(step, state, runtime);
       if (implicit) {
         const implicitParams = this.extractParameters(step);
@@ -217,26 +239,17 @@ export class RuleLoomEngine {
           closure: implicit.name,
           parameters: implicitParams,
         };
-        if (!(await this.shouldExecute(implicitInvoke, state, runtime))) {
-          continue;
-        }
         result = await this.invokeStep(implicitInvoke, state, runtime, inheritedParameters);
         continue;
       }
 
-      if (this.isBranchStep(step)) {
-        result = await this.executeBranch(step, state, runtime, inheritedParameters);
-        continue;
+      if (!this.isInvokeStep(step)) {
+        throw new Error('Flow step is missing "closure" and no implicit closure matched.');
       }
 
-      throw new Error('Flow step is missing "closure" and no implicit closure matched.');
+      result = await this.invokeStep(step, state, runtime, inheritedParameters);
     }
     return result;
-  }
-
-  private isBranchStep(step: FlowStep): step is FlowBranchStep {
-    const record = step as unknown as Record<string, unknown>;
-    return Array.isArray((record as any).cases) && !('closure' in record);
   }
 
   private isInvokeStep(step: FlowStep): step is FlowInvokeStep & { closure: string } {
@@ -274,29 +287,6 @@ export class RuleLoomEngine {
 
     const merged = explicit ? { ...rest, ...explicit } : rest;
     return Object.keys(merged).length ? merged : undefined;
-  }
-
-  private async executeBranch(
-    step: FlowBranchStep,
-    state: Record<string, unknown>,
-    runtime: ExecutionRuntime,
-    inheritedParameters?: Record<string, unknown>,
-  ): Promise<unknown> {
-    for (const branchCase of step.cases) {
-      const whenBlock = branchCase.when;
-      const thenBlock = branchCase.then;
-      const last = await this.runSteps(whenBlock, state, runtime, inheritedParameters);
-      const shouldRun = Boolean(last);
-      if (shouldRun) {
-        return this.runSteps(thenBlock, state, runtime, inheritedParameters);
-      }
-    }
-
-    if (step.otherwise) {
-      return this.runSteps(step.otherwise, state, runtime, inheritedParameters);
-    }
-
-    return undefined;
   }
 
   private async shouldExecute(
@@ -365,18 +355,66 @@ export class RuleLoomEngine {
 
     const resolvedParameters = await this.prepareParameters(closure, parameterSeed, state, runtime);
 
+    const recorders = normalizeRecorders(runtime.recorder);
+    const level = runtime.recordLevel ?? 'full';
+    const t0 = Date.now();
+
+    if (recorders.length && level !== 'none') {
+      const evt: RecorderEnterEvent = {
+        kind: 'enter',
+        flow: (runtime as any).flow,
+        step: (step as any).$meta?.id ?? step.closure,
+        closure: step.closure,
+        timestamp: t0,
+        params: level === 'timing' ? undefined : cloneLite(resolvedParameters),
+        stateBefore: level === 'full' || level === 'state' ? cloneLite(state) : undefined,
+      };
+      recorders.forEach((r) => r.onEvent?.(evt));
+    }
+
     const context: ClosureContext = {
       parameters: resolvedParameters,
       state,
       runtime,
     };
 
-    const result = await closure.handler(state, context);
+    let result: unknown;
+    try {
+      result = await closure.handler(state, context);
+    } catch (err) {
+      if (recorders.length && level !== 'none') {
+        const evt: RecorderErrorEvent = {
+          kind: 'error',
+          flow: (runtime as any).flow,
+          step: (step as any).$meta?.id ?? step.closure,
+          closure: step.closure,
+          timestamp: Date.now(),
+          durationMs: Date.now() - t0,
+          error: err instanceof Error ? err.message : String(err),
+        };
+        recorders.forEach((r) => r.onEvent?.(evt));
+      }
+      throw err;
+    }
 
     if (step.assign) {
       _.set(state, step.assign, result);
     } else if (step.mergeResult && _.isPlainObject(result)) {
       _.merge(state, result as Record<string, unknown>);
+    }
+
+    if (recorders.length && level !== 'none') {
+      const evt: RecorderExitEvent = {
+        kind: 'exit',
+        flow: (runtime as any).flow,
+        step: (step as any).$meta?.id ?? step.closure,
+        closure: step.closure,
+        timestamp: Date.now(),
+        durationMs: Date.now() - t0,
+        output: level === 'timing' ? undefined : cloneLite(result),
+        stateAfter: level === 'full' || level === 'state' ? cloneLite(state) : undefined,
+      };
+      recorders.forEach((r) => r.onEvent?.(evt));
     }
 
     return result;
@@ -522,6 +560,19 @@ export class RuleLoomEngine {
       runtime,
     };
     return target.handler(state, context);
+  }
+}
+
+function normalizeRecorders(rec?: Recorder | Recorder[] | undefined): Recorder[] {
+  if (!rec) return [];
+  return Array.isArray(rec) ? rec.filter(Boolean) : [rec];
+}
+
+function cloneLite<T>(val: T): T {
+  try {
+    return _.cloneDeep(val);
+  } catch {
+    return val;
   }
 }
 

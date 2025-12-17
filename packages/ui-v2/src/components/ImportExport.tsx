@@ -42,7 +42,7 @@ const ImportExport: React.FC = () => {
         onChange={(e) => setText(e.target.value)}
         placeholder="Paste runner YAML here"
       />
-      <p style={{ color: "var(--muted)", fontSize: 12 }}>YAML mirrors runner config plus optional $ui on steps/disconnected.</p>
+      <p style={{ color: "var(--muted)", fontSize: 12 }}>YAML mirrors runner config plus optional $meta on steps/disconnected.</p>
     </div>
   );
 };

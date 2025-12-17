@@ -16,28 +16,30 @@ flows:
         parameters:
           target: payload
           value: "${request.body}"
-      - cases:
-          - when:
-              - closure: core.greater-than
-                parameters:
-                  left:
-                    $call:
-                      name: core.length
-                      parameters:
-                        value: "${state.payload.items}"
-                  right: 0
-            then:
-              - closure: core.respond
-                parameters:
-                  status: 200
-                  body:
-                    ok: true
-                    itemCount:
+      - closure: core.branch
+        parameters:
+          cases:
+            - when:
+                - closure: core.greater-than
+                  parameters:
+                    left:
                       $call:
                         name: core.length
                         parameters:
                           value: "${state.payload.items}"
-        otherwise:
-          - closure: core.respond
-            parameters:
-              status: 204
+                    right: 0
+              then:
+                - closure: core.respond
+                  parameters:
+                    status: 200
+                    body:
+                      ok: true
+                      itemCount:
+                        $call:
+                          name: core.length
+                          parameters:
+                            value: "${state.payload.items}"
+          otherwise:
+            - closure: core.respond
+              parameters:
+                status: 204

@@ -97,7 +97,7 @@ UI v2 is a Vite/React + Zustand single-page app that edits YAML flows visually. 
 - State
   - `src/state/appStore.ts`: Source of truth for the loaded YAML (flows, closures, inputs). All mutations (add/remove nodes, connect/disconnect chains, move, param updates) go through here and are keyed by `ui.id`, not YAML paths. Connections are validated here.
   - `src/state/flowStore.ts`: UI-only view state (active flow/closure, selection).
-  - `src/state/catalogStore.ts`: In-memory manifest (`coreManifest.json`) describing closure/input signatures used for rendering connectors and inspector fields.
+  - `src/state/catalogStore.ts`: In-memory manifest describing closure/input signatures used for rendering connectors and inspector fields.
   - `src/state/walk.ts`: Single traversal helper that walks a flow and returns step visits + array metadata; shared by the store and graph builder.
 - Rendering / interaction
   - `src/components/Canvas.tsx`: Renders nodes/edges, handles drag, connect, delete (edges + nodes), zoom/pan. Delegates all mutations to `appStore`.
@@ -108,4 +108,10 @@ UI v2 is a Vite/React + Zustand single-page app that edits YAML flows visually. 
   - `src/utils/graph.ts`: Builds nodes/edges for canvas from a flow using `buildNodeIndex` + `walkFlow` so IDs stay in sync with `appStore`.
   - `src/types/index.ts`: Shared graph types (Node, Edge, Connector).
 
-Data flow: Canvas interactions (drag, connect, delete) call `appStore` mutations using node `ui.id`s. The store mutates the YAML model, then `buildGraph` re-runs from state, so canvas/inspector stay in sync. Disconnected fragments live under `flow.$ui.disconnected`. All traversal-sensitive logic (indexing, find-by-id, detach/move/connect) relies on `walkFlow` to avoid duplicated tree walking.
+Data flow: Canvas interactions (drag, connect, delete) call `appStore` mutations using node `meta.id`s. The store mutates the YAML model, then `buildGraph` re-runs from state, so canvas/inspector stay in sync. Disconnected fragments live under `flow.$meta.disconnected`. All traversal-sensitive logic (indexing, find-by-id, detach/move/connect) relies on `walkFlow` to avoid duplicated tree walking.
+
+## Execution Recording
+
+- Engine (`rule-loom-engine`) supports optional recorders on every run via `ExecutionRuntime.recorder` (single or array) and `recordLevel` (`none | timing | params | state | full`).
+- Recorders receive `enter`, `exit`, and `error` events with flow name, closure name, optional params/output/state snapshots, timestamps, and durations. Heavy payloads are skipped when level is `timing`.
+- Recording wraps `invokeStep` (branching now expressed via closures like `core.branch`); it is inert when no recorder is provided, so live runs can enable tracing without switching to simulation. Simulators can reuse the same recorder hook to drive timelines/heatmaps in the UI.

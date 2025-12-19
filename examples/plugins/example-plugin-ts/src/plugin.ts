@@ -8,6 +8,13 @@ const plugin: RuleLoomPlugin = {
     const echoInputSchema = z.object({
       type: z.literal('echo'),
       message: z.string().min(1),
+      triggers: z
+        .array(
+          z.object({
+            flow: z.string().min(1),
+          }),
+        )
+        .min(1),
     });
 
     registerInputPlugin({

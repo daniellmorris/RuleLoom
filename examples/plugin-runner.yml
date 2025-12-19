@@ -5,7 +5,8 @@ plugins:
   - source: file
     path: ./plugins/example-plugin/plugin.js
 inputs:
-  - type: init
+  - type: echo
+    message: "hello from plugin input"
     triggers:
       - flow: hello-flow
 flows:

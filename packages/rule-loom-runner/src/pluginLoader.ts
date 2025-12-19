@@ -139,8 +139,20 @@ async function resolvePluginModule(spec: PluginSpec, options: ResolveOptions): P
 
   if (spec.source === 'file') {
     const p = spec.path.startsWith('file:') ? spec.path.replace(/^file:/, '') : spec.path;
-    const resolved = path.isAbsolute(p) ? p : path.resolve(options.configDir, p);
-    return pathToFileURL(resolved).href;
+    const primaryResolved = path.isAbsolute(p) ? p : path.resolve(options.configDir, p);
+    const exists = await fs
+      .stat(primaryResolved)
+      .then((s) => s.isFile() || s.isDirectory())
+      .catch(() => false);
+
+    if (exists) {
+      return pathToFileURL(primaryResolved).href;
+    }
+
+    // Fallback: resolve relative to current working directory for inline configs
+    // whose temp directory does not mirror the plugin location.
+    const fallbackResolved = path.isAbsolute(p) ? p : path.resolve(process.cwd(), p);
+    return pathToFileURL(fallbackResolved).href;
   }
 
   if (spec.source === 'npm' || spec.source === 'store') {

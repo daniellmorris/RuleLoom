@@ -1,9 +1,9 @@
 version: 1
 plugins:
   - source: file
-    path: ../../plugins/rule-loom-core
+    path: ../../../plugins/rule-loom-core
   - source: file
-    path: ../../plugins/rule-loom-plugin-http
+    path: ../../../plugins/rule-loom-plugin-http
 inputs:
   - type: http
     config: {}

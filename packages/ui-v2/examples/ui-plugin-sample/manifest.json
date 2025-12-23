@@ -1,0 +1,31 @@
+{
+  "id": "ui-plugin-sample",
+  "version": "0.1.0",
+  "blocks": [
+    {
+      "type": "sidebar",
+      "name": "SampleSidebarPanel",
+      "module": "packages/ui-v2/examples/ui-plugin-sample/dist/plugin.js",
+      "spec": {
+        "slot": "primary",
+        "order": 10,
+        "export": "SampleSidebarPanel"
+      }
+    },
+    {
+      "type": "inspector",
+      "name": "SampleInspectorSection",
+      "module": "packages/ui-v2/examples/ui-plugin-sample/dist/plugin.js",
+      "spec": {
+        "slot": "primary",
+        "order": 20,
+        "export": "SampleInspectorSection"
+      }
+    }
+  ],
+  "source": {
+    "repo": "RuleLoom/RuleLoom",
+    "ref": "main",
+    "entry": "packages/ui-v2/examples/ui-plugin-sample/dist/plugin.js"
+  }
+}

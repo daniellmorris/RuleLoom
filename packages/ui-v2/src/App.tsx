@@ -1,123 +1,145 @@
-import Canvas from "./components/Canvas";
-import Inspector from "./components/Inspector";
-import Palette from "./components/Palette";
-import ImportExport from "./components/ImportExport";
-import PluginLibrary from "./components/PluginLibrary";
-import { useFlowStore } from "./state/flowStore";
-import { useAppStore } from "./state/appStore";
-import "./styles/global.css";
+import React, { useMemo } from 'react';
+import defaultLayout from './config/layout.default.json';
+import { PluginApiProvider } from './state/pluginApi';
+import type { LayoutRegionId, PuckBlockDescriptor, PuckLayout, PuckPage } from './types/puckLayout';
+import type { ComponentRegistry, RegisteredBlock } from './utils/componentRegistry';
 
-const App = () => {
-  const app = useAppStore((s) => s.app);
-  const addFlow = useAppStore((s) => s.addFlow);
-  const addClosure = useAppStore((s) => s.addClosure);
-  const renameFlow = useAppStore((s) => s.renameFlow);
-  const renameClosure = useAppStore((s) => s.renameClosure);
-  const removeFlow = useAppStore((s) => s.removeFlow);
-  const removeClosure = useAppStore((s) => s.removeClosure);
-  const mode = useFlowStore((s) => s.activeMode);
-  const activeFlowIdx = useFlowStore((s) => s.activeFlowId);
-  const activeClosureIdx = useFlowStore((s) => s.activeClosureId);
-  const setActiveFlow = useFlowStore((s) => s.setActiveFlow);
-  const setActiveClosure = useFlowStore((s) => s.setActiveClosure);
-  const setMode = useFlowStore((s) => s.setActiveMode);
+interface AppProps {
+  layout?: PuckLayout;
+  registry: ComponentRegistry;
+  onReloadPlugins?: () => void;
+  pluginErrors?: string[];
+  reloadingPlugins?: boolean;
+  onUpdateLayout?: (next: PuckLayout) => void;
+}
 
-  const items = mode === "flow" ? app.flows : app.closures;
-  const activeIdx = mode === "flow" ? activeFlowIdx : activeClosureIdx;
+interface BlockRendererProps {
+  descriptor: PuckBlockDescriptor;
+  registry: ComponentRegistry;
+  hostProps: BlockHostProps;
+}
+
+type BlockHostProps = Pick<AppProps, 'onReloadPlugins' | 'pluginErrors' | 'reloadingPlugins' | 'onUpdateLayout'> & {
+  pages: PuckPage[];
+  activePageId: string;
+  onPageChange?: (pageId: string) => void;
+  layout: PuckLayout;
+};
+
+const MissingBlock: React.FC<{ descriptor: PuckBlockDescriptor }> = ({ descriptor }) => (
+  <div className="panel" style={{ border: '1px dashed var(--muted)', padding: 12 }}>
+    <div style={{ fontWeight: 600 }}>Missing block</div>
+    <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+      Block "{descriptor.name}" is not registered in the component registry.
+    </div>
+  </div>
+);
+
+const BlockRenderer: React.FC<BlockRendererProps> = ({ descriptor, registry, hostProps }) => {
+  const registration = registry.resolve(descriptor.name) as RegisteredBlock | undefined;
+  if (!registration) return <MissingBlock descriptor={descriptor} />;
+  const Component = registration.component as React.ComponentType<any>;
+  const props = { ...(descriptor.props ?? {}), ...hostProps };
+  return <Component {...props} />;
+};
+
+const regionSort = (blocks: PuckBlockDescriptor[]) => [...blocks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+const groupBlocksBySlot = (blocks: PuckBlockDescriptor[]) => {
+  const slots = new Map<string, PuckBlockDescriptor[]>();
+  regionSort(blocks).forEach((block) => {
+    const slot = block.slot ?? 'default';
+    const current = slots.get(slot) ?? [];
+    slots.set(slot, [...current, block]);
+  });
+  return Array.from(slots.entries()).map(([slot, grouped]) => ({ slot, blocks: grouped }));
+};
+
+const App: React.FC<AppProps> = ({ layout, registry, onReloadPlugins, pluginErrors, reloadingPlugins, onUpdateLayout }) => {
+  const appliedLayout = useMemo<PuckLayout>(() => layout ?? (defaultLayout as PuckLayout), [layout]);
+  const pages = useMemo<PuckPage[]>(() => {
+    if (Array.isArray(appliedLayout.pages) && appliedLayout.pages.length) return appliedLayout.pages;
+    if (Array.isArray(appliedLayout.regions)) {
+      return [{ id: 'default', label: 'Main', regions: appliedLayout.regions }];
+    }
+    return [];
+  }, [appliedLayout]);
+
+  const [activePageId, setActivePageId] = React.useState(() => pages[0]?.id ?? 'default');
+
+  React.useEffect(() => {
+    if (!pages.find((p) => p.id === activePageId) && pages[0]) {
+      setActivePageId(pages[0].id);
+    }
+  }, [pages, activePageId]);
+
+  const activePage = pages.find((p) => p.id === activePageId) ?? pages[0];
+  const regionMap = useMemo(
+    () => Object.fromEntries((activePage?.regions ?? []).map((r) => [r.id, r])),
+    [activePage]
+  );
+  const resolveRegionBlocks = (id: LayoutRegionId) => regionSort(regionMap[id]?.blocks ?? []);
+  const resolveSlots = (id: LayoutRegionId) => groupBlocksBySlot(regionMap[id]?.blocks ?? []);
+  const hostProps = useMemo(
+    () => ({
+      onReloadPlugins,
+      pluginErrors,
+      reloadingPlugins,
+      onUpdateLayout,
+      pages,
+      activePageId: activePage?.id ?? 'default',
+      onPageChange: setActivePageId,
+      layout: appliedLayout
+    }),
+    [onReloadPlugins, pluginErrors, reloadingPlugins, pages, activePage, appliedLayout, onUpdateLayout]
+  );
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">Orchestrator UI v3</div>
-        <div className="segmented fancy">
-          <button className={mode === "flow" ? "seg-active" : ""} onClick={() => setMode("flow")}>Flows</button>
-          <button className={mode === "closure" ? "seg-active" : ""} onClick={() => setMode("closure")}>Closures</button>
-        </div>
-        <div className="selector-row">
-          <select
-            className="input"
-            value={Math.min(activeIdx, Math.max(items.length - 1, 0))}
-            onChange={(e) => {
-              const idx = Number(e.target.value);
-              if (mode === "flow") setActiveFlow(idx);
-              else setActiveClosure(idx);
-            }}
-          >
-            {items.length === 0 && <option value={0}>None</option>}
-            {items.map((f: any, idx: number) => (
-              <option key={idx} value={idx}>{f.name ?? `Item ${idx + 1}`}</option>
+    <PluginApiProvider>
+      <div className="app-shell">
+        <header className="topbar">
+          {resolveRegionBlocks('header').map((block) => (
+            <BlockRenderer key={block.name} descriptor={block} registry={registry} hostProps={hostProps} />
+          ))}
+        </header>
+
+        <aside className="rail sidebar">
+          <div className="scroll-column">
+            <div className="stack">
+              {resolveSlots('sidebar').map(({ slot, blocks }) => (
+                <React.Fragment key={slot}>
+                  {blocks.map((block) => (
+                    <BlockRenderer key={`${slot}-${block.name}`} descriptor={block} registry={registry} hostProps={hostProps} />
+                  ))}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        <main className="canvas-area">
+          {resolveSlots('canvas').map(({ slot, blocks }) => (
+            <React.Fragment key={slot}>
+              {blocks.map((block) => (
+                <BlockRenderer key={`${slot}-${block.name}`} descriptor={block} registry={registry} hostProps={hostProps} />
+              ))}
+            </React.Fragment>
+          ))}
+        </main>
+
+        <aside className="rail inspector-rail">
+          <div className="scroll-column">
+            {resolveSlots('inspector').map(({ slot, blocks }) => (
+              <React.Fragment key={slot}>
+                {blocks.map((block) => (
+                  <BlockRenderer key={`${slot}-${block.name}`} descriptor={block} registry={registry} hostProps={hostProps} />
+                ))}
+              </React.Fragment>
             ))}
-          </select>
-          <div className="row" style={{ gap: 6 }}>
-            <button
-              className="button secondary"
-              style={{ padding: "10px 10px" }}
-              onClick={() => {
-                const name = prompt("Rename", items[activeIdx]?.name ?? "");
-                if (!name) return;
-                if (mode === "flow") renameFlow(activeIdx, name);
-                else renameClosure(activeIdx, name);
-              }}
-              disabled={!items.length}
-            >
-              Rename
-            </button>
-            <button
-              className="button secondary"
-              style={{ padding: "10px 10px" }}
-              onClick={() => {
-                if (!items.length) return;
-                if (!confirm("Delete this item?")) return;
-                if (mode === "flow") {
-                  removeFlow(activeIdx);
-                  setActiveFlow(Math.max(0, activeIdx - 1));
-                } else {
-                  removeClosure(activeIdx);
-                  setActiveClosure(Math.max(0, activeIdx - 1));
-                }
-              }}
-              disabled={!items.length}
-            >
-              Delete
-            </button>
           </div>
-          <button
-            className="button"
-            onClick={() => {
-              if (mode === "flow") {
-                addFlow(`Flow ${app.flows.length + 1}`);
-                setActiveFlow(app.flows.length); // new index after push
-              } else {
-                addClosure(`Closure ${app.closures.length + 1}`);
-                setActiveClosure(app.closures.length);
-              }
-            }}
-          >
-            + {mode === "flow" ? "Flow" : "Closure"}
-          </button>
-        </div>
-      </header>
-
-      <aside className="rail sidebar">
-        <div className="scroll-column">
-          <div className="stack">
-            <Palette />
-            <PluginLibrary />
-            <ImportExport />
-          </div>
-        </div>
-      </aside>
-
-      <main className="canvas-area">
-        <Canvas />
-      </main>
-
-      <aside className="rail inspector-rail">
-        <div className="scroll-column">
-          <Inspector />
-        </div>
-      </aside>
-    </div>
+        </aside>
+      </div>
+    </PluginApiProvider>
   );
 };
 

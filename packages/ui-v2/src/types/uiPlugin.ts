@@ -19,6 +19,11 @@ export interface GitHubPluginSource {
   ref: string;
   manifest: string;
   baseUrl?: string;
+  /**
+   * Optional override for where block modules are loaded.
+   * Defaults to a JS-friendly CDN (raw.githack.com) to avoid text/plain MIME types from raw.githubusercontent.com.
+   */
+  moduleBaseUrl?: string;
 }
 
 export interface NpmPluginSource {

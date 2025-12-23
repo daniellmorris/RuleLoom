@@ -24,7 +24,7 @@
     }
   ],
   "source": {
-    "repo": "RuleLoom/RuleLoom",
+    "repo": "daniellmorris/RuleLoom",
     "ref": "main",
     "entry": "packages/ui-v2/examples/ui-plugin-sample/dist/plugin.js"
   }

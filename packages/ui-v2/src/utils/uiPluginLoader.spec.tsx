@@ -33,6 +33,24 @@ describe('ui plugin loader', () => {
     expect(result.errors.length).toBe(0);
   });
 
+  it('uses a JS-friendly default base for module imports to avoid MIME errors', async () => {
+    const manifest = {
+      id: 'sample',
+      version: '1.0.0',
+      blocks: [{ type: 'sidebar', name: 'SampleBlock', module: 'bundle.js' }]
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve(JSON.stringify(manifest)) });
+    const moduleLoader = vi.fn().mockResolvedValue({ default: () => null });
+
+    const result = await loadPlugins([source], { fetchImpl: fetchMock as any, moduleLoader });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://raw.githubusercontent.com/example/repo/main/plugin/manifest.json');
+    expect(moduleLoader).toHaveBeenCalledWith('https://raw.githack.com/example/repo/main/bundle.js');
+    expect(result.plugins[0].manifest.id).toBe('sample');
+    expect(result.errors.length).toBe(0);
+  });
+
   it('allows plugin blocks to override core blocks in the registry', () => {
     const registry = createComponentRegistry();
     const override = () => null;

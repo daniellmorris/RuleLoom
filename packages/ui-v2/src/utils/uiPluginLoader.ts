@@ -9,10 +9,14 @@ export interface LoadedPlugin {
 interface LoaderOptions {
   fetchImpl?: typeof fetch;
   rawBaseUrl?: string;
+  manifestBaseUrl?: string;
+  moduleBaseUrl?: string;
   moduleLoader?: (url: string) => Promise<any>;
 }
 
-const DEFAULT_RAW_BASE = 'https://raw.githubusercontent.com';
+const DEFAULT_MANIFEST_BASE = 'https://raw.githubusercontent.com';
+// raw.githack serves proper JS mime types for ESM imports from GitHub
+const DEFAULT_MODULE_BASE = 'https://raw.githack.com';
 
 type Maybe<T> = T | null;
 
@@ -37,8 +41,8 @@ export async function fetchPluginManifest(source: UiPluginSource, options?: Load
   }
 
   const fetcher = options?.fetchImpl ?? fetch;
-  const rawBaseUrl = source.baseUrl ?? options?.rawBaseUrl ?? DEFAULT_RAW_BASE;
-  const manifestUrl = buildRawUrl(rawBaseUrl, source.repo, source.ref, source.manifest);
+  const manifestBaseUrl = source.baseUrl ?? options?.manifestBaseUrl ?? options?.rawBaseUrl ?? DEFAULT_MANIFEST_BASE;
+  const manifestUrl = buildRawUrl(manifestBaseUrl, source.repo, source.ref, source.manifest);
 
   try {
     const res = await fetcher(manifestUrl);
@@ -76,7 +80,12 @@ export async function loadPlugins(sources: UiPluginSource[], options?: LoaderOpt
 
 async function loadPluginModules(source: UiPluginSource, manifest: UiPluginManifest, options?: LoaderOptions): Promise<Record<string, any>> {
   const seenModules = new Map<string, Promise<any>>();
-  const rawBaseUrl = source.baseUrl ?? options?.rawBaseUrl ?? DEFAULT_RAW_BASE;
+  const moduleBaseUrl =
+    (source as any).moduleBaseUrl ??
+    source.baseUrl ??
+    options?.moduleBaseUrl ??
+    options?.rawBaseUrl ??
+    DEFAULT_MODULE_BASE;
 
   const importModule = (resolvedPath: string) => {
     if (!seenModules.has(resolvedPath)) {
@@ -96,7 +105,7 @@ async function loadPluginModules(source: UiPluginSource, manifest: UiPluginManif
     if (modules[block.module]) continue;
     const modPath = isNpmSource(source)
       ? buildNpmModuleSpec(source.package, block.module, source.moduleBase)
-      : buildRawUrl(rawBaseUrl, (source as GitHubPluginSource).repo, (source as GitHubPluginSource).ref, block.module);
+      : buildRawUrl(moduleBaseUrl, (source as GitHubPluginSource).repo, (source as GitHubPluginSource).ref, block.module);
     const mod = await importModule(modPath);
     if (mod) modules[block.module] = mod;
   }

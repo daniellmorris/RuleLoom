@@ -18,12 +18,12 @@
           "id": "sidebar",
           "blocks": [
             {
-              "name": "Palette",
+              "name": "PluginLibrary",
               "slot": "primary",
               "order": 0
             },
             {
-              "name": "PluginLibrary",
+              "name": "Palette",
               "slot": "primary",
               "order": 1
             },
@@ -53,8 +53,7 @@
           ]
         }
       ]
-    }
-    ,
+    },
     {
       "id": "dashboard",
       "label": "Dashboard",

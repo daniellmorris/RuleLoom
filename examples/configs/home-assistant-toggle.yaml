@@ -1,16 +1,31 @@
 version: 1
-logger:
-  level: info
-
+plugins:
+  - source: github
+    repo: daniellmorris/RuleLoom
+    ref: main
+    path: plugins/rule-loom-core
+    name: RuleLoom Core
+  - source: github
+    repo: daniellmorris/RuleLoom
+    ref: main
+    path: plugins/rule-loom-plugin-http
+    name: HTTP Input & Closures
+  - source: github
+    repo: daniellmorris/RuleLoom
+    ref: main
+    path: plugins/rule-loom-plugin-scheduler
+    name: Scheduler Input
 inputs:
   - type: scheduler
-    jobs:
-      - name: toggle-ha-switch
-        flow: toggle-ha-switch
-        interval: "1s"
+    triggers:
+      - flow: toggle-ha-switch
+        $meta:
+          id: 3yh4s1uh
+          x: 422
+          "y": 674
+        interval: 1s
         runtime:
           targetEntity: switch.third_reality_inc_3rsp019bz_2
-
 closures:
   - type: flow
     name: ha.toggle-switch
@@ -20,17 +35,27 @@ closures:
         assign: lastHaResponse
         parameters:
           method: POST
-          baseUrl: "http://127.0.0.1:8123"
-          url: "/api/services/${parameters.domain}/${parameters.service}"
+          baseUrl: http://127.0.0.1:8123
+          url: /api/services/${parameters.domain}/${parameters.service}
           headers:
-            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo"
+            Authorization: >-
+              Bearer
+              eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo
           body:
-            entity_id: "${parameters.entityId}"
+            entity_id: ${parameters.entityId}
+        $meta:
+          id: fsvfj5m9
       - closure: core.log
         parameters:
           level: info
           message: "HA toggle status ${state.lastHaResponse.status}: ${state.lastHaResponse.body}"
-
+        $meta:
+          id: co9vony7
+    $meta:
+      id: z4z5y9eh
+      x: 1000
+      "y": 1000
+      disconnected: []
 flows:
   - name: toggle-ha-switch
     steps:
@@ -38,4 +63,13 @@ flows:
         parameters:
           domain: switch
           service: toggle
-          entityId: "${runtime.targetEntity}"
+          entityId: ${runtime.targetEntity}
+        $meta:
+          id: z3luwpes
+          x: 1582
+          "y": 904
+    $meta:
+      id: kfh1khdo
+      x: 1000
+      "y": 1000
+      disconnected: []

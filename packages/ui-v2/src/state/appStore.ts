@@ -20,15 +20,28 @@ export type NodeIndex = { byId: Record<string, NodeIndexEntry>; pathById: Record
 
 export interface AppState {
   version: number;
+  plugins: any[];
   inputs: any[];
   closures: FlowWithMeta[];
   flows: FlowWithMeta[];
+}
+
+function normalizeApp(app: Partial<AppState>): AppState {
+  return {
+    version: app.version ?? 1,
+    plugins: Array.isArray(app.plugins) ? app.plugins : [],
+    inputs: Array.isArray(app.inputs) ? app.inputs : [],
+    closures: Array.isArray(app.closures) ? app.closures : [],
+    flows: Array.isArray(app.flows) ? app.flows : []
+  };
 }
 
 interface AppStore {
   app: AppState;
   loadYaml: (text: string) => void;
   toYaml: () => string;
+  setPlugins: (plugins: any[]) => void;
+  addPlugin: (plugin: any) => void;
   setFlows: (flows: FlowWithMeta[]) => void;
   addFlow: (name?: string) => void;
   addClosure: (name?: string) => void;
@@ -54,6 +67,7 @@ type OperationResult = { ok: true } | { ok: false; error: string };
 
 const defaultState: AppState = {
   version: 1,
+  plugins: [],
   inputs: [],
   closures: [],
   flows: [
@@ -138,6 +152,7 @@ function parse(text: string): AppState {
 
   return {
     version: obj?.version ?? 1,
+    plugins: obj?.plugins ?? [],
     inputs: obj?.inputs ?? [],
     closures: obj?.closures ?? [],
     flows: obj?.flows ?? []
@@ -460,8 +475,16 @@ function disconnectedGuard(loc?: NodeIndexEntry): string | null {
 
 export const useAppStore = create<AppStore>((set, get) => ({
   app: defaultState,
-  loadYaml: (text) => set({ app: parse(text) }),
-  toYaml: () => dump(get().app),
+  loadYaml: (text) => set({ app: normalizeApp(parse(text)) }),
+  toYaml: () => dump(normalizeApp(get().app)),
+  setPlugins: (plugins) =>
+    set((state) => ({
+      app: { ...state.app, plugins: Array.isArray(plugins) ? plugins : [] },
+    })),
+  addPlugin: (plugin) =>
+    set((state) => ({
+      app: { ...state.app, plugins: upsertPlugin(state.app.plugins, plugin) },
+    })),
   setFlows: (flows) => set((state) => ({ app: { ...state.app, flows } })),
   addFlow: (name = "New Flow") =>
     set((state) => {
@@ -881,4 +904,16 @@ function removeStepById(flow: FlowWithMeta, nodeId: string): boolean {
   if (flow.$meta) flow.$meta.disconnected = disc;
 
   return removed;
+}
+
+function upsertPlugin(list: any[], plugin: any): any[] {
+  const key = plugin?.id ?? plugin?.manifestUrl;
+  if (!key) return list;
+  const idx = list.findIndex((p) => (p?.id ?? p?.manifestUrl) === key);
+  if (idx >= 0) {
+    const next = [...list];
+    next[idx] = { ...next[idx], ...plugin };
+    return next;
+  }
+  return [...list, plugin];
 }

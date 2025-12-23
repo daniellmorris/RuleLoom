@@ -29,16 +29,18 @@ const Palette: React.FC = () => {
     ...userClosures.map((c) => c.name).filter(Boolean)
   ]));
 
-  const groupLabel = (source?: string) => {
-    if (!source) return "Unknown";
-    if (source === "core") return "Core";
-    if (source.startsWith("runtime:")) return "Runtime";
-    if (source.startsWith("repo:")) return "Repo";
+  const pluginLabel = (source?: string) => {
+    if (!source) return "unknown";
+    if (source.startsWith("repo:")) {
+      const parts = source.split("/");
+      return parts[parts.length - 1] || "repo";
+    }
+    if (source.startsWith("runtime:")) return source.replace(/^runtime:/, "") || "runtime";
     return source;
   };
 
   const groupedClosures = closureNames.reduce((acc, name) => {
-    const label = groupLabel(closureSources[name]);
+    const label = pluginLabel(closureSources[name]);
     acc[label] = acc[label] ?? [];
     acc[label].push(name);
     return acc;
@@ -52,7 +54,7 @@ const Palette: React.FC = () => {
           availableInputs.map((inp) => (
             <button key={inp} className="button" onClick={() => addTrigger(inp)}>
               Add {inp} trigger{" "}
-              <span className="badge" title={`Source: ${inputSources[inp] ?? "unknown"}`}>{groupLabel(inputSources[inp] ?? "unknown")}</span>
+              <span className="badge" title={`Source: ${inputSources[inp] ?? "unknown"}`}>{pluginLabel(inputSources[inp] ?? "unknown")}</span>
             </button>
           ))}
         {Object.keys(groupedClosures).sort().map((label) => (
@@ -60,7 +62,7 @@ const Palette: React.FC = () => {
             <div style={{ fontSize: 12, color: "var(--muted)" }}>{label}</div>
             {(groupedClosures[label] ?? []).map((c) => (
               <button key={c} className="button secondary" onClick={() => addClosure(c)} title={`Source: ${closureSources[c] ?? "unknown"}`}>
-                Add {c} <span className="badge">{label}</span>
+                Add {c} <span className="badge">{pluginLabel(closureSources[c])}</span>
               </button>
             ))}
           </div>

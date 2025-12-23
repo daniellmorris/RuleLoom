@@ -101,8 +101,8 @@ const App = () => {
       <aside className="rail sidebar">
         <div className="scroll-column">
           <div className="stack">
-            <Palette />
             <PluginLibrary />
+            <Palette />
             <ImportExport />
           </div>
         </div>

@@ -1,0 +1,7 @@
+[
+  {
+    "repo": "RuleLoom/RuleLoom",
+    "ref": "main",
+    "manifest": "packages/ui-v2/examples/ui-plugin-sample/dist/manifest.json"
+  }
+]

@@ -24,6 +24,7 @@ type BlockHostProps = Pick<AppProps, 'onReloadPlugins' | 'pluginErrors' | 'reloa
   activePageId: string;
   onPageChange?: (pageId: string) => void;
   layout: PuckLayout;
+  registry: ComponentRegistry;
 };
 
 const MissingBlock: React.FC<{ descriptor: PuckBlockDescriptor }> = ({ descriptor }) => (
@@ -89,14 +90,19 @@ const App: React.FC<AppProps> = ({ layout, registry, onReloadPlugins, pluginErro
       pages,
       activePageId: activePage?.id ?? 'default',
       onPageChange: setActivePageId,
-      layout: appliedLayout
+      layout: appliedLayout,
+      registry
     }),
-    [onReloadPlugins, pluginErrors, reloadingPlugins, pages, activePage, appliedLayout, onUpdateLayout]
+    [onReloadPlugins, pluginErrors, reloadingPlugins, pages, activePage, appliedLayout, registry, onUpdateLayout]
   );
+
+  const hasSidebar = resolveRegionBlocks('sidebar').length > 0;
+  const hasInspector = resolveRegionBlocks('inspector').length > 0;
+  const shellClass = !hasSidebar && !hasInspector ? 'app-shell app-shell--wide' : 'app-shell';
 
   return (
     <PluginApiProvider>
-      <div className="app-shell">
+      <div className={shellClass}>
         <header className="topbar">
           {resolveRegionBlocks('header').map((block) => (
             <BlockRenderer key={block.name} descriptor={block} registry={registry} hostProps={hostProps} />

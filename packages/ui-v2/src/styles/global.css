@@ -109,6 +109,18 @@ body {
   min-height: 0;
 }
 
+.app-shell--wide {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "header"
+    "canvas";
+}
+
+.app-shell--wide .sidebar,
+.app-shell--wide .inspector-rail {
+  display: none;
+}
+
 .rail {
   padding: 12px;
   min-height: 0;

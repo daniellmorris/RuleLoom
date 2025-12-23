@@ -5,7 +5,7 @@ import Inspector from '../components/Inspector';
 import Palette from '../components/Palette';
 import PluginLibrary from '../components/PluginLibrary';
 import ShellHeader from '../components/ShellHeader';
-import DashboardEditor from '../components/DashboardEditor';
+import DashboardEditor from '../components/PuckLayoutEditor';
 import type { UiPluginBlockDescriptor, UiPluginManifest } from '../types/uiPlugin';
 
 export interface RegisteredBlock {

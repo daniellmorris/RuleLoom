@@ -6,12 +6,10 @@ interface ShellHeaderProps {
   onReloadPlugins?: () => void;
   reloadingPlugins?: boolean;
   pluginErrors?: string[];
-  pages?: { id: string; label?: string }[];
-  activePageId?: string;
-  onPageChange?: (pageId: string) => void;
+  onOpenLayoutEditor?: () => void;
 }
 
-const ShellHeader: React.FC<ShellHeaderProps> = ({ onReloadPlugins, reloadingPlugins, pluginErrors, pages, activePageId, onPageChange }) => {
+const ShellHeader: React.FC<ShellHeaderProps> = ({ onReloadPlugins, reloadingPlugins, pluginErrors, onOpenLayoutEditor }) => {
   const app = useAppStore((s) => s.app);
   const addFlow = useAppStore((s) => s.addFlow);
   const addClosure = useAppStore((s) => s.addClosure);
@@ -114,19 +112,9 @@ const ShellHeader: React.FC<ShellHeaderProps> = ({ onReloadPlugins, reloadingPlu
             Plugin errors: {pluginErrors.length}
           </span>
         ) : null}
-        {pages && pages.length > 1 && (
-          <select
-            className="input"
-            value={activePageId ?? pages[0].id}
-            onChange={(e) => onPageChange?.(e.target.value)}
-            style={{ width: 180 }}
-            title="Switch UI page"
-          >
-            {pages.map((p) => (
-              <option key={p.id} value={p.id}>{p.label ?? p.id}</option>
-            ))}
-          </select>
-        )}
+        <button className="button secondary" onClick={onOpenLayoutEditor}>
+          Open layout editor
+        </button>
       </div>
     </>
   );

@@ -167,6 +167,27 @@ body {
   text-transform: uppercase;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 7, 15, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 20;
+}
+
+.modal-panel {
+  width: 98vw;
+  height: 96vh;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
 .pill {
   border-radius: 999px;
   padding: 4px 10px;

@@ -29,8 +29,6 @@ describe('puck layout adapter', () => {
   it('builds config options from registry entries', () => {
     const registry = createComponentRegistry();
     const config = buildPuckConfig(registry);
-
-    const blockField = (config.components as any).Block.fields.name;
-    expect(blockField.options.some((opt: any) => opt.value === 'Palette')).toBe(true);
+    expect((config.components as any).Palette).toBeTruthy();
   });
 });

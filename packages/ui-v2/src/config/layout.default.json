@@ -1,88 +1,50 @@
 {
   "version": 1,
-  "pages": [
+  "regions": [
     {
-      "id": "main",
-      "label": "Main",
-      "regions": [
+      "id": "header",
+      "blocks": [
         {
-          "id": "header",
-          "blocks": [
-            {
-              "name": "ShellHeader",
-              "order": 0
-            }
-          ]
-        },
-        {
-          "id": "sidebar",
-          "blocks": [
-            {
-              "name": "PluginLibrary",
-              "slot": "primary",
-              "order": 0
-            },
-            {
-              "name": "Palette",
-              "slot": "primary",
-              "order": 1
-            },
-            {
-              "name": "ImportExport",
-              "slot": "primary",
-              "order": 2
-            }
-          ]
-        },
-        {
-          "id": "canvas",
-          "blocks": [
-            {
-              "name": "Canvas",
-              "order": 0
-            }
-          ]
-        },
-        {
-          "id": "inspector",
-          "blocks": [
-            {
-              "name": "Inspector",
-              "order": 0
-            }
-          ]
+          "name": "ShellHeader",
+          "order": 0
         }
       ]
     },
     {
-      "id": "dashboard",
-      "label": "Dashboard",
-      "regions": [
+      "id": "sidebar",
+      "blocks": [
         {
-          "id": "header",
-          "blocks": [
-            {
-              "name": "ShellHeader",
-              "order": 0
-            }
-          ]
+          "name": "PluginLibrary",
+          "slot": "primary",
+          "order": 0
         },
         {
-          "id": "canvas",
-          "blocks": [
-            {
-              "name": "DashboardEditor",
-              "order": 0
-            }
-          ]
+          "name": "Palette",
+          "slot": "primary",
+          "order": 1
         },
         {
-          "id": "sidebar",
-          "blocks": []
-        },
+          "name": "ImportExport",
+          "slot": "primary",
+          "order": 2
+        }
+      ]
+    },
+    {
+      "id": "canvas",
+      "blocks": [
         {
-          "id": "inspector",
-          "blocks": []
+          "name": "Canvas",
+          "order": 0
+        }
+      ]
+    },
+    {
+      "id": "inspector",
+      "blocks": [
+        {
+          "name": "Inspector",
+          "order": 0
         }
       ]
     }

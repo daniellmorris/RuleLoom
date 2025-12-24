@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import defaultLayout from './config/layout.default.json';
 import { PluginApiProvider } from './state/pluginApi';
-import type { LayoutRegionId, PuckBlockDescriptor, PuckLayout, PuckPage } from './types/puckLayout';
+import type { LayoutRegionId, PuckBlockDescriptor, PuckLayout } from './types/puckLayout';
 import type { ComponentRegistry, RegisteredBlock } from './utils/componentRegistry';
+import PuckLayoutEditor from './components/PuckLayoutEditor';
 
 interface AppProps {
   layout?: PuckLayout;
@@ -20,11 +21,13 @@ interface BlockRendererProps {
 }
 
 type BlockHostProps = Pick<AppProps, 'onReloadPlugins' | 'pluginErrors' | 'reloadingPlugins' | 'onUpdateLayout'> & {
-  pages: PuckPage[];
-  activePageId: string;
-  onPageChange?: (pageId: string) => void;
   layout: PuckLayout;
   registry: ComponentRegistry;
+  layoutEditorOpen: boolean;
+  openLayoutEditor: () => void;
+  closeLayoutEditor: () => void;
+  onOpenLayoutEditor?: () => void;
+  onCloseLayoutEditor?: () => void;
 };
 
 const MissingBlock: React.FC<{ descriptor: PuckBlockDescriptor }> = ({ descriptor }) => (
@@ -58,42 +61,26 @@ const groupBlocksBySlot = (blocks: PuckBlockDescriptor[]) => {
 
 const App: React.FC<AppProps> = ({ layout, registry, onReloadPlugins, pluginErrors, reloadingPlugins, onUpdateLayout }) => {
   const appliedLayout = useMemo<PuckLayout>(() => layout ?? (defaultLayout as PuckLayout), [layout]);
-  const pages = useMemo<PuckPage[]>(() => {
-    if (Array.isArray(appliedLayout.pages) && appliedLayout.pages.length) return appliedLayout.pages;
-    if (Array.isArray(appliedLayout.regions)) {
-      return [{ id: 'default', label: 'Main', regions: appliedLayout.regions }];
-    }
-    return [];
-  }, [appliedLayout]);
-
-  const [activePageId, setActivePageId] = React.useState(() => pages[0]?.id ?? 'default');
-
-  React.useEffect(() => {
-    if (!pages.find((p) => p.id === activePageId) && pages[0]) {
-      setActivePageId(pages[0].id);
-    }
-  }, [pages, activePageId]);
-
-  const activePage = pages.find((p) => p.id === activePageId) ?? pages[0];
-  const regionMap = useMemo(
-    () => Object.fromEntries((activePage?.regions ?? []).map((r) => [r.id, r])),
-    [activePage]
-  );
+  const regions = useMemo(() => appliedLayout.regions ?? appliedLayout.pages?.[0]?.regions ?? [], [appliedLayout]);
+  const regionMap = useMemo(() => Object.fromEntries(regions.map((r) => [r.id, r])), [regions]);
   const resolveRegionBlocks = (id: LayoutRegionId) => regionSort(regionMap[id]?.blocks ?? []);
   const resolveSlots = (id: LayoutRegionId) => groupBlocksBySlot(regionMap[id]?.blocks ?? []);
+  const [layoutEditorOpen, setLayoutEditorOpen] = React.useState(false);
   const hostProps = useMemo(
     () => ({
       onReloadPlugins,
       pluginErrors,
       reloadingPlugins,
       onUpdateLayout,
-      pages,
-      activePageId: activePage?.id ?? 'default',
-      onPageChange: setActivePageId,
       layout: appliedLayout,
-      registry
+      registry,
+      layoutEditorOpen,
+      openLayoutEditor: () => setLayoutEditorOpen(true),
+      closeLayoutEditor: () => setLayoutEditorOpen(false),
+      onOpenLayoutEditor: () => setLayoutEditorOpen(true),
+      onCloseLayoutEditor: () => setLayoutEditorOpen(false)
     }),
-    [onReloadPlugins, pluginErrors, reloadingPlugins, pages, activePage, appliedLayout, registry, onUpdateLayout]
+    [onReloadPlugins, pluginErrors, reloadingPlugins, appliedLayout, registry, onUpdateLayout, layoutEditorOpen]
   );
 
   const hasSidebar = resolveRegionBlocks('sidebar').length > 0;
@@ -145,6 +132,20 @@ const App: React.FC<AppProps> = ({ layout, registry, onReloadPlugins, pluginErro
           </div>
         </aside>
       </div>
+
+      {layoutEditorOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-panel">
+            <PuckLayoutEditor
+              layout={appliedLayout}
+              registry={registry}
+              onUpdateLayout={onUpdateLayout}
+              open
+              onClose={() => setLayoutEditorOpen(false)}
+            />
+          </div>
+        </div>
+      )}
     </PluginApiProvider>
   );
 };

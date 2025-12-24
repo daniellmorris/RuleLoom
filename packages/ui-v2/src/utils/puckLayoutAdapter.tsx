@@ -8,8 +8,6 @@ import type {
   PuckLayout
 } from '../types/puckLayout';
 
-type PuckNode = NonNullable<PuckData['content']>[number];
-
 const regionIds: LayoutRegionId[] = ['header', 'sidebar', 'canvas', 'inspector'];
 
 const makeId = () => {
@@ -18,92 +16,94 @@ const makeId = () => {
 };
 
 export function layoutToPuckData(layout: PuckLayout): PuckData {
-  const regions: LayoutRegion[] =
-    layout.regions ??
-    layout.pages?.[0]?.regions ??
-    [];
+  const regions: LayoutRegion[] = layout.pages?.[0]?.regions ?? layout.regions ?? [];
+  const regionMap = Object.fromEntries(regionIds.map((id) => [id, regions.find((r) => r.id === id)]));
 
-  const regionNodes: PuckNode[] = regions.map((region, idx) => ({
-    id: `region-${idx}`,
-    type: 'Region',
-    props: {
-      id: region.id,
-      label: region.label
-    },
-    children: (region.blocks ?? []).map((block, bIdx) => ({
-      id: `block-${idx}-${bIdx}`,
+  const slotBlocks = (regionId: LayoutRegionId) => {
+    const region = regionMap[regionId] as LayoutRegion | undefined;
+    return (region?.blocks ?? []).map((block) => ({
+      id: makeId(),
       type: block.name,
       props: {
+        id: makeId(),
         slot: block.slot,
         order: block.order,
         props: block.props ? JSON.stringify(block.props, null, 2) : ''
       }
-    }))
-  }));
+    }));
+  };
 
-  const content: PuckNode[] = [
+  const content = [
     {
-      id: 'layout-root',
-      type: 'LayoutRoot',
-      props: {},
-      children: regionNodes
+      id: 'shell',
+      type: 'Shell',
+      props: {
+        id: 'shell',
+        header: slotBlocks('header'),
+        sidebar: slotBlocks('sidebar'),
+        canvas: slotBlocks('canvas'),
+        inspector: slotBlocks('inspector')
+      }
     }
   ];
 
-  return normalizeDataIds({ content });
+  return normalizeDataIds({ root: { props: { id: 'root' } }, content });
 }
 
 export function puckDataToLayout(data: PuckData): PuckLayout {
-  const root = (data.content ?? []).find((node) => node?.type === 'LayoutRoot');
-  const regionChildren = root?.children ?? data.content ?? [];
+  const shell = (data.content ?? []).find((node) => node?.type === 'Shell');
+  const props = (shell?.props as any) ?? {};
 
-  const regions: LayoutRegion[] = regionChildren
-    .filter((node) => node?.type === 'Region')
-    .map((regionNode) => {
-      const regionId = (regionNode?.props as any)?.id as LayoutRegionId | undefined;
-      const blocks: PuckBlockDescriptor[] = (regionNode?.children ?? [])
-        .map((child) => {
-          const props = (child.props as any) ?? {};
-          return {
-            name: child.type as string,
-            slot: props.slot,
-            order: typeof props.order === 'number' ? props.order : undefined,
-            props: parsePropsField(props.props)
-          };
-        });
-
+  const regions: LayoutRegion[] = regionIds.map((regionId) => {
+    const blocks: PuckBlockDescriptor[] = (props[regionId] ?? []).map((child: any) => {
+      const childProps = child?.props ?? {};
       return {
-        id: regionIds.includes(regionId ?? '' as LayoutRegionId) ? regionId! : 'sidebar',
-        label: (regionNode?.props as any)?.label,
-        blocks
+        name: child?.type,
+        slot: childProps.slot,
+        order: typeof childProps.order === 'number' ? childProps.order : undefined,
+        props: cleanBlockProps(childProps)
       };
     });
+
+    return {
+      id: regionId,
+      label: props?.label,
+      blocks
+    } satisfies LayoutRegion;
+  });
 
   return { version: 1, regions };
 }
 
 export function buildPuckConfig(registry: ComponentRegistry): Config {
+  const allowed = (region: LayoutRegionId) =>
+    registry
+      .entries()
+      .filter((entry) => !entry.type || entry.type === region)
+      .map((entry) => entry.name);
+
   return {
+    root: {
+      label: 'App Shell',
+      fields: {},
+      render: ({ children }: { children?: React.ReactNode }) => <>{children}</>
+    },
     components: {
-      LayoutRoot: {
-        label: 'Layout',
+      Shell: {
+        label: 'Shell',
         fields: {
-          children: {
-            type: 'blocks',
-            label: 'Regions',
-            allowedComponents: ['Region']
-          }
+          header: { type: 'slot', allow: allowed('header') },
+          sidebar: { type: 'slot', allow: allowed('sidebar') },
+          canvas: { type: 'slot', allow: allowed('canvas') },
+          inspector: { type: 'slot', allow: allowed('inspector') }
         },
-        render: ({ children }: { children?: React.ReactNode }) => (
+        render: ({ header, sidebar, canvas, inspector }: Record<LayoutRegionId, React.ReactNode>) => (
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: '320px 1fr 360px',
               gridTemplateRows: '70px 1fr',
-              gridTemplateAreas: `
-                "header header header"
-                "sidebar canvas inspector"
-              `,
+              gridTemplateAreas: `"header header header" "sidebar canvas inspector"`,
               gap: 12,
               padding: 12,
               background: 'var(--bg-panel)',
@@ -112,40 +112,10 @@ export function buildPuckConfig(registry: ComponentRegistry): Config {
               minHeight: 420
             }}
           >
-            {children}
-          </div>
-        )
-      },
-      Region: {
-        label: 'Region',
-        fields: {
-          id: {
-            type: 'select',
-            label: 'Region',
-            options: regionIds.map((id) => ({ label: id, value: id }))
-          },
-          label: { type: 'text', label: 'Label', optional: true },
-          children: {
-            type: 'blocks',
-            label: 'Blocks',
-            allowedComponents: registry.entries().map((e) => e.name)
-          }
-        },
-        render: ({ id, label, children }: { id: LayoutRegionId; label?: string; children?: React.ReactNode }) => (
-          <div
-            style={{
-              gridArea: id,
-              border: '1px dashed var(--muted)',
-              padding: 8,
-              borderRadius: 10,
-              background: 'var(--bg)'
-            }}
-          >
-            <div style={{ fontWeight: 600 }}>{label ?? id}</div>
-            <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 8 }}>Drop blocks here</div>
-            <div className="stack" style={{ gap: 8 }}>
-              {React.Children.toArray(children)}
-            </div>
+            <div style={{ gridArea: 'header' }}>{header}</div>
+            <div style={{ gridArea: 'sidebar' }} className="stack" aria-label="Sidebar">{sidebar}</div>
+            <div style={{ gridArea: 'canvas' }} className="stack" aria-label="Canvas">{canvas}</div>
+            <div style={{ gridArea: 'inspector' }} className="stack" aria-label="Inspector">{inspector}</div>
           </div>
         )
       },
@@ -196,17 +166,39 @@ function parsePropsField(value: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
+function cleanBlockProps(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const props = { ...(value as Record<string, unknown>) };
+  const parsedProps = parsePropsField((props as any).props);
+  delete (props as any).slot;
+  delete (props as any).order;
+  delete (props as any).id;
+  delete (props as any).key;
+  delete (props as any).props;
+  const merged = { ...props, ...(parsedProps ?? {}) };
+  return Object.keys(merged).length ? merged : undefined;
+}
+
 export function normalizeDataIds(data: PuckData): PuckData {
   const cloneNode = (node: any): any => {
     const next: any = { ...node };
     const id = node.id ?? makeId();
     next.id = id;
     next.key = node.key ?? id;
+    next.props = {
+      ...(node.props ?? {}),
+      id: (node.props ?? {}).id ?? id
+    };
     if (Array.isArray(node.children)) {
       next.children = node.children.map((child: any) => cloneNode(child));
     }
+    regionIds.forEach((slot) => {
+      if (Array.isArray((node.props ?? {})[slot])) {
+        next.props[slot] = (node.props as any)[slot].map((child: any) => cloneNode(child));
+      }
+    });
     return next;
   };
   const content = (data.content ?? []).map((n) => cloneNode(n));
-  return { ...data, content };
+  return { ...data, content, root: data.root ?? { props: { id: 'root' } } };
 }

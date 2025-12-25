@@ -97,7 +97,15 @@ export function buildPuckConfig(registry: ComponentRegistry): Config {
           canvas: { type: 'slot', allow: allowed('canvas') },
           inspector: { type: 'slot', allow: allowed('inspector') }
         },
-        render: ({ header, sidebar, canvas, inspector }: Record<LayoutRegionId, React.ReactNode>) => (
+        render: ({ header, sidebar, canvas, inspector }: Record<LayoutRegionId, React.ReactNode>) => {
+          const renderSlot = (slotValue: React.ReactNode) => {
+            if (typeof slotValue === 'function') {
+              return (slotValue as () => React.ReactNode)();
+            }
+            return slotValue;
+          };
+
+          return (
           <div
             style={{
               display: 'grid',
@@ -112,12 +120,13 @@ export function buildPuckConfig(registry: ComponentRegistry): Config {
               minHeight: 420
             }}
           >
-            <div style={{ gridArea: 'header' }}>{header}</div>
-            <div style={{ gridArea: 'sidebar' }} className="stack" aria-label="Sidebar">{sidebar}</div>
-            <div style={{ gridArea: 'canvas' }} className="stack" aria-label="Canvas">{canvas}</div>
-            <div style={{ gridArea: 'inspector' }} className="stack" aria-label="Inspector">{inspector}</div>
+            <div style={{ gridArea: 'header' }}>{renderSlot(header)}</div>
+            <div style={{ gridArea: 'sidebar' }} className="stack" aria-label="Sidebar">{renderSlot(sidebar)}</div>
+            <div style={{ gridArea: 'canvas' }} className="stack" aria-label="Canvas">{renderSlot(canvas)}</div>
+            <div style={{ gridArea: 'inspector' }} className="stack" aria-label="Inspector">{renderSlot(inspector)}</div>
           </div>
-        )
+          );
+        }
       },
       ...Object.fromEntries(
         registry.entries().map((entry) => {

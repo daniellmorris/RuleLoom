@@ -18,12 +18,93 @@ export type NodeIndexEntry = {
 
 export type NodeIndex = { byId: Record<string, NodeIndexEntry>; pathById: Record<string, string>; idByPath: Record<string, string> };
 
+export type DashboardWidget = {
+  type: string;
+  title?: string;
+  value?: number | string;
+  size?: { w: number; h: number };
+  position?: { col: number; row: number };
+  props?: Record<string, unknown>;
+};
+
+export type DashboardEntry = {
+  id: string;
+  name: string;
+  description?: string;
+  layout: any; // stores Puck Data directly
+};
+
+export type DashboardsState = {
+  config?: {
+    defaultId?: string;
+    currentId?: string;
+    grid?: { cols?: number; rowHeight?: number; gap?: number };
+  };
+  list: DashboardEntry[];
+};
+
+const defaultDashboards: DashboardsState = {
+  config: { defaultId: "main", currentId: "main", grid: { cols: 12, rowHeight: 120, gap: 12 } },
+  list: [
+    {
+      id: "main",
+      name: "Main Dashboard",
+      layout: {
+        content: [
+          {
+            type: "FlexColumn",
+            props: {
+              gap: 12,
+              children: [
+                {
+                  type: "Panel",
+                  props: {
+                    title: "Recent Runs",
+                    children: [
+                      {
+                        type: "TableWidget",
+                        props: {
+                          title: "Recent Runs",
+                          data:
+                            '{"columns":["flow","status","duration"],"rows":[{"flow":"orders","status":"ok","duration":"1200ms"},{"flow":"billing","status":"ok","duration":"980ms"},{"flow":"shipping","status":"warn","duration":"2400ms"}]}'
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  type: "FlexRow",
+                  props: {
+                    gap: 12,
+                    children: [
+                      {
+                        type: "MetricWidget",
+                        props: { title: "Errors", value: "12" }
+                      },
+                      {
+                        type: "MetricWidget",
+                        props: { title: "Throughput", value: "1.2k/s" }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+};
+
 export interface AppState {
   version: number;
   plugins: any[];
   inputs: any[];
   closures: FlowWithMeta[];
   flows: FlowWithMeta[];
+  dashboards?: DashboardsState;
+  view?: 'builder' | 'dashboards';
 }
 
 function normalizeApp(app: Partial<AppState>): AppState {
@@ -32,7 +113,8 @@ function normalizeApp(app: Partial<AppState>): AppState {
     plugins: Array.isArray(app.plugins) ? app.plugins : [],
     inputs: Array.isArray(app.inputs) ? app.inputs : [],
     closures: Array.isArray(app.closures) ? app.closures : [],
-    flows: Array.isArray(app.flows) ? app.flows : []
+    flows: Array.isArray(app.flows) ? app.flows : [],
+    dashboards: app.dashboards ?? defaultDashboards
   };
 }
 
@@ -49,6 +131,10 @@ interface AppStore {
   renameClosure: (idx: number, name: string) => void;
   removeFlow: (idx: number) => void;
   removeClosure: (idx: number) => void;
+  setView: (view: 'builder' | 'dashboards') => void;
+  setCurrentDashboard: (id: string) => void;
+  addDashboard: (name?: string, layout?: any) => void;
+  updateDashboardLayout: (id: string, layout: any) => void;
   attachCallChain: (flowName: string, fromId: string, paramName: string, targetId: string) => OperationResult;
   attachFlowStepsChain: (flowName: string, fromId: string, paramName: string, targetId: string) => OperationResult;
   moveStepChainAfter: (flowName: string, sourceId: string, targetId: string) => OperationResult;
@@ -76,7 +162,9 @@ const defaultState: AppState = {
       steps: [],
       $meta: { id: nanoid(), x: 1000, y: 1000, disconnected: [] }
     }
-  ]
+  ],
+  dashboards: defaultDashboards,
+  view: "builder"
 };
 
 function ensureFlowMeta(flow: FlowWithMeta) {
@@ -155,7 +243,8 @@ function parse(text: string): AppState {
     plugins: obj?.plugins ?? [],
     inputs: obj?.inputs ?? [],
     closures: obj?.closures ?? [],
-    flows: obj?.flows ?? []
+    flows: obj?.flows ?? [],
+    dashboards: obj?.dashboards ?? defaultDashboards
   };
 }
 
@@ -477,6 +566,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   app: defaultState,
   loadYaml: (text) => set({ app: normalizeApp(parse(text)) }),
   toYaml: () => dump(normalizeApp(get().app)),
+  setView: (view) => set((state) => ({ app: { ...state.app, view } })),
   setPlugins: (plugins) =>
     set((state) => ({
       app: { ...state.app, plugins: Array.isArray(plugins) ? plugins : [] },
@@ -495,6 +585,47 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => {
       const closures = [...state.app.closures, { name, steps: [], $meta: { id: nanoid(), x: 60, y: 120, disconnected: [] } }];
       return { app: { ...state.app, closures } };
+    }),
+  setCurrentDashboard: (id) =>
+    set((state) => {
+      const dashboards = state.app.dashboards ?? defaultDashboards;
+      return { app: { ...state.app, dashboards: { ...dashboards, config: { ...dashboards.config, currentId: id } } } };
+    }),
+  addDashboard: (name = "New Dashboard", layout) =>
+    set((state) => {
+      const dashboards = state.app.dashboards ?? defaultDashboards;
+      const id = nanoid();
+      const nextDash = {
+        id,
+        name,
+        layout:
+          layout ??
+          {
+            version: 1,
+            regions: [
+              {
+                id: "canvas",
+                blocks: [{ name: "DashboardGrid", props: { widgets: [] } }]
+              }
+            ]
+          }
+      };
+      return {
+        app: {
+          ...state.app,
+          dashboards: {
+            ...dashboards,
+            config: { ...dashboards.config, currentId: id },
+            list: [...(dashboards.list ?? []), nextDash]
+          }
+        }
+      };
+    }),
+  updateDashboardLayout: (id, layout) =>
+    set((state) => {
+      const dashboards = state.app.dashboards ?? defaultDashboards;
+      const list = (dashboards.list ?? []).map((d) => (d.id === id ? { ...d, layout } : d));
+      return { app: { ...state.app, dashboards: { ...dashboards, list } } };
     }),
   renameFlow: (idx, name) =>
     set((state) => {

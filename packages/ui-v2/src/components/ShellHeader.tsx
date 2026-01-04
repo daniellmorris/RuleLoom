@@ -17,6 +17,7 @@ const ShellHeader: React.FC<ShellHeaderProps> = ({ onReloadPlugins, reloadingPlu
   const renameClosure = useAppStore((s) => s.renameClosure);
   const removeFlow = useAppStore((s) => s.removeFlow);
   const removeClosure = useAppStore((s) => s.removeClosure);
+  const setView = useAppStore((s) => s.setView);
   const mode = useFlowStore((s) => s.activeMode);
   const activeFlowIdx = useFlowStore((s) => s.activeFlowId);
   const activeClosureIdx = useFlowStore((s) => s.activeClosureId);
@@ -112,6 +113,9 @@ const ShellHeader: React.FC<ShellHeaderProps> = ({ onReloadPlugins, reloadingPlu
             Plugin errors: {pluginErrors.length}
           </span>
         ) : null}
+        <button className="button secondary" onClick={() => setView('dashboards')}>
+          Dashboards
+        </button>
         <button className="button secondary" onClick={onOpenLayoutEditor}>
           Open layout editor
         </button>

@@ -28,7 +28,8 @@ export function layoutToPuckData(layout: PuckLayout): PuckData {
         id: makeId(),
         slot: block.slot,
         order: block.order,
-        props: block.props ? JSON.stringify(block.props, null, 2) : ''
+        ...block.props,
+        propsJson: block.props ? JSON.stringify(block.props, null, 2) : ''
       }
     }));
   };
@@ -144,15 +145,19 @@ export function buildPuckConfig(registry: ComponentRegistry): Config {
             );
           };
 
+          const fields =
+            entry.fields ??
+            {
+              slot: { type: 'text', label: 'Slot', optional: true },
+              order: { type: 'number', label: 'Order', optional: true },
+              props: { type: 'textarea', label: 'Props (JSON)', optional: true }
+            };
+
           return [
             entry.name,
             {
               label: entry.name,
-              fields: {
-                slot: { type: 'text', label: 'Slot', optional: true },
-                order: { type: 'number', label: 'Order', optional: true },
-                props: { type: 'textarea', label: 'Props (JSON)', optional: true }
-              },
+              fields,
               render
             }
           ];
@@ -179,12 +184,14 @@ function cleanBlockProps(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const props = { ...(value as Record<string, unknown>) };
   const parsedProps = parsePropsField((props as any).props);
+  const parsedJsonProps = parsePropsField((props as any).propsJson);
   delete (props as any).slot;
   delete (props as any).order;
   delete (props as any).id;
   delete (props as any).key;
   delete (props as any).props;
-  const merged = { ...props, ...(parsedProps ?? {}) };
+  delete (props as any).propsJson;
+  const merged = { ...props, ...(parsedProps ?? {}), ...(parsedJsonProps ?? {}) };
   return Object.keys(merged).length ? merged : undefined;
 }
 
@@ -201,7 +208,10 @@ export function normalizeDataIds(data: PuckData): PuckData {
     if (Array.isArray(node.children)) {
       next.children = node.children.map((child: any) => cloneNode(child));
     }
-    regionIds.forEach((slot) => {
+    if (Array.isArray((node.props ?? {}).children)) {
+      next.props.children = (node.props as any).children.map((child: any) => cloneNode(child));
+    }
+    ['widgets', ...regionIds].forEach((slot) => {
       if (Array.isArray((node.props ?? {})[slot])) {
         next.props[slot] = (node.props as any)[slot].map((child: any) => cloneNode(child));
       }

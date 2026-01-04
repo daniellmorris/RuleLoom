@@ -6,6 +6,7 @@ import Palette from '../components/Palette';
 import PluginLibrary from '../components/PluginLibrary';
 import ShellHeader from '../components/ShellHeader';
 import DashboardEditor from '../components/PuckLayoutEditor';
+import DashboardList from '../components/DashboardList';
 import type { UiPluginBlockDescriptor, UiPluginManifest } from '../types/uiPlugin';
 
 export interface RegisteredBlock {
@@ -14,6 +15,7 @@ export interface RegisteredBlock {
   pluginId?: string;
   component: ComponentType<any>;
   spec?: UiPluginBlockDescriptor['spec'];
+  fields?: Record<string, any>;
 }
 
 export interface ComponentRegistry {
@@ -30,7 +32,8 @@ const coreBlocks: RegisteredBlock[] = [
   { name: 'PluginLibrary', type: 'sidebar', pluginId: 'core', component: PluginLibrary },
   { name: 'ImportExport', type: 'sidebar', pluginId: 'core', component: ImportExport },
   { name: 'Canvas', type: 'canvas', pluginId: 'core', component: Canvas },
-  { name: 'Inspector', type: 'inspector', pluginId: 'core', component: Inspector }
+  { name: 'Inspector', type: 'inspector', pluginId: 'core', component: Inspector },
+  { name: 'DashboardList', type: 'sidebar', pluginId: 'core', component: DashboardList },
 ];
 
 export function createComponentRegistry(): ComponentRegistry {

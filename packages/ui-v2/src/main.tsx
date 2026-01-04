@@ -8,6 +8,8 @@ import type { UiPluginSource } from './types/uiPlugin';
 import { createComponentRegistry } from './utils/componentRegistry';
 import { loadPlugins } from './utils/uiPluginLoader';
 import './styles/global.css';
+import DashboardsPage from './views/DashboardsPage';
+import { useAppStore } from './state/appStore';
 
 (globalThis as any).React = (globalThis as any).React ?? React;
 (globalThis as any).ReactDOM = (globalThis as any).ReactDOM ?? ReactDOM;
@@ -18,6 +20,7 @@ const Host: React.FC = () => {
   const [registry, setRegistry] = useState(() => createComponentRegistry());
   const [loadingPlugins, setLoadingPlugins] = useState(false);
   const [pluginErrors, setPluginErrors] = useState<string[]>([]);
+  const view = useAppStore((s) => s.app.view ?? 'builder');
 
   const reloadPlugins = useCallback(async () => {
     setLoadingPlugins(true);
@@ -53,14 +56,18 @@ const Host: React.FC = () => {
   }, []);
 
   return (
-    <App
-      layout={layout}
-      registry={registry}
-      onReloadPlugins={reloadPlugins}
-      pluginErrors={pluginErrors}
-      reloadingPlugins={loadingPlugins}
-      onUpdateLayout={setLayout}
-    />
+    view === 'dashboards' ? (
+      <DashboardsPage registry={registry} onReloadPlugins={reloadPlugins} pluginErrors={pluginErrors} reloadingPlugins={loadingPlugins} />
+    ) : (
+      <App
+        layout={layout}
+        registry={registry}
+        onReloadPlugins={reloadPlugins}
+        pluginErrors={pluginErrors}
+        reloadingPlugins={loadingPlugins}
+        onUpdateLayout={setLayout}
+      />
+    )
   );
 };
 

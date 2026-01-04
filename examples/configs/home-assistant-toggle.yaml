@@ -26,6 +26,17 @@ inputs:
         interval: 1s
         runtime:
           targetEntity: switch.third_reality_inc_3rsp019bz_2
+  - type: http
+    config:
+      basePath: /api
+    triggers:
+      - flow: ha.get-entities
+        method: get
+        path: /entities
+        $meta:
+          id: http-trigger-entities
+          x: 240
+          "y": 240
 closures:
   - type: flow
     name: ha.toggle-switch
@@ -72,4 +83,29 @@ flows:
       id: kfh1khdo
       x: 1000
       "y": 1000
+      disconnected: []
+  - name: ha.get-entities
+    steps:
+      - closure: http.request
+        assign: lastHaResponse
+        parameters:
+          method: GET
+          baseUrl: http://127.0.0.1:8123
+          url: /api/states
+          headers:
+            Authorization: >-
+              Bearer
+              eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo
+        $meta:
+          id: ha-http-entities
+      - closure: core.respond
+        parameters:
+          status: ${state.lastHaResponse.status}
+          body: ${state.lastHaResponse.body}
+        $meta:
+          id: ha-http-respond
+    $meta:
+      id: ha-flow-entities
+      x: 1280
+      "y": 640
       disconnected: []

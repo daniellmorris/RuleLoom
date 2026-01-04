@@ -17,12 +17,12 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.670.0",
     "@aws-sdk/s3-request-presigner": "^3.670.0",
-    "rule-loom-lib": "file:../packages/rule-loom-lib",
-    "rule-loom-engine": "file:../packages/rule-loom-engine"
+    "rule-loom-lib": "^0.1.0",
+    "rule-loom-engine": "^0.1.0"
   },
   "devDependencies": {
     "vitest": "^2.0.5",
     "typescript": "^5.4.2",
-    "rule-loom-runner": "file:../../packages/rule-loom-runner"
+    "rule-loom-runner": "^0.1.0"
   }
 }

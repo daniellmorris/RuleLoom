@@ -1,4 +1,4 @@
-import type { GitHubPluginSource, NpmPluginSource, UiPluginManifest, UiPluginSource } from '../types/uiPlugin';
+import type { GitHubPluginSource, NpmPluginSource, UiPluginBlockDescriptor, UiPluginManifest, UiPluginSource } from '../types/uiPlugin';
 
 export interface LoadedPlugin {
   source: UiPluginSource;
@@ -41,8 +41,9 @@ export async function fetchPluginManifest(source: UiPluginSource, options?: Load
   }
 
   const fetcher = options?.fetchImpl ?? fetch;
-  const manifestBaseUrl = source.baseUrl ?? options?.manifestBaseUrl ?? options?.rawBaseUrl ?? DEFAULT_MANIFEST_BASE;
-  const manifestUrl = buildRawUrl(manifestBaseUrl, source.repo, source.ref, source.manifest);
+  const ghSource = source as GitHubPluginSource;
+  const manifestBaseUrl = ghSource.baseUrl ?? options?.manifestBaseUrl ?? options?.rawBaseUrl ?? DEFAULT_MANIFEST_BASE;
+  const manifestUrl = buildRawUrl(manifestBaseUrl, ghSource.repo, ghSource.ref, ghSource.manifest);
 
   try {
     const res = await fetcher(manifestUrl);
@@ -50,7 +51,7 @@ export async function fetchPluginManifest(source: UiPluginSource, options?: Load
       throw new Error(`Received ${res.status} when fetching manifest`);
     }
     const raw = await res.text();
-    const manifest = parseManifest(raw, source, manifestUrl);
+    const manifest = parseManifest(raw, ghSource, manifestUrl);
     return { manifest };
   } catch (err: any) {
     const message = err?.message ?? 'Unknown manifest error';
@@ -80,12 +81,9 @@ export async function loadPlugins(sources: UiPluginSource[], options?: LoaderOpt
 
 async function loadPluginModules(source: UiPluginSource, manifest: UiPluginManifest, options?: LoaderOptions): Promise<Record<string, any>> {
   const seenModules = new Map<string, Promise<any>>();
-  const moduleBaseUrl =
-    (source as any).moduleBaseUrl ??
-    source.baseUrl ??
-    options?.moduleBaseUrl ??
-    options?.rawBaseUrl ??
-    DEFAULT_MODULE_BASE;
+  const moduleBaseUrl = isNpmSource(source)
+    ? options?.moduleBaseUrl ?? options?.rawBaseUrl ?? DEFAULT_MODULE_BASE
+    : source.moduleBaseUrl ?? source.baseUrl ?? options?.moduleBaseUrl ?? options?.rawBaseUrl ?? DEFAULT_MODULE_BASE;
 
   const importModule = (resolvedPath: string) => {
     if (!seenModules.has(resolvedPath)) {
@@ -105,7 +103,12 @@ async function loadPluginModules(source: UiPluginSource, manifest: UiPluginManif
     if (modules[block.module]) continue;
     const modPath = isNpmSource(source)
       ? buildNpmModuleSpec(source.package, block.module, source.moduleBase)
-      : buildRawUrl(moduleBaseUrl, (source as GitHubPluginSource).repo, (source as GitHubPluginSource).ref, block.module);
+      : buildRawUrl(
+          moduleBaseUrl,
+          (source as GitHubPluginSource).repo,
+          (source as GitHubPluginSource).ref,
+          block.module
+        );
     const mod = await importModule(modPath);
     if (mod) modules[block.module] = mod;
   }
@@ -113,7 +116,7 @@ async function loadPluginModules(source: UiPluginSource, manifest: UiPluginManif
   return modules;
 }
 
-function parseManifest(raw: string, source: UiPluginSource, manifestUrl: string): UiPluginManifest {
+function parseManifest(raw: string, source: GitHubPluginSource, manifestUrl: string): UiPluginManifest {
   let parsed: any;
   try {
     parsed = JSON.parse(raw);
@@ -125,11 +128,7 @@ function parseManifest(raw: string, source: UiPluginSource, manifestUrl: string)
     throw new Error('Plugin manifest must be an object');
   }
 
-  const blocks = Array.isArray(parsed.blocks)
-    ? parsed.blocks
-        .map((b: any) => sanitizeBlock(b))
-        .filter(Boolean)
-    : [];
+  const blocks = Array.isArray(parsed.blocks) ? parsed.blocks.map((b: any) => sanitizeBlock(b)).filter(isBlock) : [];
 
   if (!parsed.id || typeof parsed.id !== 'string') {
     throw new Error('Plugin manifest requires an id');
@@ -156,11 +155,7 @@ function parseManifestObject(parsed: unknown, source: UiPluginSource): UiPluginM
   if (!isRecord(parsed)) {
     throw new Error('Plugin manifest must be an object');
   }
-  const blocks = Array.isArray(parsed.blocks)
-    ? parsed.blocks
-        .map((b: any) => sanitizeBlock(b))
-        .filter(Boolean)
-    : [];
+  const blocks = Array.isArray(parsed.blocks) ? parsed.blocks.map((b: any) => sanitizeBlock(b)).filter(isBlock) : [];
   if (!parsed.id || typeof parsed.id !== 'string') {
     throw new Error('Plugin manifest requires an id');
   }
@@ -186,7 +181,7 @@ function parseManifestObject(parsed: unknown, source: UiPluginSource): UiPluginM
   };
 }
 
-function sanitizeBlock(raw: any) {
+function sanitizeBlock(raw: any): UiPluginBlockDescriptor | null {
   if (!isRecord(raw)) return null;
   const type = typeof raw.type === 'string' ? raw.type : '';
   const name = typeof raw.name === 'string' ? raw.name : '';
@@ -200,6 +195,10 @@ function sanitizeBlock(raw: any) {
     : undefined;
   if (!type || !name || !module) return null;
   return { type, name, module, spec };
+}
+
+function isBlock(value: unknown): value is UiPluginBlockDescriptor {
+  return !!value;
 }
 
 function buildRawUrl(base: string, repo: string, ref: string, path: string): string {
@@ -220,6 +219,7 @@ function buildNpmModuleSpec(pkg: string, path: string, moduleBase?: string): str
 function isNpmSource(source: UiPluginSource): source is NpmPluginSource {
   return (source as NpmPluginSource).kind === 'npm' || !!(source as NpmPluginSource).package;
 }
+
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

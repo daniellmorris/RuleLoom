@@ -42,7 +42,13 @@ const PuckLayoutEditor: React.FC<PuckLayoutEditorProps> = ({ layout, registry, o
       <div className="panel">
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>Layout editor</h3>
-          <button className="button" onClick={() => setDraft(layoutToPuckData(layout)) || setStatus('clean')}>
+          <button
+            className="button"
+            onClick={() => {
+              setDraft(layoutToPuckData(layout));
+              setStatus('clean');
+            }}
+          >
             Prime editor
           </button>
         </div>

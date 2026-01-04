@@ -48,7 +48,8 @@ export function layoutToPuckData(layout: PuckLayout): PuckData {
     }
   ];
 
-  return normalizeDataIds({ root: { props: { id: 'root' } }, content });
+  // Root props intentionally empty; Puck types don't accept arbitrary fields here.
+  return normalizeDataIds({ root: { props: {} }, content });
 }
 
 export function puckDataToLayout(data: PuckData): PuckLayout {
@@ -98,7 +99,8 @@ export function buildPuckConfig(registry: ComponentRegistry): Config {
           canvas: { type: 'slot', allow: allowed('canvas') },
           inspector: { type: 'slot', allow: allowed('inspector') }
         },
-        render: ({ header, sidebar, canvas, inspector }: Record<LayoutRegionId, React.ReactNode>) => {
+        render: (props: any) => {
+          const { header, sidebar, canvas, inspector } = props as Record<LayoutRegionId, React.ReactNode>;
           const renderSlot = (slotValue: React.ReactNode) => {
             if (typeof slotValue === 'function') {
               return (slotValue as () => React.ReactNode)();

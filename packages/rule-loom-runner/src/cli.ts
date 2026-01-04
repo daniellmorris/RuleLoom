@@ -11,6 +11,7 @@ program
   .option("-c, --config <path>", "Path to configuration file", "config.yaml")
   .action(async (options) => {
     try {
+      console.log("Starting RuleLoom Runner...", process.argv);
       const { instance } = await startRunner({
         configPath: options.config,
       });

@@ -29,6 +29,9 @@ inputs:
   - type: http
     config:
       basePath: /api
+      corsOrigins: http://localhost:4173, http://localhost
+      corsMethods: GET, POST
+      corsAllowedHeaders: Authorization, Content-Type
     triggers:
       - flow: ha.get-entities
         method: get
@@ -133,5 +136,5 @@ dashboards:
                 - type: TableWidget
                   props:
                     title: Entities
-                    data: >-
-                      {"columns":["flow","status","duration"],"rows":[{"flow":"orders","status":"ok","duration":"1200ms"},{"flow":"billing","status":"ok","duration":"980ms"},{"flow":"shipping","status":"warn","duration":"2400ms"}]}
+                    endpoint: http://localhost:3000/api/entities
+                    columns: entity_id,state

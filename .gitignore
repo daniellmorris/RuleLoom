@@ -8,3 +8,5 @@ yarn-error.log*
 package-lock.json
 .ruleloom/
 **/tsconfig.tsbuildinfo
+**/tsconfig.build.tsbuildinfo
+**/*.tsbuildinfo

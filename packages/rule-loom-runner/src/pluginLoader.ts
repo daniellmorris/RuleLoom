@@ -50,6 +50,7 @@ export interface PluginLoaderOptions {
 }
 
 const DEFAULT_CACHE_DIR = path.join(os.homedir(), '.rule-loom', 'plugins');
+const GITHUB_CACHE_META = '.ruleloom-github.json';
 
 export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLoaderOptions) {
   const cacheDir = options.cacheDir ?? DEFAULT_CACHE_DIR;
@@ -166,8 +167,15 @@ async function resolvePluginModule(spec: PluginSpec, options: ResolveOptions): P
     .stat(entryFile)
     .then((s) => s.isDirectory() || s.isFile())
     .catch(() => false);
-  if (!exists) {
+  const updatePlan = await planGithubUpdate(spec, targetDir, exists, options);
+  if (updatePlan.shouldDownload) {
     await downloadGithubRepo(spec, targetDir, options);
+    await writeGithubCacheMeta(targetDir, {
+      repo: spec.repo,
+      ref: spec.ref,
+      commit: updatePlan.latestCommit,
+      fetchedAt: new Date().toISOString(),
+    });
   }
 
   const entry = (await resolveEntryFile(entryFile)) ?? entryFile;
@@ -345,4 +353,101 @@ async function downloadGithubRepo(spec: Extract<PluginSpec, { source: 'github' }
 
   // Extract tarball (requires system tar).
   await execFileAsync('tar', ['-xzf', tarFile, '--strip-components=1', '-C', targetDir]);
+}
+
+function isPinnedCommit(ref: string) {
+  return /^[0-9a-f]{40}$/i.test(ref);
+}
+
+interface GithubCacheMeta {
+  repo: string;
+  ref: string;
+  commit?: string;
+  fetchedAt?: string;
+}
+
+async function readGithubCacheMeta(targetDir: string): Promise<GithubCacheMeta | undefined> {
+  const metaPath = path.join(targetDir, GITHUB_CACHE_META);
+  const raw = await fs.readFile(metaPath, 'utf8').catch(() => undefined);
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return parsed as GithubCacheMeta;
+  } catch {
+    // ignore invalid cache metadata
+  }
+  return undefined;
+}
+
+async function writeGithubCacheMeta(targetDir: string, meta: GithubCacheMeta) {
+  const metaPath = path.join(targetDir, GITHUB_CACHE_META);
+  await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+}
+
+async function planGithubUpdate(
+  spec: Extract<PluginSpec, { source: 'github' }>,
+  targetDir: string,
+  cacheExists: boolean,
+  options: ResolveOptions,
+): Promise<{ shouldDownload: boolean; latestCommit?: string }> {
+  if (!cacheExists) {
+    return { shouldDownload: true };
+  }
+
+  if (isPinnedCommit(spec.ref)) {
+    return { shouldDownload: false, latestCommit: spec.ref };
+  }
+
+  const latestCommit = await fetchGithubCommitSha(spec.repo, spec.ref, options.logger);
+  if (!latestCommit) {
+    options.logger.warn?.(`Unable to validate latest commit for ${spec.repo}@${spec.ref}; using cached plugin.`);
+    return { shouldDownload: false };
+  }
+
+  const cached = await readGithubCacheMeta(targetDir);
+  if (cached?.commit && cached.commit === latestCommit) {
+    return { shouldDownload: false, latestCommit };
+  }
+
+  return { shouldDownload: true, latestCommit };
+}
+
+async function fetchGithubCommitSha(repo: string, ref: string, logger: RuleLoomLogger): Promise<string | undefined> {
+  const url = `https://api.github.com/repos/${repo}/commits/${encodeURIComponent(ref)}`;
+  try {
+    const raw = await httpGetJson(url, {
+      'User-Agent': 'rule-loom-runner',
+      Accept: 'application/vnd.github+json',
+    });
+    if (raw && typeof raw.sha === 'string') {
+      return raw.sha;
+    }
+  } catch (error) {
+    logger.debug?.(`Failed to fetch latest commit for ${repo}@${ref}: ${(error as Error).message}`);
+  }
+  return undefined;
+}
+
+function httpGetJson(url: string, headers: Record<string, string>): Promise<any> {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, { headers }, (res) => {
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`HTTP ${res.statusCode}`));
+          res.resume();
+          return;
+        }
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        res.on('end', () => {
+          try {
+            const raw = Buffer.concat(chunks).toString('utf8');
+            resolve(JSON.parse(raw));
+          } catch (error) {
+            reject(error);
+          }
+        });
+      })
+      .on('error', reject);
+  });
 }

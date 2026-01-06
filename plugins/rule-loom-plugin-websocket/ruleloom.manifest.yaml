@@ -1,0 +1,41 @@
+version: 1
+name: rule-loom-plugin-websocket
+pluginVersion: 0.1.0
+entry: dist/index.js
+closures: []
+inputs:
+  - type: websocket
+    configParameters:
+      - name: url
+        type: string
+        required: true
+        description: WebSocket URL (ws:// or wss://).
+      - name: protocols
+        type: string
+        required: false
+        description: Subprotocol(s) for the WebSocket handshake.
+      - name: headers
+        type: object
+        required: false
+        description: Headers to send during the WebSocket handshake.
+      - name: connectMessages
+        type: any
+        required: false
+        description: Messages to send after connect (objects are JSON-encoded).
+      - name: reconnect
+        type: boolean
+        required: false
+        description: Reconnect on disconnect (default true).
+      - name: reconnectIntervalMs
+        type: number
+        required: false
+        description: Reconnect delay in milliseconds (default 5000).
+    triggerParameters:
+      - name: flow
+        type: string
+        required: true
+        description: Target flow name
+      - name: json
+        type: boolean
+        required: false
+        description: Parse inbound messages as JSON

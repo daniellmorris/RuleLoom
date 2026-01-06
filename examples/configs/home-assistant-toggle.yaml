@@ -15,6 +15,11 @@ plugins:
     ref: main
     path: plugins/rule-loom-plugin-scheduler
     name: Scheduler Input
+  - source: github
+    repo: daniellmorris/RuleLoom
+    ref: main
+    path: plugins/rule-loom-plugin-websocket
+    name: WebSocket Input
 inputs:
   - type: scheduler
     triggers:
@@ -40,6 +45,19 @@ inputs:
           id: http-trigger-entities
           x: 937.264315951729
           "y": 635.2344261316908
+  - type: websocket
+    config:
+      url: ws://dmserver:8123/api/websocket
+      connectMessages:
+        - type: auth
+          access_token: >-
+            eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo
+        - id: 1
+          type: subscribe_events
+          event_type: state_changed
+    triggers:
+      - flow: ha.ws-events
+        json: true
 closures:
   - type: flow
     name: ha.toggle-switch
@@ -115,6 +133,19 @@ flows:
       id: ha-flow-entities
       x: 1280
       "y": 640
+      disconnected: []
+  - name: ha.ws-events
+    steps:
+      - closure: core.log
+        parameters:
+          level: info
+          message: "HA WS event: ${state.websocket.message.type}"
+        $meta:
+          id: ha-ws-log
+    $meta:
+      id: ha-flow-ws-events
+      x: 1280
+      "y": 320
       disconnected: []
 dashboards:
   config:

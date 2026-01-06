@@ -39,6 +39,10 @@ plugins:
     name: "MQTT"
     description: "MQTT plugin."
     manifest: plugins/rule-loom-plugin-mqtt/ruleloom.manifest.yaml
+  - id: websocket
+    name: "WebSocket"
+    description: "WebSocket input plugin."
+    manifest: plugins/rule-loom-plugin-websocket/ruleloom.manifest.yaml
   - id: notion
     name: "Notion"
     description: "Notion plugin."

@@ -1,0 +1,28 @@
+{
+  "name": "rule-loom-plugin-websocket",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "ruleloom.manifest.yaml"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "manifest": "npm -w rule-loom-runner run build --if-present && node ../../packages/rule-loom-runner/dist/cli.js manifest .",
+    "postbuild": "npm run manifest"
+  },
+  "dependencies": {
+    "ws": "^8.17.0",
+    "zod": "^3.23.8",
+    "rule-loom-engine": "0.1.0",
+    "rule-loom-lib": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2",
+    "rule-loom-runner": "0.1.0",
+    "vitest": "^2.0.5"
+  }
+}

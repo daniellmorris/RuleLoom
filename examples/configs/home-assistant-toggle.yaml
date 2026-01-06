@@ -46,7 +46,7 @@ closures:
         assign: lastHaResponse
         parameters:
           method: POST
-          baseUrl: http://127.0.0.1:8123
+          baseUrl: http://dmserver:8123
           url: /api/services/${parameters.domain}/${parameters.service}
           headers:
             Authorization: >-
@@ -90,7 +90,7 @@ flows:
         assign: lastHaResponse
         parameters:
           method: GET
-          baseUrl: http://127.0.0.1:8123
+          baseUrl: http://dmserver:8123
           url: /api/states
           headers:
             Authorization: >-

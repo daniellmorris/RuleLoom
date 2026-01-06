@@ -152,9 +152,28 @@ function buildHttpSchema() {
 
 export const httpInputSchema = buildHttpSchema();
 
+function normalizeBasePath(basePath?: string) {
+  const raw = (basePath ?? '/').trim();
+  if (!raw || raw === '/') {
+    return '/';
+  }
+  const prefixed = raw.startsWith('/') ? raw : `/${raw}`;
+  return prefixed.endsWith('/') ? prefixed.slice(0, -1) : prefixed;
+}
+
+function normalizeRoutePath(path: string) {
+  const trimmed = path.trim();
+  if (!trimmed || trimmed === '/') {
+    return '/';
+  }
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+
 export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions): HttpInputApp {
   const app = express();
   const limit = input.config?.bodyLimit ?? '1mb';
+  const basePath = normalizeBasePath(input.config?.basePath);
+  const router = express.Router();
   app.use(express.json({ limit }));
   app.use(express.urlencoded({ extended: true, limit }));
   app.use(morgan('combined'));
@@ -162,8 +181,16 @@ export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfi
   for (const route of input.triggers) {
     const method = (route.method ?? 'post').toLowerCase();
     const handler = routeHandler(engine, route, options.logger, options.metadata);
-    (app as any)[method](route.path, handler);
-    options.logger.info?.(`Registered route [${method.toUpperCase()}] ${route.path} -> flow "${route.flow}"`);
+    const routePath = normalizeRoutePath(route.path);
+    (router as any)[method](routePath, handler);
+    const fullPath = basePath === '/' ? routePath : `${basePath}${routePath}`;
+    options.logger.info?.(`Registered route [${method.toUpperCase()}] ${fullPath} -> flow "${route.flow}"`);
+  }
+
+  if (basePath === '/') {
+    app.use(router);
+  } else {
+    app.use(basePath, router);
   }
 
   app.use((req, res, next) => {

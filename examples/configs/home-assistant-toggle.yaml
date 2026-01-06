@@ -21,9 +21,9 @@ inputs:
       - flow: toggle-ha-switch
         $meta:
           id: 3yh4s1uh
-          x: 422
-          "y": 674
-        interval: 10s
+          x: 700.4338046778479
+          "y": 941.8155663638621
+        interval: 1h
         runtime:
           targetEntity: switch.third_reality_inc_3rsp019bz_2
   - type: http
@@ -35,8 +35,8 @@ inputs:
         path: /entities
         $meta:
           id: http-trigger-entities
-          x: 240
-          "y": 240
+          x: 937.264315951729
+          "y": 635.2344261316908
 closures:
   - type: flow
     name: ha.toggle-switch
@@ -98,14 +98,40 @@ flows:
               eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo
         $meta:
           id: ha-http-entities
+          x: 1529.6393977624346
+          "y": 638.8871836447433
       - closure: core.respond
         parameters:
           status: ${state.lastHaResponse.status}
           body: ${state.lastHaResponse.body}
         $meta:
           id: ha-http-respond
+          x: 1804.5337896689537
+          "y": 625.9093368165385
     $meta:
       id: ha-flow-entities
       x: 1280
       "y": 640
       disconnected: []
+dashboards:
+  config:
+    defaultId: main
+    currentId: main
+    grid:
+      cols: 12
+      rowHeight: 120
+      gap: 12
+  list:
+    - id: main
+      name: Main Dashboard
+      layout:
+        content:
+          - type: FlexColumn
+            props:
+              gap: 12
+              children:
+                - type: TableWidget
+                  props:
+                    title: Entities
+                    data: >-
+                      {"columns":["flow","status","duration"],"rows":[{"flow":"orders","status":"ok","duration":"1200ms"},{"flow":"billing","status":"ok","duration":"980ms"},{"flow":"shipping","status":"warn","duration":"2400ms"}]}

@@ -46,6 +46,18 @@ inputs:
         type: number
         required: false
         description: Port for the standalone HTTP server (defaults to 3000)
+      - name: corsOrigins
+        type: string
+        required: false
+        description: CORS allowed origins (comma-separated or array)
+      - name: corsMethods
+        type: string
+        required: false
+        description: CORS allowed methods (comma-separated or array)
+      - name: corsAllowedHeaders
+        type: string
+        required: false
+        description: CORS allowed headers (comma-separated or array)
     triggerParameters:
       - name: method
         type: string

@@ -15,6 +15,7 @@
     "postbuild": "npm run manifest"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^4.19.2",
     "http-errors": "^2.0.0",
     "lodash": "^4.17.21",
@@ -24,6 +25,7 @@
     "rule-loom-lib": "0.1.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
     "typescript": "^5.4.2",
     "rule-loom-runner": "0.1.0",
     "vitest": "^2.0.5"

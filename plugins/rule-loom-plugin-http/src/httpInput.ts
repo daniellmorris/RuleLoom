@@ -1,4 +1,5 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
+import cors, { type CorsOptions } from 'cors';
 import http from 'node:http';
 import createError from 'http-errors';
 import morgan from 'morgan';
@@ -29,6 +30,9 @@ export interface HttpInputConfig extends BaseInputConfig {
     basePath?: string;
     bodyLimit?: string | number;
     port?: number;
+    corsOrigins?: string | string[];
+    corsMethods?: string | string[];
+    corsAllowedHeaders?: string | string[];
   };
   triggers: HttpTriggerConfig[];
 }
@@ -106,6 +110,9 @@ export const httpConfigParameters = [
   { name: 'basePath', type: 'string', required: false, description: 'Prefix for all routes' },
   { name: 'bodyLimit', type: 'string', required: false, description: 'JSON body limit (e.g. 1mb)' },
   { name: 'port', type: 'number', required: false, description: 'Port for the standalone HTTP server (defaults to 3000)' },
+  { name: 'corsOrigins', type: 'string', required: false, description: 'CORS allowed origins (comma-separated or array)' },
+  { name: 'corsMethods', type: 'string', required: false, description: 'CORS allowed methods (comma-separated or array)' },
+  { name: 'corsAllowedHeaders', type: 'string', required: false, description: 'CORS allowed headers (comma-separated or array)' },
 ];
 
 export const httpTriggerParameters = [
@@ -124,6 +131,8 @@ function buildHttpSchema() {
         return z.number();
       case 'boolean':
         return z.boolean();
+      case 'object':
+        return z.record(z.any());
       default:
         return z.any();
     }
@@ -169,14 +178,36 @@ function normalizeRoutePath(path: string) {
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 }
 
+function normalizeCorsList(value?: string | string[]) {
+  if (!value) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return value;
+  }
+  return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
 export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions): HttpInputApp {
   const app = express();
   const limit = input.config?.bodyLimit ?? '1mb';
   const basePath = normalizeBasePath(input.config?.basePath);
   const router = express.Router();
+  const corsOrigins = normalizeCorsList(input.config?.corsOrigins);
+  const corsMethods = normalizeCorsList(input.config?.corsMethods);
+  const corsAllowedHeaders = normalizeCorsList(input.config?.corsAllowedHeaders);
   app.use(express.json({ limit }));
   app.use(express.urlencoded({ extended: true, limit }));
   app.use(morgan('combined'));
+
+  if (corsOrigins || corsMethods || corsAllowedHeaders) {
+    const corsOptions: CorsOptions = {
+      origin: corsOrigins,
+      methods: corsMethods,
+      allowedHeaders: corsAllowedHeaders,
+    };
+    router.use(cors(corsOptions));
+  }
 
   for (const route of input.triggers) {
     const method = (route.method ?? 'post').toLowerCase();

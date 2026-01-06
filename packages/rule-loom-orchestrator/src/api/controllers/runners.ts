@@ -202,11 +202,14 @@ export function updateRunnerController(registry: RunnerRegistry, store: RunnerSt
         configContent,
         basePath: basePath?.trim(),
       });
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof RunnerValidationError) {
         throw createHttpError(400, error.message, { errors: error.result.issues });
       }
-      throw error;
+      if (error instanceof Error) {
+        throw createHttpError(500, error.message, { cause: error });
+      }
+      throw createHttpError(500, 'Unknown error while updating runner');
     }
 
     try {
@@ -215,7 +218,7 @@ export function updateRunnerController(registry: RunnerRegistry, store: RunnerSt
           ? configContent ?? (await readInlineConfig(registry, record)) ?? null
           : null;
       await store.update(record.id, buildPersistencePayload(record, inlineContent));
-    } catch (error) {
+    } catch (error: unknown) {
       await registry.removeRunner(record.id).catch(() => undefined);
       await registry
         .addRunner({
@@ -225,7 +228,10 @@ export function updateRunnerController(registry: RunnerRegistry, store: RunnerSt
           basePath: existing.basePath,
         })
         .catch(() => undefined);
-      throw createHttpError(500, 'Failed to persist runner update', { cause: error });
+      if (error instanceof Error) {
+        throw createHttpError(500, error.message, { cause: error });
+      }
+      throw createHttpError(500, 'Failed to persist runner update');
     }
 
     res.json(summarize(record));
@@ -244,7 +250,7 @@ export function deleteRunner(registry: RunnerRegistry, store: RunnerStore) {
 
     try {
       await store.delete(req.params.id);
-    } catch (error) {
+    } catch (error: unknown) {
       await registry
         .addRunner({
           id: existing.id,
@@ -253,7 +259,10 @@ export function deleteRunner(registry: RunnerRegistry, store: RunnerStore) {
           basePath: existing.basePath,
         })
         .catch(() => undefined);
-      throw createHttpError(500, 'Failed to delete runner from persistence', { cause: error });
+      if (error instanceof Error) {
+        throw createHttpError(500, error.message, { cause: error });
+      }
+      throw createHttpError(500, 'Failed to delete runner from persistence');
     }
 
     res.status(204).end();

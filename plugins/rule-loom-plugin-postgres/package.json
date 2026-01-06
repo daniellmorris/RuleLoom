@@ -16,13 +16,13 @@
   },
   "dependencies": {
     "pg": "^8.12.0",
-    "rule-loom-lib": "^0.1.0",
-    "rule-loom-engine": "^0.1.0"
+    "rule-loom-lib": "0.1.0",
+    "rule-loom-engine": "0.1.0"
   },
   "devDependencies": {
     "@types/pg": "^8.11.6",
     "vitest": "^2.0.5",
     "typescript": "^5.4.2",
-    "rule-loom-runner": "^0.1.0"
+    "rule-loom-runner": "0.1.0"
   }
 }

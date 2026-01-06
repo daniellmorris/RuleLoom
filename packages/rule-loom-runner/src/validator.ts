@@ -115,7 +115,7 @@ function validateInvokeStep(
     const matched = implicitClosures.find((closure) => {
       const fields = closure.implicitFields ?? [];
       if (!fields.length) return false;
-      return fields.every((field) => Object.prototype.hasOwnProperty.call(step as any, field));
+      return fields.every((field: string) => Object.prototype.hasOwnProperty.call(step as any, field));
     });
 
     if (!matched) {
@@ -233,7 +233,7 @@ function validateParameters(
     return;
   }
 
-  const allowedNames = new Set(descriptors.map((descriptor) => descriptor.name));
+  const allowedNames = new Set(descriptors.map((descriptor: { name: string }) => descriptor.name));
   for (const key of providedKeys) {
     if (!allowedNames.has(key)) {
       issues.push({

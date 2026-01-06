@@ -20,12 +20,12 @@
     "lodash": "^4.17.21",
     "morgan": "^1.10.0",
     "zod": "^3.23.8",
-    "rule-loom-engine": "^0.1.0",
-    "rule-loom-lib": "^0.1.0"
+    "rule-loom-engine": "0.1.0",
+    "rule-loom-lib": "0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.4.2",
-    "rule-loom-runner": "^0.1.0",
+    "rule-loom-runner": "0.1.0",
     "vitest": "^2.0.5"
   }
 }

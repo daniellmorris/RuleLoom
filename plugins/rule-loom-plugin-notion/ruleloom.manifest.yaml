@@ -2,33 +2,4 @@ version: 1
 name: rule-loom-plugin-notion
 pluginVersion: 0.1.0
 entry: dist/index.js
-closures:
-  - name: notion.createPage
-    description: Create a page in a Notion database
-    signature:
-      parameters:
-        - name: token
-          type: string
-          required: true
-        - name: databaseId
-          type: string
-          required: true
-        - name: properties
-          type: object
-          required: true
-  - name: notion.queryDatabase
-    description: Query a Notion database
-    signature:
-      parameters:
-        - name: token
-          type: string
-          required: true
-        - name: databaseId
-          type: string
-          required: true
-        - name: filter
-          type: any
-          required: false
-        - name: sorts
-          type: any
-          required: false
+closures: []

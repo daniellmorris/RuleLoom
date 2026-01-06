@@ -8,16 +8,20 @@
     "plugins/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
-    "dev": "npm run dev --workspace rule-loom-runner",
-    "start": "npm run start --workspace rule-loom-runner",
+    "build": "lerna run build --stream",
+    "dev": "lerna run dev --scope rule-loom-runner --stream",
+    "start": "lerna run start --scope rule-loom-runner --stream",
     "test": "ts-node --project tsconfig.test.json tests/engine.spec.ts",
-    "test:integration": "vitest run --config vitest.config.ts"
+    "test:integration": "vitest run --config vitest.config.ts",
+    "lerna:version": "lerna version --no-private",
+    "lerna:changed": "lerna changed",
+    "lerna:diff": "lerna diff"
   },
   "devDependencies": {
     "@prisma/client": "^5.22.0",
     "@types/supertest": "^2.0.16",
     "jsdom": "^27.3.0",
+    "lerna": "^8.1.2",
     "prisma": "^5.22.0",
     "supertest": "^6.3.4",
     "ts-node": "^10.9.2",

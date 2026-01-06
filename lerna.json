@@ -1,0 +1,15 @@
+{
+  "$schema": "https://lerna.dev/lerna-schema.json",
+  "version": "0.1.0",
+  "npmClient": "npm",
+  "packages": ["packages/*", "plugins/*"],
+  "command": {
+    "publish": {
+      "registry": "https://registry.npmjs.org/",
+      "noPrivate": true
+    },
+    "version": {
+      "noPrivate": true
+    }
+  }
+}

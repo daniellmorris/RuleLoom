@@ -10,7 +10,7 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
-    "rule-loom-core": "^0.1.0",
+    "rule-loom-core": "0.1.0",
     "clsx": "^2.1.0",
     "js-yaml": "^4.1.0",
     "@measured/puck": "^0.20.2",

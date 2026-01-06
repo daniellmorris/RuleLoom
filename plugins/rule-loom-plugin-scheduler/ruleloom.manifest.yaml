@@ -3,36 +3,3 @@ name: rule-loom-plugin-scheduler
 pluginVersion: 0.1.0
 entry: dist/index.js
 closures: []
-inputs:
-  - type: scheduler
-    configParameters: []
-    triggerParameters:
-      - name: name
-        type: string
-        required: false
-        description: Friendly job name
-      - name: flow
-        type: string
-        required: true
-        description: Flow to run
-      - name: interval
-        type: string
-        required: false
-        description: Interval expression or ms
-      - name: cron
-        type: string
-        required: false
-        description: Cron expression
-      - name: timeout
-        type: string
-        required: false
-        description: Timeout or delay
-      - name: initialState
-        type: any
-        required: false
-      - name: runtime
-        type: any
-        required: false
-      - name: enabled
-        type: boolean
-        required: false

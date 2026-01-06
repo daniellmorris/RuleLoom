@@ -2,4 +2,17 @@ version: 1
 name: rule-loom-plugin-postgres
 pluginVersion: 0.1.0
 entry: dist/index.js
-closures: []
+closures:
+  - name: postgres.query
+    description: Execute a SQL query against Postgres
+    signature:
+      parameters:
+        - name: connectionString
+          type: string
+          required: true
+        - name: text
+          type: string
+          required: true
+        - name: values
+          type: array
+          required: false

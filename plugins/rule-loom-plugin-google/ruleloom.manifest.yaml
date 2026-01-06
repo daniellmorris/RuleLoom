@@ -2,4 +2,58 @@ version: 1
 name: rule-loom-plugin-google
 pluginVersion: 0.1.0
 entry: dist/index.js
-closures: []
+closures:
+  - name: google.sheets.append
+    description: Append rows to a Google Sheet
+    signature:
+      parameters:
+        - name: serviceAccount
+          type: object
+          required: true
+        - name: spreadsheetId
+          type: string
+          required: true
+        - name: range
+          type: string
+          required: true
+        - name: values
+          type: array
+          required: true
+  - name: google.drive.upload
+    description: Upload a file to Google Drive (or GCS via storage)
+    signature:
+      parameters:
+        - name: serviceAccount
+          type: object
+          required: true
+        - name: bucket
+          type: string
+          required: false
+        - name: filename
+          type: string
+          required: true
+        - name: contentType
+          type: string
+          required: false
+        - name: buffer
+          type: any
+          required: true
+  - name: google.gmail.send
+    description: Send an email via Gmail API using service account (domain-wide delegation)
+    signature:
+      parameters:
+        - name: serviceAccount
+          type: object
+          required: true
+        - name: user
+          type: string
+          required: true
+        - name: to
+          type: string
+          required: true
+        - name: subject
+          type: string
+          required: true
+        - name: body
+          type: string
+          required: true

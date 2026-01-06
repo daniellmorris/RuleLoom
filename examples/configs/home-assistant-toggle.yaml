@@ -23,7 +23,7 @@ inputs:
           id: 3yh4s1uh
           x: 422
           "y": 674
-        interval: 1s
+        interval: 10s
         runtime:
           targetEntity: switch.third_reality_inc_3rsp019bz_2
   - type: http

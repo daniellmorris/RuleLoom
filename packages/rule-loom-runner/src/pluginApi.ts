@@ -50,8 +50,25 @@ export function getInputSchema() {
   if (plugins.length === 0) {
     return z.never();
   }
-  if (plugins.length === 1) {
-    return plugins[0].schema;
+  const missingSchema = plugins.filter((plugin) => !plugin.schema);
+  if (missingSchema.length) {
+    const names = missingSchema.map((p) => p.type ?? '<unknown>').join(', ');
+    throw new Error(`Input plugins missing schema: ${names}`);
   }
-  return z.discriminatedUnion('type', plugins.map((plugin) => plugin.schema) as any);
+
+  // Normalize schemas to the local zod instance so unions work even if
+  // plugins were built with their own bundled zod.
+  const normalized = plugins.map((plugin) => {
+    const base = z.object({ type: z.literal(plugin.type) });
+    if (!(plugin as any).schema?._def) {
+      console.warn('Input plugin schema missing _def', plugin.type, plugin.schema);
+    }
+    return base.and(plugin.schema as any);
+  });
+
+  if (normalized.length === 1) {
+    return normalized[0];
+  }
+
+  return z.union(normalized as any);
 }

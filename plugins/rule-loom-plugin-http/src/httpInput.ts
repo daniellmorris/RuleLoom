@@ -1,4 +1,5 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
+import http from 'node:http';
 import createError from 'http-errors';
 import morgan from 'morgan';
 import _ from 'lodash';
@@ -27,6 +28,7 @@ export interface HttpInputConfig extends BaseInputConfig {
   config?: {
     basePath?: string;
     bodyLimit?: string | number;
+    port?: number;
   };
   triggers: HttpTriggerConfig[];
 }
@@ -103,6 +105,7 @@ export interface CreateHttpInputOptions {
 export const httpConfigParameters = [
   { name: 'basePath', type: 'string', required: false, description: 'Prefix for all routes' },
   { name: 'bodyLimit', type: 'string', required: false, description: 'JSON body limit (e.g. 1mb)' },
+  { name: 'port', type: 'number', required: false, description: 'Port for the standalone HTTP server (defaults to 3000)' },
 ];
 
 export const httpTriggerParameters = [
@@ -191,12 +194,24 @@ export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
   triggerParameters: httpTriggerParameters,
   initialize: async (config: HttpInputConfig, { logger, engine, metadata }: InputPluginContext) => {
     const httpApp = createHttpInputApp(engine, config, { logger, metadata });
+    const port = config.config?.port ?? 3000;
+    const server = http.createServer(httpApp);
+    await new Promise<void>((resolve) => {
+      server.listen(port, () => {
+        const address = server.address();
+        const actualPort = typeof address === 'object' && address ? address.port : port;
+        logger.info?.(`HTTP input listening on port ${actualPort}${config.config?.basePath ?? ''}`);
+        resolve();
+      });
+    });
     return {
       services: {
         httpApp,
         httpBasePath: config.config?.basePath ?? '/',
+        httpServer: server,
       },
       cleanup: async () => {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
         httpApp.removeAllListeners();
       },
     };

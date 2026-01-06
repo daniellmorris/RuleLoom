@@ -2,4 +2,70 @@ version: 1
 name: rule-loom-plugin-http
 pluginVersion: 0.1.0
 entry: dist/index.js
-closures: []
+closures:
+  - name: http.request
+    description: Performs an HTTP request and returns status, headers, and body.
+    signature:
+      description: Performs an HTTP request and returns status, headers, and body.
+      parameters:
+        - name: method
+          type: string
+          description: HTTP method (GET/POST/etc.).
+        - name: url
+          type: string
+          description: Absolute URL or path relative to baseUrl.
+          required: true
+        - name: baseUrl
+          type: string
+          description: Override base URL for this invocation.
+        - name: headers
+          type: object
+          description: Additional request headers.
+        - name: body
+          type: any
+          description: JSON-serializable payload or raw string.
+        - name: timeoutMs
+          type: number
+          description: Request timeout in milliseconds.
+      allowAdditionalParameters: false
+      returns:
+        type: object
+        description: Response { status, headers, body }.
+inputs:
+  - type: http
+    configParameters:
+      - name: basePath
+        type: string
+        required: false
+        description: Prefix for all routes
+      - name: bodyLimit
+        type: string
+        required: false
+        description: JSON body limit (e.g. 1mb)
+      - name: port
+        type: number
+        required: false
+        description: Port for the standalone HTTP server (defaults to 3000)
+    triggerParameters:
+      - name: method
+        type: string
+        required: false
+        description: HTTP method
+        enum:
+          - get
+          - post
+          - put
+          - patch
+          - delete
+      - name: path
+        type: string
+        required: true
+        description: Route path
+      - name: flow
+        type: string
+        required: true
+        description: Target flow name
+      - name: respondWith
+        type: any
+        required: false
+        description: Static fallback response

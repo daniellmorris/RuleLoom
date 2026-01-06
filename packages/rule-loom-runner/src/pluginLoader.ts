@@ -140,19 +140,16 @@ async function resolvePluginModule(spec: PluginSpec, options: ResolveOptions): P
   if (spec.source === 'file') {
     const p = spec.path.startsWith('file:') ? spec.path.replace(/^file:/, '') : spec.path;
     const primaryResolved = path.isAbsolute(p) ? p : path.resolve(options.configDir, p);
-    const exists = await fs
-      .stat(primaryResolved)
-      .then((s) => s.isFile() || s.isDirectory())
-      .catch(() => false);
-
-    if (exists) {
-      return pathToFileURL(primaryResolved).href;
+    const entry = await resolveEntryFile(primaryResolved);
+    if (entry) {
+      return pathToFileURL(entry).href;
     }
 
     // Fallback: resolve relative to current working directory for inline configs
     // whose temp directory does not mirror the plugin location.
     const fallbackResolved = path.isAbsolute(p) ? p : path.resolve(process.cwd(), p);
-    return pathToFileURL(fallbackResolved).href;
+    const fallbackEntry = await resolveEntryFile(fallbackResolved);
+    return pathToFileURL(fallbackEntry ?? fallbackResolved).href;
   }
 
   if (spec.source === 'npm' || spec.source === 'store') {
@@ -173,7 +170,65 @@ async function resolvePluginModule(spec: PluginSpec, options: ResolveOptions): P
     await downloadGithubRepo(spec, targetDir, options);
   }
 
-  return pathToFileURL(entryFile).href;
+  const entry = (await resolveEntryFile(entryFile)) ?? entryFile;
+  return pathToFileURL(entry).href;
+}
+
+async function resolveEntryFile(fsPath: string): Promise<string | undefined> {
+  const stat = await fs
+    .stat(fsPath)
+    .catch(() => undefined);
+  if (!stat) return undefined;
+  if (stat.isFile()) return fsPath;
+
+  if (stat.isDirectory()) {
+    const distIndex = path.join(fsPath, 'dist', 'index.js');
+    const srcIndex = path.join(fsPath, 'index.js');
+    const tsSrcIndex = path.join(fsPath, 'src', 'index.ts');
+    const pkgJsonPath = path.join(fsPath, 'package.json');
+
+    const distExists = await fs
+      .stat(distIndex)
+      .then((s) => s.isFile())
+      .catch(() => false);
+    if (distExists) return distIndex;
+
+    const srcExists = await fs
+      .stat(srcIndex)
+      .then((s) => s.isFile())
+      .catch(() => false);
+    if (srcExists) return srcIndex;
+
+    const tsExists = await fs
+      .stat(tsSrcIndex)
+      .then((s) => s.isFile())
+      .catch(() => false);
+    if (tsExists) return tsSrcIndex;
+
+    const pkgJsonExists = await fs
+      .stat(pkgJsonPath)
+      .then((s) => s.isFile())
+      .catch(() => false);
+
+    if (pkgJsonExists) {
+      try {
+        const pkg = JSON.parse(await fs.readFile(pkgJsonPath, 'utf8'));
+        const exportEntry = typeof pkg.module === 'string' ? pkg.module : pkg.main;
+        if (exportEntry) {
+          const resolved = path.join(fsPath, exportEntry);
+          const resolvedExists = await fs
+            .stat(resolved)
+            .then((s) => s.isFile())
+            .catch(() => false);
+          if (resolvedExists) return resolved;
+        }
+      } catch {
+        // ignore malformed package.json
+      }
+    }
+  }
+
+  return undefined;
 }
 
 async function requireManifest(modulePath: string) {

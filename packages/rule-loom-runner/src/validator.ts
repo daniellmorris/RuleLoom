@@ -235,6 +235,7 @@ function validateParameters(
 
   const allowedNames = new Set(descriptors.map((descriptor: { name: string }) => descriptor.name));
   for (const key of providedKeys) {
+    if (key.startsWith('$')) continue;
     if (!allowedNames.has(key)) {
       issues.push({
         level: 'error',

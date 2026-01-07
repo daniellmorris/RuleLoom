@@ -4,22 +4,22 @@ plugins:
     repo: daniellmorris/RuleLoom
     ref: main
     path: plugins/rule-loom-core
-    name: RuleLoom Core
+    name: Core
   - source: github
     repo: daniellmorris/RuleLoom
     ref: main
     path: plugins/rule-loom-plugin-http
-    name: HTTP Input & Closures
+    name: HTTP
   - source: github
     repo: daniellmorris/RuleLoom
     ref: main
     path: plugins/rule-loom-plugin-scheduler
-    name: Scheduler Input
+    name: Scheduler
   - source: github
     repo: daniellmorris/RuleLoom
     ref: main
     path: plugins/rule-loom-plugin-websocket
-    name: WebSocket Input
+    name: WebSocket
 inputs:
   - type: scheduler
     triggers:

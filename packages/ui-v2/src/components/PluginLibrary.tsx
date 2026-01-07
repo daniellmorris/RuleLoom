@@ -34,6 +34,27 @@ function deriveGithubSpec(manifestUrl: string, name?: string) {
   }
 }
 
+function githubManifestUrl(spec: any) {
+  if (!spec || spec.source !== "github") return null;
+  const repo = typeof spec.repo === "string" ? spec.repo : "";
+  const ref = typeof spec.ref === "string" ? spec.ref : "";
+  if (!repo || !ref) return null;
+  const rawPath = typeof spec.path === "string" ? spec.path.trim() : "";
+  const path = rawPath.replace(/^\/+/, "").replace(/\/+$/, "");
+  const manifestPath = path ? `${path}/ruleloom.manifest.yaml` : "ruleloom.manifest.yaml";
+  return `https://raw.githubusercontent.com/${repo}/${ref}/${manifestPath}`;
+}
+
+function githubSourceTag(spec: any) {
+  if (!spec || spec.source !== "github") return null;
+  const repo = typeof spec.repo === "string" ? spec.repo : "";
+  const ref = typeof spec.ref === "string" ? spec.ref : "";
+  const rawPath = typeof spec.path === "string" ? spec.path.trim() : "";
+  const path = rawPath ? `:${rawPath}` : "";
+  if (!repo || !ref) return null;
+  return `github:${repo}@${ref}${path}`;
+}
+
 function repoId(url: string, manifest?: RepoManifest) {
   const explicit = manifest?.repoName?.trim();
   if (explicit) return explicit;
@@ -60,6 +81,7 @@ const PluginLibrary: React.FC = () => {
   const appPlugins = useAppStore((s) => s.app.plugins);
   const [openRepo, setOpenRepo] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const loadedGithubSources = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const onClickAway = (e: MouseEvent) => {
@@ -78,6 +100,45 @@ const PluginLibrary: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repos]);
+
+  useEffect(() => {
+    const activeSources = new Set<string>();
+    const githubSpecs = Array.isArray(appPlugins) ? appPlugins.filter((p) => p?.source === "github") : [];
+    const loadManifests = async () => {
+      const toLoad: Array<{ url: string; source: string }> = [];
+      githubSpecs.forEach((spec) => {
+        const source = githubSourceTag(spec);
+        const url = githubManifestUrl(spec);
+        if (!source || !url) return;
+        activeSources.add(source);
+        if (!loadedGithubSources.current.has(source)) {
+          toLoad.push({ url, source });
+        }
+      });
+
+      const removed = [...loadedGithubSources.current].filter((src) => !activeSources.has(src));
+      if (removed.length) {
+        removeSources(removed);
+        removed.forEach((src) => loadedGithubSources.current.delete(src));
+      }
+
+      await Promise.all(
+        toLoad.map(async ({ url, source }) => {
+          try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const text = await res.text();
+            addManifest(text, source);
+            loadedGithubSources.current.add(source);
+          } catch (err) {
+            console.warn(`Failed to load plugin manifest from ${url}`, err);
+          }
+        }),
+      );
+    };
+
+    loadManifests();
+  }, [appPlugins, addManifest, removeSources]);
 
   const handleSelectPlugins = async (
     repoUrlSel: string,

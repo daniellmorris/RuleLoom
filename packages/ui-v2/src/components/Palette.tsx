@@ -29,6 +29,13 @@ const Palette: React.FC = () => {
     ...userClosures.map((c) => c.name).filter(Boolean)
   ]));
 
+  const shortGithubLabel = (source: string) => {
+    const trimmed = source.replace(/^github:/, "");
+    const [repoPart] = trimmed.split("@");
+    const parts = repoPart.split("/").filter(Boolean);
+    return parts[parts.length - 1] || "github";
+  };
+
   const pluginLabel = (source?: string) => {
     if (!source) return "unknown";
     if (source.startsWith("repo:")) {
@@ -36,6 +43,7 @@ const Palette: React.FC = () => {
       return parts[parts.length - 1] || "repo";
     }
     if (source.startsWith("runtime:")) return source.replace(/^runtime:/, "") || "runtime";
+    if (source.startsWith("github:")) return shortGithubLabel(source);
     return source;
   };
 

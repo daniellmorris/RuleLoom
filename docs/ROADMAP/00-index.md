@@ -15,4 +15,3 @@ Each item lives in its own file with: Overview, Theory/Intent, Implementation Pl
 - 11-core-closures.md
 - 12-namespacing.md
 - 13-ui-plugin-system.md
-- 14-plugin-repositories-and-runtime-ui.md

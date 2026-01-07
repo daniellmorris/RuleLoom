@@ -8,6 +8,22 @@ import yaml from "js-yaml";
 
 type ParamMeta = { name: string; type?: string; required?: boolean; enum?: string[]; children?: ParamMeta[]; skipTemplateResolution?: boolean };
 
+function shortSourceLabel(source?: string) {
+  if (!source) return "unknown";
+  if (source.startsWith("repo:")) {
+    const parts = source.split("/");
+    return parts[parts.length - 1] || "repo";
+  }
+  if (source.startsWith("runtime:")) return source.replace(/^runtime:/, "") || "runtime";
+  if (source.startsWith("github:")) {
+    const trimmed = source.replace(/^github:/, "");
+    const [repoPart] = trimmed.split("@");
+    const parts = repoPart.split("/").filter(Boolean);
+    return parts[parts.length - 1] || "github";
+  }
+  return source;
+}
+
 function findTriggerById(app: any, flowName: string | undefined, triggerId: string) {
   if (!flowName) return null;
   for (let i = 0; i < (app.inputs ?? []).length; i++) {
@@ -124,7 +140,7 @@ const Inspector: React.FC = () => {
       <h3>Inspector</h3>
       <div className="row" style={{ justifyContent: "space-between" }}>
         <p style={{ color: "var(--muted)", margin: 0 }}>{title}</p>
-        <span className="badge" title={`Source: ${source}`}>{source}</span>
+        <span className="badge" title={`Source: ${source}`}>{shortSourceLabel(source)}</span>
       </div>
       <div className="stack" style={{ gap: 8 }}>
         {params.map((p) => (

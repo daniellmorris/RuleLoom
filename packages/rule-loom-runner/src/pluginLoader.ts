@@ -1,21 +1,21 @@
-import fs from 'node:fs/promises';
-import { createWriteStream } from 'node:fs';
-import path from 'node:path';
-import { createHash } from 'node:crypto';
-import { pathToFileURL, fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-import https from 'node:https';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import os from 'node:os';
-import yaml from 'js-yaml';
-import type { RuleLoomLogger } from 'rule-loom-lib';
-import { registerInputPlugin, resetInputPlugins } from './pluginApi.js';
-import type { ClosureDefinition } from 'rule-loom-engine';
-import { registerClosure } from './closureRegistry.js';
-import type { PluginSpec } from './pluginSpecs.js';
-import { parseClosureConfigs } from './config.js';
-import { buildClosures } from './closures.js';
+import fs from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import path from "node:path";
+import { createHash } from "node:crypto";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import https from "node:https";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import os from "node:os";
+import yaml from "js-yaml";
+import type { RuleLoomLogger } from "rule-loom-lib";
+import { registerInputPlugin, resetInputPlugins } from "./pluginApi.js";
+import type { ClosureDefinition } from "rule-loom-engine";
+import { registerClosure } from "./closureRegistry.js";
+import type { PluginSpec } from "./pluginSpecs.js";
+import { parseClosureConfigs } from "./config.js";
+import { buildClosures } from "./closures.js";
 
 const execFileAsync = promisify(execFile);
 const loadedPlugins = new Set<string>();
@@ -29,7 +29,7 @@ export interface RuleLoomPlugin {
 
 export interface LoadedPluginInfo {
   id: string;
-  source: PluginSpec['source'] | 'builtin';
+  source: PluginSpec["source"] | "builtin";
   modulePath: string;
   name?: string;
   version?: string;
@@ -49,33 +49,47 @@ export interface PluginLoaderOptions {
   logger: RuleLoomLogger;
 }
 
-const DEFAULT_CACHE_DIR = path.join(os.homedir(), '.rule-loom', 'plugins');
-const GITHUB_CACHE_META = '.ruleloom-github.json';
+const DEFAULT_CACHE_DIR = path.join(os.homedir(), ".rule-loom", "plugins");
+const GITHUB_CACHE_META = ".ruleloom-github.json";
 
-export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLoaderOptions) {
+export async function loadRuleLoomPlugins(
+  specs: PluginSpec[],
+  options: PluginLoaderOptions,
+) {
   const cacheDir = options.cacheDir ?? DEFAULT_CACHE_DIR;
   await fs.mkdir(cacheDir, { recursive: true }).catch(() => undefined);
 
   if (!specs.length) return;
 
   for (const spec of specs) {
-    const modulePath = await resolvePluginModule(spec, { ...options, cacheDir });
+    const modulePath = await resolvePluginModule(spec, {
+      ...options,
+      cacheDir,
+    });
     if (loadedPlugins.has(modulePath)) {
-      options.logger.debug?.(`Plugin at ${modulePath} already loaded; skipping.`);
+      options.logger.debug?.(
+        `Plugin at ${modulePath} already loaded; skipping.`,
+      );
       continue;
     }
 
-    if (spec.source !== 'config') {
+    if (spec.source !== "config") {
       await requireManifest(modulePath);
     }
 
-    if (spec.source === 'config') {
+    if (spec.source === "config") {
       const sourcePath = fileURLToPath(new URL(modulePath));
-      const rawFile = await fs.readFile(sourcePath, 'utf8');
+      const rawFile = await fs.readFile(sourcePath, "utf8");
       const parsed = (yaml.load(rawFile) ?? {}) as any;
-      const closureEntries = Array.isArray(parsed) ? parsed : parsed.closures ?? [];
+      const closureEntries = Array.isArray(parsed)
+        ? parsed
+        : (parsed.closures ?? []);
       const closureConfigs = parseClosureConfigs(closureEntries);
-      const closures = await buildClosures(closureConfigs, path.dirname(sourcePath), options.logger);
+      const closures = await buildClosures(
+        closureConfigs,
+        path.dirname(sourcePath),
+        options.logger,
+      );
       closures.forEach((c) => registerClosure(c));
       loadedPlugins.add(modulePath);
       await recordLoadedPlugin({
@@ -87,13 +101,18 @@ export async function loadRuleLoomPlugins(specs: PluginSpec[], options: PluginLo
       continue;
     }
     const pluginModule = await import(modulePath);
-    const plugin: RuleLoomPlugin | undefined = pluginModule.default ?? pluginModule.plugin ?? pluginModule;
-    if (!plugin || typeof plugin.register !== 'function') {
-      throw new Error(`Plugin loaded from ${modulePath} does not export a { register } function.`);
+    const plugin: RuleLoomPlugin | undefined =
+      pluginModule.default ?? pluginModule.plugin ?? pluginModule;
+    if (!plugin || typeof plugin.register !== "function") {
+      throw new Error(
+        `Plugin loaded from ${modulePath} does not export a { register } function.`,
+      );
     }
 
     const name = plugin.name ?? specName(spec);
-    options.logger.info?.(`Registering plugin ${name ?? 'unknown'}${plugin.version ? `@${plugin.version}` : ''}`);
+    options.logger.info?.(
+      `Registering plugin ${name ?? "unknown"}${plugin.version ? `@${plugin.version}` : ""}`,
+    );
     await plugin.register({
       registerInputPlugin,
       registerClosure,
@@ -121,9 +140,9 @@ export function getLoadedPlugins(): LoadedPluginInfo[] {
 }
 
 function specName(spec: PluginSpec): string | undefined {
-  if (spec.source === 'file') return spec.name ?? path.basename(spec.path);
-  if (spec.source === 'config') return spec.name ?? path.basename(spec.path);
-  if (spec.source === 'github') return spec.name ?? spec.repo;
+  if (spec.source === "file") return spec.name ?? path.basename(spec.path);
+  if (spec.source === "config") return spec.name ?? path.basename(spec.path);
+  if (spec.source === "github") return spec.name ?? spec.repo;
   return spec.name;
 }
 
@@ -131,16 +150,27 @@ interface ResolveOptions extends PluginLoaderOptions {
   cacheDir: string;
 }
 
-async function resolvePluginModule(spec: PluginSpec, options: ResolveOptions): Promise<string> {
-  if (spec.source === 'config') {
-    const resolved = spec.path.startsWith('file:') ? spec.path.replace(/^file:/, '') : spec.path;
-    const absolute = path.isAbsolute(resolved) ? resolved : path.resolve(options.configDir, resolved);
+async function resolvePluginModule(
+  spec: PluginSpec,
+  options: ResolveOptions,
+): Promise<string> {
+  if (spec.source === "config") {
+    const resolved = spec.path.startsWith("file:")
+      ? spec.path.replace(/^file:/, "")
+      : spec.path;
+    const absolute = path.isAbsolute(resolved)
+      ? resolved
+      : path.resolve(options.configDir, resolved);
     return pathToFileURL(absolute).href;
   }
 
-  if (spec.source === 'file') {
-    const p = spec.path.startsWith('file:') ? spec.path.replace(/^file:/, '') : spec.path;
-    const primaryResolved = path.isAbsolute(p) ? p : path.resolve(options.configDir, p);
+  if (spec.source === "file") {
+    const p = spec.path.startsWith("file:")
+      ? spec.path.replace(/^file:/, "")
+      : spec.path;
+    const primaryResolved = path.isAbsolute(p)
+      ? p
+      : path.resolve(options.configDir, p);
     const entry = await resolveEntryFile(primaryResolved);
     if (entry) {
       return pathToFileURL(entry).href;
@@ -148,18 +178,20 @@ async function resolvePluginModule(spec: PluginSpec, options: ResolveOptions): P
 
     // Fallback: resolve relative to current working directory for inline configs
     // whose temp directory does not mirror the plugin location.
-    const fallbackResolved = path.isAbsolute(p) ? p : path.resolve(process.cwd(), p);
+    const fallbackResolved = path.isAbsolute(p)
+      ? p
+      : path.resolve(process.cwd(), p);
     const fallbackEntry = await resolveEntryFile(fallbackResolved);
     return pathToFileURL(fallbackEntry ?? fallbackResolved).href;
   }
 
-  if (spec.source === 'npm' || spec.source === 'store') {
+  if (spec.source === "npm" || spec.source === "store") {
     // Attempt native resolution; external download would require package manager.
     return spec.name;
   }
 
   // github source
-  const cacheKey = `${spec.repo.replace(/[\\/]/g, '_')}@${spec.ref}`;
+  const cacheKey = `${spec.repo.replace(/[\\/]/g, "_")}@${spec.ref}`;
   const targetDir = path.join(options.cacheDir, cacheKey);
   const entryFile = spec.path ? path.join(targetDir, spec.path) : targetDir;
 
@@ -183,17 +215,15 @@ async function resolvePluginModule(spec: PluginSpec, options: ResolveOptions): P
 }
 
 async function resolveEntryFile(fsPath: string): Promise<string | undefined> {
-  const stat = await fs
-    .stat(fsPath)
-    .catch(() => undefined);
+  const stat = await fs.stat(fsPath).catch(() => undefined);
   if (!stat) return undefined;
   if (stat.isFile()) return fsPath;
 
   if (stat.isDirectory()) {
-    const distIndex = path.join(fsPath, 'dist', 'index.js');
-    const srcIndex = path.join(fsPath, 'index.js');
-    const tsSrcIndex = path.join(fsPath, 'src', 'index.ts');
-    const pkgJsonPath = path.join(fsPath, 'package.json');
+    const distIndex = path.join(fsPath, "dist", "index.js");
+    const srcIndex = path.join(fsPath, "index.js");
+    const tsSrcIndex = path.join(fsPath, "src", "index.ts");
+    const pkgJsonPath = path.join(fsPath, "package.json");
 
     const distExists = await fs
       .stat(distIndex)
@@ -220,8 +250,9 @@ async function resolveEntryFile(fsPath: string): Promise<string | undefined> {
 
     if (pkgJsonExists) {
       try {
-        const pkg = JSON.parse(await fs.readFile(pkgJsonPath, 'utf8'));
-        const exportEntry = typeof pkg.module === 'string' ? pkg.module : pkg.main;
+        const pkg = JSON.parse(await fs.readFile(pkgJsonPath, "utf8"));
+        const exportEntry =
+          typeof pkg.module === "string" ? pkg.module : pkg.main;
         if (exportEntry) {
           const resolved = path.join(fsPath, exportEntry);
           const resolvedExists = await fs
@@ -255,14 +286,16 @@ async function requireManifest(modulePath: string) {
   }
 }
 
-async function locateManifest(resolvedModulePath: string): Promise<string | undefined> {
+async function locateManifest(
+  resolvedModulePath: string,
+): Promise<string | undefined> {
   const require = createRequire(import.meta.url);
 
-  if (resolvedModulePath.startsWith('file:')) {
+  if (resolvedModulePath.startsWith("file:")) {
     const fsPath = fileURLToPath(resolvedModulePath);
     let current = path.extname(fsPath) ? path.dirname(fsPath) : fsPath;
     while (true) {
-      const candidate = path.join(current, 'ruleloom.manifest.yaml');
+      const candidate = path.join(current, "ruleloom.manifest.yaml");
       // eslint-disable-next-line no-await-in-loop
       const exists = await fs
         .stat(candidate)
@@ -278,30 +311,40 @@ async function locateManifest(resolvedModulePath: string): Promise<string | unde
 
   // Attempt to resolve relative to module name (npm/store/github).
   try {
-    return require.resolve(path.join(resolvedModulePath, 'ruleloom.manifest.yaml'));
+    return require.resolve(
+      path.join(resolvedModulePath, "ruleloom.manifest.yaml"),
+    );
   } catch (error) {
     // ignore
   }
 
   try {
-    return require.resolve('ruleloom.manifest.yaml', { paths: [resolvedModulePath] });
+    return require.resolve("ruleloom.manifest.yaml", {
+      paths: [resolvedModulePath],
+    });
   } catch (error) {
     return undefined;
   }
 }
 
 function inventoryIdForSpec(spec: PluginSpec, modulePath: string): string {
-  if (spec.source === 'file') return `file:${modulePath}`;
-  if (spec.source === 'config') return `config:${modulePath}`;
-  if (spec.source === 'github') return `github:${spec.repo}@${spec.ref}${spec.path ? `:${spec.path}` : ''}`;
-  if (spec.source === 'npm') return `npm:${spec.name}${spec.version ? `@${spec.version}` : ''}`;
-  return `store:${spec.name}${spec.version ? `@${spec.version}` : ''}`;
+  if (spec.source === "file") return `file:${modulePath}`;
+  if (spec.source === "config") return `config:${modulePath}`;
+  if (spec.source === "github")
+    return `github:${spec.repo}@${spec.ref}${spec.path ? `:${spec.path}` : ""}`;
+  if (spec.source === "npm")
+    return `npm:${spec.name}${spec.version ? `@${spec.version}` : ""}`;
+  return `store:${spec.name}${spec.version ? `@${spec.version}` : ""}`;
 }
 
-async function recordLoadedPlugin(info: Omit<LoadedPluginInfo, 'manifestPath' | 'manifestRaw'>) {
+async function recordLoadedPlugin(
+  info: Omit<LoadedPluginInfo, "manifestPath" | "manifestRaw">,
+) {
   if (loadedPluginInventory.has(info.id)) return;
 
-  const { manifestPath, manifestRaw } = await readManifestForInventory(info.modulePath);
+  const { manifestPath, manifestRaw } = await readManifestForInventory(
+    info.modulePath,
+  );
   loadedPluginInventory.set(info.id, {
     ...info,
     manifestPath,
@@ -309,7 +352,9 @@ async function recordLoadedPlugin(info: Omit<LoadedPluginInfo, 'manifestPath' | 
   });
 }
 
-async function readManifestForInventory(modulePath: string): Promise<{ manifestPath?: string; manifestRaw?: string }> {
+async function readManifestForInventory(
+  modulePath: string,
+): Promise<{ manifestPath?: string; manifestRaw?: string }> {
   const manifestPath = await locateManifest(modulePath);
   if (!manifestPath) return {};
   const exists = await fs
@@ -317,14 +362,20 @@ async function readManifestForInventory(modulePath: string): Promise<{ manifestP
     .then((s) => s.isFile())
     .catch(() => false);
   if (!exists) return {};
-  const manifestRaw = await fs.readFile(manifestPath, 'utf8').catch(() => undefined);
+  const manifestRaw = await fs
+    .readFile(manifestPath, "utf8")
+    .catch(() => undefined);
   return { manifestPath, manifestRaw };
 }
 
-async function downloadGithubRepo(spec: Extract<PluginSpec, { source: 'github' }>, targetDir: string, options: ResolveOptions) {
+async function downloadGithubRepo(
+  spec: Extract<PluginSpec, { source: "github" }>,
+  targetDir: string,
+  options: ResolveOptions,
+) {
   await fs.mkdir(targetDir, { recursive: true });
   const tarballUrl = `https://codeload.github.com/${spec.repo}/tar.gz/${spec.ref}`;
-  const tarFile = path.join(targetDir, 'plugin.tgz');
+  const tarFile = path.join(targetDir, "plugin.tgz");
 
   options.logger.info?.(`Downloading GitHub plugin ${spec.repo}@${spec.ref}`);
   await new Promise<void>((resolve, reject) => {
@@ -332,27 +383,39 @@ async function downloadGithubRepo(spec: Extract<PluginSpec, { source: 'github' }
     https
       .get(tarballUrl, (res) => {
         if (res.statusCode && res.statusCode >= 400) {
-          reject(new Error(`Failed to download plugin tarball: ${res.statusCode}`));
+          reject(
+            new Error(`Failed to download plugin tarball: ${res.statusCode}`),
+          );
           return;
         }
         res.pipe(file);
-        file.on('finish', () => file.close(() => resolve()));
+        file.on("finish", () => file.close(() => resolve()));
       })
-      .on('error', (err) => reject(err));
+      .on("error", (err) => reject(err));
   });
 
   if (spec.integrity) {
-    const hash = createHash('sha256');
+    const hash = createHash("sha256");
     const data = await fs.readFile(tarFile);
     hash.update(data);
-    const digest = `sha256-${hash.digest('hex')}`;
+    const digest = `sha256-${hash.digest("hex")}`;
     if (digest !== spec.integrity) {
-      throw new Error(`Integrity mismatch for ${spec.repo}@${spec.ref}. Expected ${spec.integrity} got ${digest}`);
+      throw new Error(
+        `Integrity mismatch for ${spec.repo}@${spec.ref}. Expected ${spec.integrity} got ${digest}`,
+      );
     }
   }
 
   // Extract tarball (requires system tar).
-  await execFileAsync('tar', ['-xzf', tarFile, '--strip-components=1', '-C', targetDir]);
+  await execFileAsync("tar", [
+    "-xzf",
+    tarFile,
+    "--strip-components=1",
+    "-C",
+    targetDir,
+  ]);
+
+  await installGithubPluginDeps(targetDir, options.logger);
 }
 
 function isPinnedCommit(ref: string) {
@@ -366,13 +429,15 @@ interface GithubCacheMeta {
   fetchedAt?: string;
 }
 
-async function readGithubCacheMeta(targetDir: string): Promise<GithubCacheMeta | undefined> {
+async function readGithubCacheMeta(
+  targetDir: string,
+): Promise<GithubCacheMeta | undefined> {
   const metaPath = path.join(targetDir, GITHUB_CACHE_META);
-  const raw = await fs.readFile(metaPath, 'utf8').catch(() => undefined);
+  const raw = await fs.readFile(metaPath, "utf8").catch(() => undefined);
   if (!raw) return undefined;
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') return parsed as GithubCacheMeta;
+    if (parsed && typeof parsed === "object") return parsed as GithubCacheMeta;
   } catch {
     // ignore invalid cache metadata
   }
@@ -381,11 +446,11 @@ async function readGithubCacheMeta(targetDir: string): Promise<GithubCacheMeta |
 
 async function writeGithubCacheMeta(targetDir: string, meta: GithubCacheMeta) {
   const metaPath = path.join(targetDir, GITHUB_CACHE_META);
-  await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+  await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), "utf8");
 }
 
 async function planGithubUpdate(
-  spec: Extract<PluginSpec, { source: 'github' }>,
+  spec: Extract<PluginSpec, { source: "github" }>,
   targetDir: string,
   cacheExists: boolean,
   options: ResolveOptions,
@@ -398,9 +463,15 @@ async function planGithubUpdate(
     return { shouldDownload: false, latestCommit: spec.ref };
   }
 
-  const latestCommit = await fetchGithubCommitSha(spec.repo, spec.ref, options.logger);
+  const latestCommit = await fetchGithubCommitSha(
+    spec.repo,
+    spec.ref,
+    options.logger,
+  );
   if (!latestCommit) {
-    options.logger.warn?.(`Unable to validate latest commit for ${spec.repo}@${spec.ref}; using cached plugin.`);
+    options.logger.warn?.(
+      `Unable to validate latest commit for ${spec.repo}@${spec.ref}; using cached plugin.`,
+    );
     return { shouldDownload: false };
   }
 
@@ -412,23 +483,32 @@ async function planGithubUpdate(
   return { shouldDownload: true, latestCommit };
 }
 
-async function fetchGithubCommitSha(repo: string, ref: string, logger: RuleLoomLogger): Promise<string | undefined> {
+async function fetchGithubCommitSha(
+  repo: string,
+  ref: string,
+  logger: RuleLoomLogger,
+): Promise<string | undefined> {
   const url = `https://api.github.com/repos/${repo}/commits/${encodeURIComponent(ref)}`;
   try {
     const raw = await httpGetJson(url, {
-      'User-Agent': 'rule-loom-runner',
-      Accept: 'application/vnd.github+json',
+      "User-Agent": "rule-loom-runner",
+      Accept: "application/vnd.github+json",
     });
-    if (raw && typeof raw.sha === 'string') {
+    if (raw && typeof raw.sha === "string") {
       return raw.sha;
     }
   } catch (error) {
-    logger.debug?.(`Failed to fetch latest commit for ${repo}@${ref}: ${(error as Error).message}`);
+    logger.debug?.(
+      `Failed to fetch latest commit for ${repo}@${ref}: ${(error as Error).message}`,
+    );
   }
   return undefined;
 }
 
-function httpGetJson(url: string, headers: Record<string, string>): Promise<any> {
+function httpGetJson(
+  url: string,
+  headers: Record<string, string>,
+): Promise<any> {
   return new Promise((resolve, reject) => {
     https
       .get(url, { headers }, (res) => {
@@ -438,16 +518,38 @@ function httpGetJson(url: string, headers: Record<string, string>): Promise<any>
           return;
         }
         const chunks: Buffer[] = [];
-        res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-        res.on('end', () => {
+        res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        res.on("end", () => {
           try {
-            const raw = Buffer.concat(chunks).toString('utf8');
+            const raw = Buffer.concat(chunks).toString("utf8");
             resolve(JSON.parse(raw));
           } catch (error) {
             reject(error);
           }
         });
       })
-      .on('error', reject);
+      .on("error", reject);
   });
+}
+
+async function installGithubPluginDeps(
+  targetDir: string,
+  logger: RuleLoomLogger,
+) {
+  const pkgJsonPath = path.join(targetDir, "package.json");
+  const hasPackageJson = await fs
+    .stat(pkgJsonPath)
+    .then((s) => s.isFile())
+    .catch(() => false);
+  if (!hasPackageJson) return;
+
+  logger.info?.(`Installing npm dependencies for plugin at ${targetDir}`);
+  await execFileAsync(
+    "npm",
+    ["install", "--omit=dev", "--no-fund", "--no-audit"],
+    { cwd: targetDir, env: process.env },
+  );
+  logger.info?.(
+    `Finished installing npm dependencies for plugin at ${targetDir}`,
+  );
 }

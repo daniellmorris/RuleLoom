@@ -28,6 +28,7 @@ export const githubPluginSpecSchema = z.object({
   repo: z.string().min(1),
   ref: z.string().min(1),
   path: z.string().optional(),
+  build: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
   integrity: z.string().optional(),
   name: z.string().optional(),
 });

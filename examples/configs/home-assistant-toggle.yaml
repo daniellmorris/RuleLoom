@@ -5,21 +5,33 @@ plugins:
     ref: main
     path: plugins/rule-loom-core
     name: Core
+    build:
+      - npm install
+      - npm run build
   - source: github
     repo: daniellmorris/RuleLoom
     ref: main
     path: plugins/rule-loom-plugin-http
     name: HTTP
+    build:
+      - npm install
+      - npm run build
   - source: github
     repo: daniellmorris/RuleLoom
     ref: main
     path: plugins/rule-loom-plugin-scheduler
     name: Scheduler
+    build:
+      - npm install
+      - npm run build
   - source: github
     repo: daniellmorris/RuleLoom
     ref: main
     path: plugins/rule-loom-plugin-websocket
     name: WebSocket
+    build:
+      - npm install
+      - npm run build
 inputs:
   - type: scheduler
     triggers:

@@ -415,7 +415,7 @@ async function downloadGithubRepo(
     targetDir,
   ]);
 
-  await installGithubPluginDeps(targetDir, options.logger);
+  await runGithubPluginSetup(spec, targetDir, options.logger);
 }
 
 function isPinnedCommit(ref: string) {
@@ -552,4 +552,35 @@ async function installGithubPluginDeps(
   logger.info?.(
     `Finished installing npm dependencies for plugin at ${targetDir}`,
   );
+}
+
+async function runGithubPluginSetup(
+  spec: Extract<PluginSpec, { source: "github" }>,
+  targetDir: string,
+  logger: RuleLoomLogger,
+) {
+  const commands = normalizeGithubBuildCommands(spec);
+  if (!commands.length) {
+    await installGithubPluginDeps(targetDir, logger);
+    return;
+  }
+
+  logger.info?.(`Running build commands for GitHub plugin at ${targetDir}`);
+  for (const command of commands) {
+    logger.info?.(`Running plugin command: ${command}`);
+    await execFileAsync(command, [], {
+      cwd: targetDir,
+      env: process.env,
+      shell: true,
+    });
+  }
+  logger.info?.(`Finished build commands for GitHub plugin at ${targetDir}`);
+}
+
+function normalizeGithubBuildCommands(
+  spec: Extract<PluginSpec, { source: "github" }>,
+): string[] {
+  if (!spec.build) return [];
+  if (typeof spec.build === "string") return [spec.build];
+  return spec.build;
 }

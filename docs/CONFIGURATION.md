@@ -88,9 +88,13 @@ plugins:
     ref: main
     path: plugins/rule-loom-plugin-http
     name: HTTP Input & Closures
+    build:
+      - npm install
+      - npm run build
 ```
 
 GitHub plugins are cached under `~/.rule-loom/plugins/<repo>@<ref>`. For branch/tag refs, the runner checks the latest commit and only re-downloads when it changes. If the check fails, it keeps the cached plugin. For pinned 40-char SHA refs, no update check is performed.
+When `build` is provided, the runner executes those commands (in order) in the plugin root after download; include any needed install/build steps. If `build` is omitted, the runner runs `npm install --omit=dev` when a `package.json` is present.
 
 ### Plugin repositories (ui-v2 catalog)
 

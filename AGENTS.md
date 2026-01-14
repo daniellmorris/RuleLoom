@@ -3,6 +3,7 @@
 ## Project Structure & Modules
 - Monorepo managed with npm workspaces; core packages live under `packages/` (`rule-loom-engine`, `rule-loom-core`, `rule-loom-lib`, `rule-loom-runner`, `rule-loom-orchestrator`, `rule-loom-orchestrator-ui`, `ui-v2`), and plugins under `plugins/` (Slack, S3, Postgres, etc.).
 - Shared docs and diagrams are in `docs/`; runnable examples sit in `examples/`.
+- Documentation lives primarily in `docs/` (e.g., `ARCHITECTURE.md`, `CONFIGURATION.md`, `SCREENSHOTS.md`, and `ROADMAP/`); package-specific guides live in each package's `README.md`.
 - Prisma schema/database config is at `prisma/schema.prisma`; generated artifacts go to each package’s `dist/`.
 - Top-level tests live in `tests/` with helpers under `tests/helpers` and integration suites in `tests/integration`.
 

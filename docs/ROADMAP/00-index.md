@@ -10,7 +10,6 @@ Each item lives in its own file with: Overview, Theory/Intent, Implementation Pl
 - 06-yaml-defined-inputs.md
 - 07-yaml-testing-framework.md
 - 08-runner-chaining.md
-- 09-websocket-input.md
 - 10-multiple-input-instances.md
 - 11-core-closures.md
 - 12-namespacing.md

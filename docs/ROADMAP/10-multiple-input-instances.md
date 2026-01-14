@@ -1,4 +1,4 @@
-# Multiple input instances of same type
+# Multiple input instances of same type (Supported in runner but UI does not support this yet)
 
 ## Overview
 Support multiple configured instances of a given input type (e.g., two HTTP inputs, multiple AMQP brokers) with distinct configs and triggers.

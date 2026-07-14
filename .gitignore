@@ -10,3 +10,9 @@ package-lock.json
 **/tsconfig.tsbuildinfo
 **/tsconfig.build.tsbuildinfo
 **/*.tsbuildinfo
+
+# Guard against invoking `tsc` with engine source filenames, which bypasses outDir.
+packages/rule-loom-engine/src/*.js
+packages/rule-loom-engine/src/*.js.map
+packages/rule-loom-engine/src/*.d.ts
+packages/rule-loom-engine/src/*.d.ts.map

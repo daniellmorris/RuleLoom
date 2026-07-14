@@ -10,6 +10,8 @@
 ## Build, Test, and Run
 - `npm install` – install workspace dependencies.
 - `npm run build` – build all workspaces in dependency order (emits `dist/` per package).
+- Run TypeScript builds through the repository or workspace build scripts (for example, `npm run build` or `npm run build --workspace <workspace>`). Do not invoke `tsc` with individual source-file paths, because that bypasses the project `outDir` and can emit `.js`, `.d.ts`, and source-map files beside files in `src/`.
+- Keep all generated build outputs in the package-specific `dist/` directory. Before finishing build-related work, check that no generated `.js`, `.d.ts`, `*.map`, or `*.tsbuildinfo` files were added under `src/`.
 - `npm run dev` – start `rule-loom-runner` in watch/ts-node mode for local YAML configs.
 - `npm run start` – launch the compiled runner.
 - `npm run test` – execute the TypeScript unit suite (`tests/engine.spec.ts`) via `ts-node`.

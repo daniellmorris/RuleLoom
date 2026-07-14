@@ -247,7 +247,7 @@ export function createHttpClosures(
           },
           {
             name: "headers",
-            type: "any",
+            type: "object",
             description: "Additional request headers.",
           },
           {

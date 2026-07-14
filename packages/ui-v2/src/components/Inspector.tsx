@@ -163,7 +163,7 @@ const Inspector: React.FC<{ registry?: ComponentRegistry }> = ({ registry }) => 
     const val = step?.parameters?.[name];
     const isFlow = typeof val === "object" && val !== null && Array.isArray((val as any).steps);
     const isCallFlow = typeof val === "object" && val !== null && typeof (val as any).$call === "object" && Array.isArray((val as any).$call.steps);
-    return { name, type: isFlow || isCallFlow ? "flowSteps" : "string" };
+    return { name, type: isFlow || isCallFlow ? "flowSteps" : inferParameterType(val) };
   });
   const params: ParamMeta[] = metaParams.length ? metaParams : fallbackParams;
   const dynamicConnectors = node ? buildConnectorsForNode(node as any, meta).filter((connector) => connector.direction === "dynamic") : [];
@@ -219,7 +219,7 @@ const Inspector: React.FC<{ registry?: ComponentRegistry }> = ({ registry }) => 
   );
 };
 
-const ParamRow: React.FC<{
+export const ParamRow: React.FC<{
   param: ParamMeta;
   value: any;
   onValue: (v: any) => void;
@@ -235,6 +235,11 @@ const ParamRow: React.FC<{
   const isAny = param.type === "any";
   const isCall = typeof value === "object" && value !== null && "$call" in value;
   const baseValue = lockedValue ?? (isCall ? (value as any).$call : value);
+  const isStructured =
+    isAny ||
+    param.type === "object" ||
+    param.type === "json" ||
+    (!isCall && !isFlowSteps && !isArray && typeof baseValue === "object" && baseValue !== null);
 
   if (isArray) {
     const items: any[] = Array.isArray(baseValue) ? baseValue : [];
@@ -308,8 +313,8 @@ const ParamRow: React.FC<{
 
   const field =
     isFlowSteps || isCall || readOnly ? (
-      <input className="input" value={baseValue ?? "(connected)"} readOnly disabled />
-    ) : isAny ? (
+      <input className="input" value={formatReadOnlyValue(baseValue)} readOnly disabled />
+    ) : isStructured ? (
       <AnyEditor value={baseValue} onChange={onValue} />
     ) : param.enum && param.enum.length ? (
       <select className="input" value={baseValue ?? ""} onChange={(e) => onValue(e.target.value)}>
@@ -380,6 +385,21 @@ function createDefaultArrayItem(children: ParamMeta[]): any {
     }
   });
   return obj;
+}
+
+function inferParameterType(value: unknown): string {
+  if (Array.isArray(value)) return "array";
+  if (value !== null && typeof value === "object") return "object";
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  return "string";
+}
+
+function formatReadOnlyValue(value: unknown): string | number {
+  if (value === undefined || value === null || value === "") return "(connected)";
+  if (typeof value === "string" || typeof value === "number") return value;
+  if (typeof value === "boolean") return String(value);
+  return safeStringify(value);
 }
 
 const AnyEditor: React.FC<{ value: any; onChange: (v: any) => void }> = ({ value, onChange }) => {

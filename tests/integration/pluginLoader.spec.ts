@@ -3,7 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { describe, it, expect, afterAll } from 'vitest';
 import { createRunner, validateConfig } from '../../packages/rule-loom-runner/src/index.js';
-import { resetLoadedPlugins, getLoadedPlugins } from '../../packages/rule-loom-runner/src/pluginLoader.js';
+import { resetLoadedPlugins } from '../../packages/rule-loom-runner/src/pluginLoader.js';
 import { resetClosureRegistry } from '../../packages/rule-loom-runner/src/closureRegistry.js';
 
 const exampleConfig = path.resolve('examples/plugin-runner.yml');
@@ -55,12 +55,25 @@ describe('plugin loader', () => {
     const configPath = await prepareConfig();
     const instance = await createRunner(configPath);
     try {
-      const plugins = getLoadedPlugins();
+      const plugins = instance.plugins;
       expect(Array.isArray(plugins)).toBe(true);
       expect(plugins.some((p) => typeof p.id === 'string')).toBe(true);
       expect(plugins.some((p) => typeof p.manifestRaw === 'string' && p.manifestRaw.includes('version:'))).toBe(true);
     } finally {
       await instance?.close();
+    }
+  });
+
+  it('isolates plugin registration across concurrent runners', async () => {
+    const configPath = await prepareConfig();
+    const [first, second] = await Promise.all([createRunner(configPath), createRunner(configPath)]);
+    try {
+      expect(first.plugins).toHaveLength(1);
+      expect(second.plugins).toHaveLength(1);
+      expect((await first.engine.execute('hello-flow', {})).lastResult).toBe(5);
+      expect((await second.engine.execute('hello-flow', {})).lastResult).toBe(5);
+    } finally {
+      await Promise.all([first.close(), second.close()]);
     }
   });
 });

@@ -16,6 +16,9 @@ describe('Runner chaining', () => {
       const address = server.address();
       if (!address || typeof address === 'string') throw new Error('Expected downstream HTTP server address');
       const runnerHost = `http://127.0.0.1:${address.port}`;
+      await expect(
+        callRuleLoomRunner({ host: runnerHost, flow: 'downstream-flow', payload: { message: 'unauthorized' } }),
+      ).rejects.toThrow(/Unauthorized/);
       const events: any[] = [];
       const result = await upstream.engine.execute(
         'upstream-flow',
@@ -89,6 +92,32 @@ describe('Runner chaining', () => {
     } finally {
       await close(server);
     }
+  });
+
+  itHttp('runner client enforces host and call-depth policy before sending', async () => {
+    await expect(
+      callRuleLoomRunner({
+        host: 'http://example.com',
+        flow: 'any-flow',
+      }),
+    ).rejects.toThrow(/HTTPS/);
+
+    await expect(
+      callRuleLoomRunner({
+        host: 'https://runner.example.com',
+        flow: 'any-flow',
+        allowedHosts: ['different.example.com'],
+      }),
+    ).rejects.toThrow(/not allowed/);
+
+    await expect(
+      callRuleLoomRunner({
+        host: 'http://127.0.0.1:1',
+        flow: 'any-flow',
+        callDepth: 9,
+        maxCallDepth: 8,
+      }),
+    ).rejects.toThrow(/depth exceeds/);
   });
 });
 

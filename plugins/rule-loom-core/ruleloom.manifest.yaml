@@ -6,6 +6,8 @@ closures:
   - name: core.assign
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Assigns a value from parameters/state/runtime into state at the provided path.
       parameters:
@@ -27,6 +29,8 @@ closures:
   - name: core.respond
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Sets state.response so HTTP inputs send a response downstream.
       parameters:
@@ -48,6 +52,8 @@ closures:
   - name: core.log
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Logs a message using the configured logger.
       parameters:
@@ -64,6 +70,8 @@ closures:
   - name: core.truthy
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Returns true when the provided value is truthy.
       parameters:
@@ -76,6 +84,8 @@ closures:
   - name: core.equals
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Performs a deep equality comparison between `left` and `right`.
       parameters:
@@ -90,6 +100,8 @@ closures:
   - name: core.greater-than
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Compares whether `left` is greater than `right` after numeric coercion.
       parameters:
@@ -104,6 +116,8 @@ closures:
   - name: core.less-than
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Compares whether `left` is less than `right` after numeric coercion.
       parameters:
@@ -118,6 +132,8 @@ closures:
   - name: core.includes
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Checks if an item exists inside an array, string, or object values.
       parameters:
@@ -132,6 +148,8 @@ closures:
   - name: core.length
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Calculates the length of an array/string/object.
       parameters:
@@ -147,6 +165,8 @@ closures:
   - name: core.for-each
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Iterates over each entry in `collection` and executes nested steps.
       parameters:
@@ -167,6 +187,8 @@ closures:
   - name: core.branch
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Branches execution based on conditional cases.
       parameters:
@@ -201,6 +223,8 @@ closures:
   - name: core.runner-call
     namespace: core
     version: 0.1.0
+    capabilities:
+      - network
     signature:
       description: Invokes another RuleLoom runner through its HTTP runner endpoint.
       parameters:
@@ -235,6 +259,15 @@ closures:
         - name: trace
           type: boolean
           description: Ask the downstream runner to return recorder trace. Defaults to true.
+        - name: allowedHosts
+          type: array
+          description: Optional allowlist of downstream hostnames or host:port values.
+        - name: allowInsecureHttp
+          type: boolean
+          description: Allow plain HTTP for non-loopback trusted hosts.
+        - name: maxCallDepth
+          type: number
+          description: Maximum chained runner depth. Defaults to 8.
         - name: mergeState
           type: any
           description: true to merge downstream state into current state, or a state path to store it.
@@ -244,6 +277,8 @@ closures:
   - name: core.date-add
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Adds a date/time amount and returns an ISO string, date string, or timestamp.
       parameters:
@@ -272,6 +307,8 @@ closures:
   - name: core.date-parse
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: 'Parses a date-like value without throwing; invalid inputs return `{ valid: false }`.'
       parameters:
@@ -286,6 +323,8 @@ closures:
   - name: core.date-format
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Formats a date with Intl.DateTimeFormat.
       parameters:
@@ -310,6 +349,8 @@ closures:
   - name: core.string-replace
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Replaces text using a literal search string or regular expression.
       parameters:
@@ -343,6 +384,8 @@ closures:
   - name: core.string-split
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Splits text into an array. Omit separator to split into characters.
       parameters:
@@ -362,6 +405,8 @@ closures:
   - name: core.string-slugify
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Converts text into a URL-safe slug.
       parameters:
@@ -383,6 +428,8 @@ closures:
   - name: core.collection-map
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Maps an array or object values to a field path, or returns each item when path is omitted.
       parameters:
@@ -399,6 +446,8 @@ closures:
   - name: core.collection-filter
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Filters an array or object values by item value or path.
       parameters:
@@ -426,6 +475,8 @@ closures:
   - name: core.collection-reduce
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Reduces a collection with common operations.
       parameters:
@@ -453,6 +504,8 @@ closures:
   - name: core.math-add
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Adds numeric values.
       parameters:
@@ -471,6 +524,8 @@ closures:
   - name: core.math-subtract
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Subtracts numeric values from the first value.
       parameters:
@@ -489,6 +544,8 @@ closures:
   - name: core.math-multiply
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Multiplies numeric values.
       parameters:
@@ -507,6 +564,8 @@ closures:
   - name: core.math-divide
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Divides the first numeric value by remaining values.
       parameters:
@@ -525,6 +584,8 @@ closures:
   - name: core.math-round
     namespace: core
     version: 0.1.0
+    capabilities:
+      - pure
     signature:
       description: Rounds a number to optional decimal precision.
       parameters:

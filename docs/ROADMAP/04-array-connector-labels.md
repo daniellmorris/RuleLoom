@@ -1,5 +1,7 @@
 # Array/dynamic connector labeling
 
+**Status: Implemented.** Connector IDs remain stable while metadata-derived and user-overridden labels are rendered and persisted.
+
 ## Overview
 Improve labeling of dynamic connectors (arrays, branch cases, flowSteps) with array-level metadata so edges stay readable.
 

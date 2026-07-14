@@ -8,6 +8,7 @@ This guide walks through the YAML schema understood by `rule-loom-runner`. It is
 
 ```yaml
 version: 1                # optional; defaults to 1
+namespace: orders         # optional runner route namespace
 logger:                   # optional
   level: info | debug | ...
 plugins:                  # optional; defaults to []
@@ -23,6 +24,12 @@ inputs:                   # optional; defaults to []
       corsOrigins: http://localhost
       corsMethods: GET, POST
       corsAllowedHeaders: Authorization, Content-Type
+      runnerEndpoint:     # disabled unless explicitly enabled
+        enabled: true
+        token: "${secrets.RUNNER_TOKEN}"
+        allowSimulation: false
+        maxTraceEvents: 1000
+        maxCallDepth: 8
     triggers:
       - method: get | post | put | patch | delete (defaults to post)
         path: /example
@@ -91,10 +98,13 @@ plugins:
     build:
       - npm install
       - npm run build
+    trustBuild: true      # required when build commands are present
 ```
 
 GitHub plugins are cached under `~/.rule-loom/plugins/<repo>@<ref>`. For branch/tag refs, the runner checks the latest commit and only re-downloads when it changes. If the check fails, it keeps the cached plugin. For pinned 40-char SHA refs, no update check is performed.
 When `build` is provided, the runner executes those commands (in order) in the plugin root after download; include any needed install/build steps. If `build` is omitted, the runner runs `npm install --omit=dev` when a `package.json` is present.
+
+> **Trust boundary:** GitHub plugins are arbitrary executable code and build commands inherit the runner environment. Prefer reviewed plugins pinned to a full commit SHA with an integrity hash. Do not load untrusted branches in a process holding production secrets.
 
 ### Plugin repositories (ui-v2 catalog)
 
@@ -123,6 +133,7 @@ When the manifest URL is hosted on `raw.githubusercontent.com`, the UI can deriv
 - `config.basePath` – optional route prefix (defaults to `/`).
 - `config.bodyLimit` – forwarded to Express body parsers (string like `1mb` or numeric byte value).
 - `config.corsOrigins` / `config.corsMethods` / `config.corsAllowedHeaders` – optional CORS allowlists (string or array; comma-separated strings are accepted).
+- `config.runnerEndpoint` – opt-in `POST /__ruleloom/run` endpoint. `token` enables Bearer authentication; `allowSimulation` controls remote simulation; trace and call-depth limits bound chained requests.
 - `triggers` – array of route descriptors:
   - `method` – HTTP verb (defaults to `post`).
   - `path` – Express path pattern.
@@ -165,6 +176,8 @@ WebSocket input provided by `rule-loom-plugin-websocket`:
 ## Closure Entries
 
 Every closure must declare a schema (aka signature) describing its parameters and outputs. The core plugin auto-registers the `core.*` utilities, and other plugins (e.g., HTTP, MQTT) register their own closures. Custom modules should return closures with a `signature` property so the runner can validate flow steps before execution. Use `npm run validate -- --config path/to/config.yaml` (or `ruleloom-runner validate -c ...`) to lint a config offline; the orchestrator also exposes `POST /api/runners/validate` for the same check.
+
+Closures should declare `capabilities`: any combination of `pure`, `network`, `database`, `filesystem`, `message`, or `process`. Simulation treats omitted capabilities as unknown and blocks the closure unless it has an explicit `simulate` handler or a YAML test mock.
 
 ### `type: template`
 Creates a closure from predefined templates.

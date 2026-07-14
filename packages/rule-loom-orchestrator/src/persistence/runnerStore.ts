@@ -84,7 +84,7 @@ export class RunnerStore {
     if (this.initialized) {
       return;
     }
-    await this.prisma.$executeRawUnsafe(`
+    await this.prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS "RunnerConfig" (
         "id" TEXT NOT NULL PRIMARY KEY,
         "basePath" TEXT NOT NULL,
@@ -93,13 +93,13 @@ export class RunnerStore {
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" DATETIME NOT NULL
       );
-    `);
-    await this.prisma.$executeRawUnsafe(`
+    `;
+    await this.prisma.$executeRaw`
       DROP INDEX IF EXISTS "RunnerConfig_configPath_key";
-    `);
-    await this.prisma.$executeRawUnsafe(`
+    `;
+    await this.prisma.$executeRaw`
       CREATE UNIQUE INDEX IF NOT EXISTS "RunnerConfig_basePath_key" ON "RunnerConfig"("basePath");
-    `);
+    `;
     this.initialized = true;
   }
 }

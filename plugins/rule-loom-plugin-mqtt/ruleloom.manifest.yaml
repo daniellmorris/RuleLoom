@@ -4,6 +4,9 @@ pluginVersion: 0.1.0
 entry: dist/index.js
 closures:
   - name: mqtt.publish
+    capabilities:
+      - message
+      - network
     description: Publish a message to an MQTT topic
     signature:
       parameters:

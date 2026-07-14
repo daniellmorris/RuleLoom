@@ -4,6 +4,8 @@ pluginVersion: 0.1.0
 entry: dist/index.js
 closures:
   - name: notion.createPage
+    capabilities:
+      - network
     description: Create a page in a Notion database
     signature:
       parameters:
@@ -17,6 +19,8 @@ closures:
           type: object
           required: true
   - name: notion.queryDatabase
+    capabilities:
+      - network
     description: Query a Notion database
     signature:
       parameters:

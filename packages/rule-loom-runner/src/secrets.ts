@@ -13,7 +13,7 @@ export interface SecretsConfig {
 async function parseDotenv(filePath: string, encoding: BufferEncoding = 'utf8'): Promise<Record<string, string>> {
   const content = await fs.readFile(filePath, { encoding });
   const lines = content.split(/\r?\n/);
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = Object.create(null);
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
@@ -21,13 +21,13 @@ async function parseDotenv(filePath: string, encoding: BufferEncoding = 'utf8'):
     if (eq === -1) continue;
     const key = trimmed.slice(0, eq).trim();
     const value = trimmed.slice(eq + 1).trim().replace(/^['"]|['"]$/g, '');
-    if (key) out[key] = value;
+    if (key && !['__proto__', 'prototype', 'constructor'].includes(key)) out[key] = value;
   }
   return out;
 }
 
 export async function resolveSecrets(config: SecretsConfig | undefined, configDir: string): Promise<SecretMap> {
-  const secrets: SecretMap = {};
+  const secrets: SecretMap = Object.create(null);
   if (!config) return secrets;
 
   if (config.dotenv) {
@@ -75,7 +75,7 @@ export function applySecrets(value: unknown, secrets: SecretMap): unknown {
     return value.map((item) => applySecrets(item, secrets));
   }
   if (value && typeof value === 'object') {
-    const result: Record<string, unknown> = {};
+    const result: Record<string, unknown> = Object.create(null);
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       result[k] = applySecrets(v, secrets);
     }

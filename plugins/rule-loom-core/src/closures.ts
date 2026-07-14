@@ -1,6 +1,6 @@
 import _ from 'lodash';
 import type { ClosureDefinition, FlowBranchCase, FlowStep } from 'rule-loom-engine';
-import RuleLoomEngine from 'rule-loom-engine';
+import RuleLoomEngine, { assertSafeObject, assertSafePath } from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
 import { callRuleLoomRunner, type RunnerCallResponse } from './runnerClient.js';
 import { createUtilityClosures } from './utilityClosures.js';
@@ -14,8 +14,10 @@ export function coreAssignClosure(): ClosureDefinition {
       if (!target) {
         throw new Error('core.assign requires a "target" parameter.');
       }
+      assertSafePath(target, 'core.assign target');
       const merge = Boolean(params.merge);
       const value = params.value;
+      assertSafeObject(value, 'core.assign value');
 
       if (merge) {
         const current = _.get(state, target);
@@ -198,6 +200,7 @@ export function coreLengthClosure(): ClosureDefinition {
     name: 'core.length',
     handler: async (state: any, context: any) => {
       const targetPath = context.parameters?.target as string | undefined;
+      if (targetPath) assertSafePath(targetPath, 'core.length target');
       const value = targetPath ? _.get(state, targetPath) : context.parameters?.value;
       if (Array.isArray(value) || typeof value === 'string') {
         return value.length;
@@ -317,6 +320,7 @@ export function coreBranchClosure(): ClosureDefinition {
 export function coreRunnerCallClosure(): ClosureDefinition {
   return {
     name: 'core.runner-call',
+    capabilities: ['network'],
     handler: async (state: any, context: any) => {
       const params = context.parameters ?? {};
       const flow = params.flow as string | undefined;
@@ -334,6 +338,11 @@ export function coreRunnerCallClosure(): ClosureDefinition {
         retries: params.retries as number | undefined,
         simulate: params.simulate as boolean | undefined,
         trace: params.trace as boolean | undefined,
+        allowedHosts: params.allowedHosts as string[] | undefined,
+        allowInsecureHttp: params.allowInsecureHttp as boolean | undefined,
+        requestId: context.runtime?.requestId as string | undefined,
+        callDepth: Number(context.runtime?.callDepth ?? 0) + 1,
+        maxCallDepth: params.maxCallDepth as number | undefined,
       });
       mergeRunnerState(state, response, params.mergeState);
       return response;
@@ -351,6 +360,9 @@ export function coreRunnerCallClosure(): ClosureDefinition {
         { name: 'retries', type: 'number', description: 'Number of retry attempts after the initial request.' },
         { name: 'simulate', type: 'boolean', description: 'Ask the downstream runner to execute in simulation mode when supported.' },
         { name: 'trace', type: 'boolean', description: 'Ask the downstream runner to return recorder trace. Defaults to true.' },
+        { name: 'allowedHosts', type: 'array', description: 'Optional allowlist of downstream hostnames or host:port values.' },
+        { name: 'allowInsecureHttp', type: 'boolean', description: 'Allow plain HTTP for non-loopback trusted hosts.' },
+        { name: 'maxCallDepth', type: 'number', description: 'Maximum chained runner depth. Defaults to 8.' },
         { name: 'mergeState', type: 'any', description: 'true to merge downstream state into current state, or a state path to store it.' },
       ],
       returns: { type: 'object', description: 'Downstream runner response with state, lastResult, and optional trace.' },
@@ -374,6 +386,7 @@ function withCoreNamespace(closure: ClosureDefinition): ClosureDefinition {
     ...closure,
     namespace: closure.namespace ?? 'core',
     version: closure.version ?? '0.1.0',
+    capabilities: closure.capabilities ?? ['pure'],
   };
 }
 

@@ -1,5 +1,7 @@
 # UI plugin system (ui-v2)
 
+**Status: Partial.** Runtime manifest/module loading and panel, canvas-overlay, palette-provider, validator, and transformer extension points exist, with a sample plugin. Transformers execute in import/export flows; duplicate plugin/extension conflicts and insecure remote URLs are rejected. Enable/disable controls, stable published types, schema-complete manifests, and trust UX remain.
+
 ## Overview
 Introduce a lightweight plugin system for ui-v2 so teams can extend the editor without forking (e.g., custom panels, decorators, validators, import/export hooks).
 

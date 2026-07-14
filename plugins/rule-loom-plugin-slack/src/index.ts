@@ -13,6 +13,7 @@ export const plugin = {
   async register(ctx: PluginRegistrationContext) {
     ctx.registerClosure({
       name: 'slack.postMessage',
+      capabilities: ['network'],
       description: 'Send a message to a Slack channel',
       signature: {
         parameters: [

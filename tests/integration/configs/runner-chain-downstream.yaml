@@ -8,6 +8,10 @@ inputs:
   - type: http
     config:
       port: 0
+      runnerEndpoint:
+        enabled: true
+        token: test-runner-token
+        maxTraceEvents: 100
     triggers:
       - method: post
         path: /unused

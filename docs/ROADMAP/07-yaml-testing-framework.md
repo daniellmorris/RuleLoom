@@ -1,5 +1,7 @@
 # YAML testing framework
 
+**Status: Operational foundation implemented.** The standalone package, CLI, summary/JSON/TAP reporters, conditional mocks, safe state patches, partial/exact expectations, exit codes, traces, README/API examples, and simulator-backed side-effect policy exist. Rich structural diff rendering and UI integration remain.
+
 ## Overview
 Provide a test DSL in YAML (inline or separate files) to assert flow behavior using simulated inputs, mocks, and expected outputs/state.
 

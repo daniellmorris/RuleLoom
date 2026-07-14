@@ -8,6 +8,7 @@ plugins:
     build:
       - npm install
       - npm run build
+    trustBuild: true
   - source: github
     repo: daniellmorris/RuleLoom
     ref: main
@@ -16,6 +17,7 @@ plugins:
     build:
       - npm install
       - npm run build
+    trustBuild: true
   - source: github
     repo: daniellmorris/RuleLoom
     ref: main
@@ -24,6 +26,7 @@ plugins:
     build:
       - npm install
       - npm run build
+    trustBuild: true
   - source: github
     repo: daniellmorris/RuleLoom
     ref: main
@@ -32,6 +35,7 @@ plugins:
     build:
       - npm install
       - npm run build
+    trustBuild: true
 inputs:
   - type: scheduler
     triggers:

@@ -6,6 +6,7 @@ export function aiGenerateClosure(): AiClosureDefinition {
     namespace: 'ai',
     version: '0.1.0',
     name: 'ai.generate',
+    capabilities: ['network'],
     description: 'Generate text or JSON with a configured AI provider.',
     handler: async (_state, context) => {
       const params = context.parameters ?? {};

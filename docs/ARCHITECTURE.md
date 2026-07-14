@@ -10,8 +10,8 @@ RuleLoom is organised as a set of focused packages layered on top of each other:
                 ▲                       ▲
                 │                       │
 ┌───────────────────────────┐   ┌───────────────────────────┐
-│     rule-loom-inputs       │   │       External Config     │
-│ (HTTP/Scheduler adapters) │   │  (YAML files referencing  │
+│       input plugins        │   │       External Config     │
+│ (HTTP/Scheduler/MQTT/etc.)│   │  (YAML files referencing  │
 └──────────────▲────────────┘   │        closures/flows)    │
                │                └───────────────────────────┘
 ┌──────────────┴────────────┐
@@ -47,13 +47,14 @@ Shared utilities (currently a structured logger) that provide consistent interfa
 ### rule-loom-core
 Supplies reusable closures (assign/respond/log/comparisons/iterators) that follow engine conventions. Closures declare step-array parameters in their signature (e.g., `core.for-each` uses `flowSteps`).
 
-### rule-loom-inputs
-- Encapsulates concrete input adapters (Express HTTP server, Bree scheduler, future AMQP/MQTT bridges).
+### input plugins
+- Concrete adapters live under `plugins/` (Express HTTP, Bree scheduler, MQTT, WebSocket, and others).
 - Each adapter exports factories so higher layers can opt-in without pulling heavy dependencies directly.
 - Emits lifecycle events (e.g., scheduler job state transitions) consumed by the orchestrator for metrics.
 
 ### rule-loom-runner
-- Parses YAML configs with Zod, builds closure lists (core/module/flow), and instantiates the selected inputs from `rule-loom-inputs`.
+- Parses YAML configs with Zod, builds closure lists (core/module/flow), and instantiates selected input plugins.
+- Serializes plugin-registration sessions so concurrently created runners receive isolated closure/input catalogs.
 - HTTP adapters inject the request into `state.request` and pass route metadata through `runtime`.
 - Provides CLI/programmatic APIs for running a single configuration.
 - Starts scheduler inputs when declared, emitting events for observability.
@@ -62,6 +63,14 @@ Supplies reusable closures (assign/respond/log/comparisons/iterators) that follo
 - Loads multiple runner configs, mounts their Express apps under configurable base paths.
 - Exposes a combined health endpoint and shared logging.
 - Persists runner definitions in SQLite via Prisma so API mutations survive orchestrator restarts. Configure the storage location with the `RULE_LOOM_DATABASE_URL` environment variable.
+- Prepares and validates replacement runners before swapping them into the live registry.
+
+## Trust and execution boundaries
+
+- Backend and UI plugins are trusted executable code. GitHub build commands and remote UI modules must only come from reviewed sources.
+- The runner-call HTTP endpoint is disabled unless `config.runnerEndpoint.enabled` is true; configure its Bearer token outside isolated development.
+- Runner chaining validates protocols, requires HTTPS for non-loopback hosts by default, supports host allowlists, refuses redirects, and propagates depth/correlation headers.
+- Simulation is capability-based. Pure closures run normally; network, database, filesystem, message, and process closures require an explicit simulator or test mock and otherwise fail closed.
 
 ## Execution Flow
 

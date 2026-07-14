@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { resolveDynamicValues, type TemplateContext } from './utils.js';
+import { assertSafeObject, assertSafePath, resolveDynamicValues, type TemplateContext } from './utils.js';
 
 export interface ClosureContext {
   /** Parameters resolved for the closure invocation. */
@@ -14,6 +14,8 @@ export type ClosureHandler = (
   state: Record<string, unknown>,
   context: ClosureContext,
 ) => Promise<unknown> | unknown;
+
+export type ClosureCapability = 'pure' | 'network' | 'database' | 'filesystem' | 'message' | 'process';
 
 export type ClosureParameterType =
   | 'string'
@@ -63,6 +65,10 @@ export interface ClosureDefinition {
   version?: string;
   aliases?: string[];
   handler: ClosureHandler;
+  /** External capabilities used by this closure. Omitted closures are treated as pure. */
+  capabilities?: ClosureCapability[];
+  /** Side-effect-free implementation used when runtime.simulate is true. */
+  simulate?: ClosureHandler;
   description?: string;
   metadata?: Record<string, unknown>;
   signature?: ClosureSignature;
@@ -261,6 +267,14 @@ export class RuleLoomEngine {
     return { state, lastResult };
   }
 
+  async simulate(
+    flowName: string,
+    initialState: Record<string, unknown> = {},
+    runtime: ExecutionRuntime = {},
+  ): Promise<ExecutionResult> {
+    return this.execute(flowName, initialState, { ...runtime, simulate: true });
+  }
+
   async runSteps(
     steps: FlowStep[],
     state: Record<string, unknown>,
@@ -367,7 +381,7 @@ export class RuleLoomEngine {
         runtime,
       };
 
-      const result = await closure.handler(state, context);
+      const result = await this.executeClosure(closure, state, context);
       const truthy = Boolean(result);
       if (condition.negate ? truthy : !truthy) {
         return false;
@@ -422,7 +436,7 @@ export class RuleLoomEngine {
 
     let result: unknown;
     try {
-      result = await closure.handler(state, context);
+      result = await this.executeClosure(closure, state, context);
     } catch (err) {
       if (recorders.length && level !== 'none') {
         const evt: RecorderErrorEvent = {
@@ -440,8 +454,10 @@ export class RuleLoomEngine {
     }
 
     if (step.assign) {
+      assertSafePath(step.assign, 'Step assign path');
       _.set(state, step.assign, result);
     } else if (step.mergeResult && _.isPlainObject(result)) {
+      assertSafeObject(result, 'Step merge result');
       _.merge(state, result as Record<string, unknown>);
     }
 
@@ -601,7 +617,30 @@ export class RuleLoomEngine {
       state,
       runtime,
     };
-    return target.handler(state, context);
+    return this.executeClosure(target, state, context);
+  }
+
+  private executeClosure(
+    closure: ClosureDefinition,
+    state: Record<string, unknown>,
+    context: ClosureContext,
+  ): Promise<unknown> | unknown {
+    if (context.runtime.simulate !== true) {
+      return closure.handler(state, context);
+    }
+    // Simulation fails closed for legacy/unknown closures. Built-ins and plugin
+    // closures must declare capabilities explicitly.
+    const capabilities = closure.capabilities ?? ['process'];
+    const hasSideEffects = capabilities.some((capability) => capability !== 'pure');
+    if (!hasSideEffects) {
+      return closure.handler(state, context);
+    }
+    if (closure.simulate) {
+      return closure.simulate(state, context);
+    }
+    throw new Error(
+      `Simulation blocked closure "${closure.name}" because it requires ${capabilities.join(', ')} and has no simulator.`,
+    );
   }
 
   private resolveClosureName(name: string): string | undefined {
@@ -626,5 +665,5 @@ function cloneLite<T>(val: T): T {
 }
 
 export default RuleLoomEngine;
-export { resolveDynamicValues } from './utils.js';
+export { assertSafeObject, assertSafePath, resolveDynamicValues } from './utils.js';
 export type { TemplateContext } from './utils.js';

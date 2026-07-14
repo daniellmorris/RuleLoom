@@ -1,4 +1,6 @@
-# Multiple input instances of same type (Supported in runner but UI does not support this yet)
+# Multiple input instances of same type
+
+**Status: Implemented for runner and UI.** IDs, validation, shared-port HTTP routing, editor CRUD, and YAML round trips exist. Remaining hardening: transactional initialization, service namespacing for non-HTTP inputs, and broader plugin coverage.
 
 ## Overview
 Support multiple configured instances of a given input type (e.g., two HTTP inputs, multiple AMQP brokers) with distinct configs and triggers.

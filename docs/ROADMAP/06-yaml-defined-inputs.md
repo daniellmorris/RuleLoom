@@ -1,5 +1,7 @@
 # YAML-defined inputs
 
+**Status: Design stage.** Config-defined closures exist, but declarative input composition, dependency loading, and capability validation do not.
+
 This is a WIP: More thinking is needed on this
 
 ## Overview

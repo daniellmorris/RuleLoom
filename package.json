@@ -11,8 +11,12 @@
     "build": "lerna run build --stream",
     "dev": "lerna run dev --scope rule-loom-runner --stream",
     "start": "lerna run start --scope rule-loom-runner --stream",
-    "test": "ts-node --project tsconfig.test.json tests/engine.spec.ts",
+    "test": "npm run test:all",
+    "test:all": "npm run test:unit && npm run test:workspaces && npm run test:integration",
+    "test:unit": "ts-node --project tsconfig.test.json tests/engine.spec.ts",
+    "test:workspaces": "npm run test --workspaces --if-present",
     "test:integration": "vitest run --config vitest.config.ts",
+    "check": "npm run build && npm run test:all && git diff --check",
     "lerna:version": "lerna version --no-private",
     "lerna:changed": "lerna changed",
     "lerna:diff": "lerna diff"

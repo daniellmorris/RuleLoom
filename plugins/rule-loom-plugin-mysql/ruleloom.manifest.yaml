@@ -4,6 +4,9 @@ pluginVersion: 0.1.0
 entry: dist/index.js
 closures:
   - name: mysql.query
+    capabilities:
+      - database
+      - network
     description: Execute a SQL query against MySQL
     signature:
       parameters:

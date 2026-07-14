@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import yaml from 'js-yaml';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { type ClosureDefinition, type ClosureSignature } from 'rule-loom-engine';
+import { type ClosureCapability, type ClosureDefinition, type ClosureSignature } from 'rule-loom-engine';
 import type { InputPlugin } from 'rule-loom-core/inputs';
 import type { BaseInputConfig } from 'rule-loom-core/inputs/types';
 import type { PluginRegistrationContext, RuleLoomPlugin } from './pluginLoader.js';
@@ -14,6 +14,7 @@ export interface RuleLoomManifestClosure {
   namespace?: string;
   version?: string;
   aliases?: string[];
+  capabilities?: ClosureCapability[];
   description?: string;
   signature?: ClosureSignature;
   implicitFields?: string[];
@@ -53,8 +54,8 @@ function createSilentLogger() {
 }
 
 function sanitizeClosure(closure: ClosureDefinition): RuleLoomManifestClosure {
-  const { name, namespace, version, aliases, description, signature, implicitFields, metadata } = closure;
-  return { name, namespace, version, aliases, description, signature, implicitFields, metadata };
+  const { name, namespace, version, aliases, capabilities, description, signature, implicitFields, metadata } = closure;
+  return { name, namespace, version, aliases, capabilities, description, signature, implicitFields, metadata };
 }
 
 function sanitizeInputPlugin(plugin: InputPlugin<BaseInputConfig>): RuleLoomManifestInputPlugin {

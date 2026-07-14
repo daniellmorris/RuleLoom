@@ -16,6 +16,12 @@ const orchestratorConfigSchema = z.object({
       level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).optional(),
     })
     .optional(),
+  auth: z
+    .object({
+      token: z.string().min(1).optional(),
+      protectMetrics: z.boolean().optional().default(true),
+    })
+    .optional(),
   runners: z.array(runnerEntrySchema).optional().default([]),
 });
 

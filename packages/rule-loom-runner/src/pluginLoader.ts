@@ -16,6 +16,7 @@ import { registerClosure } from "./closureRegistry.js";
 import type { PluginSpec } from "./pluginSpecs.js";
 import { parseClosureConfigs } from "./config.js";
 import { buildClosures } from "./closures.js";
+import { assertSafeData, assertTextSize } from "./safeData.js";
 
 const execFileAsync = promisify(execFile);
 const loadedPlugins = new Set<string>();
@@ -80,7 +81,9 @@ export async function loadRuleLoomPlugins(
     if (spec.source === "config") {
       const sourcePath = fileURLToPath(new URL(modulePath));
       const rawFile = await fs.readFile(sourcePath, "utf8");
+      assertTextSize(rawFile, `Config plugin ${sourcePath}`);
       const parsed = (yaml.load(rawFile) ?? {}) as any;
+      assertSafeData(parsed, `Config plugin ${sourcePath}`);
       const closureEntries = Array.isArray(parsed)
         ? parsed
         : (parsed.closures ?? []);
@@ -191,6 +194,11 @@ async function resolvePluginModule(
   }
 
   // github source
+  if (!isPinnedCommit(spec.ref) && !spec.integrity) {
+    options.logger.warn?.(
+      `GitHub plugin ${spec.repo}@${spec.ref} is mutable and has no integrity hash; prefer a pinned commit plus sha256 integrity.`,
+    );
+  }
   const cacheKey = `${spec.repo.replace(/[\\/]/g, "_")}@${spec.ref}`;
   const targetDir = path.join(options.cacheDir, cacheKey);
   const entryFile = spec.path ? path.join(targetDir, spec.path) : targetDir;
@@ -201,7 +209,15 @@ async function resolvePluginModule(
     .catch(() => false);
   const updatePlan = await planGithubUpdate(spec, targetDir, exists, options);
   if (updatePlan.shouldDownload) {
-    await downloadGithubRepo(spec, targetDir, options);
+    const stagingDir = `${targetDir}.tmp-${process.pid}-${Date.now()}`;
+    try {
+      await downloadGithubRepo(spec, stagingDir, options);
+      await fs.rm(targetDir, { recursive: true, force: true });
+      await fs.rename(stagingDir, targetDir);
+    } catch (error) {
+      await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
+    }
     await writeGithubCacheMeta(targetDir, {
       repo: spec.repo,
       ref: spec.ref,
@@ -546,7 +562,7 @@ async function installGithubPluginDeps(
   logger.info?.(`Installing npm dependencies for plugin at ${targetDir}`);
   await execFileAsync(
     "npm",
-    ["install", "--omit=dev", "--no-fund", "--no-audit"],
+    ["install", "--omit=dev", "--ignore-scripts", "--no-fund", "--no-audit"],
     { cwd: targetDir, env: process.env },
   );
   logger.info?.(
@@ -563,6 +579,12 @@ async function runGithubPluginSetup(
   if (!commands.length) {
     await installGithubPluginDeps(targetDir, logger);
     return;
+  }
+
+  if (spec.trustBuild !== true) {
+    throw new Error(
+      `GitHub plugin ${spec.repo}@${spec.ref} declares build commands. Set trustBuild: true only after reviewing them.`,
+    );
   }
 
   logger.info?.(`Running build commands for GitHub plugin at ${targetDir}`);

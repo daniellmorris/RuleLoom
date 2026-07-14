@@ -21,25 +21,36 @@ export async function initializeInputs(
   const pluginMap = new Map(getInputPlugins().map((plugin) => [plugin.type, plugin]));
   const services: Record<string, unknown> = {};
 
-  for (const input of inputs) {
-    const plugin = pluginMap.get((input as any).type);
-    if (!plugin) {
-      throw new Error(`No input plugin registered for type "${(input as any).type}".`);
+  try {
+    for (const input of inputs) {
+      const plugin = pluginMap.get((input as any).type);
+      if (!plugin) {
+        throw new Error(`No input plugin registered for type "${(input as any).type}".`);
+      }
+      const context: InputPluginContext = { logger, engine, namespace, metadata, events };
+      const result = await plugin.initialize(input as any, context);
+      if (result?.services) {
+        Object.assign(services, result.services);
+      }
+      if (result?.cleanup) {
+        cleanupFns.push(result.cleanup);
+      }
     }
-    const context: InputPluginContext = { logger, engine, namespace, metadata, events };
-    const result = await plugin.initialize(input as any, context);
-    if (result?.services) {
-      Object.assign(services, result.services);
+  } catch (error) {
+    for (const cleanup of [...cleanupFns].reverse()) {
+      await Promise.resolve(cleanup()).catch(() => undefined);
     }
-    if (result?.cleanup) {
-      cleanupFns.push(result.cleanup);
-    }
+    throw error;
   }
+
+  let closed = false;
 
   return {
     services,
     cleanup: async () => {
-      for (const cleanup of cleanupFns.reverse()) {
+      if (closed) return;
+      closed = true;
+      for (const cleanup of [...cleanupFns].reverse()) {
         await Promise.resolve(cleanup()).catch(() => undefined);
       }
     },

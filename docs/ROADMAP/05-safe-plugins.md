@@ -1,5 +1,7 @@
 # Safe plugins (YAML-only, sandboxed)
 
+**Status: Design stage.** Current backend plugins and remote UI plugins execute trusted code in-process. No `safeOnly` mode, capability enforcement, signature verification, or sandbox exists yet.
+
 This is a WIP: I don't think the following is complete or even really what we want for this feature. But it's a start.
 
 ## Overview

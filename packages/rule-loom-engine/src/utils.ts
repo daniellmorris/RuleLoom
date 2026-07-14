@@ -1,5 +1,29 @@
 import _ from 'lodash';
 
+const BLOCKED_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
+
+export function assertSafePath(path: string, label = 'path'): void {
+  const segments = path.match(/[^.[\]]+/g) ?? [];
+  const blocked = segments.find((segment) => BLOCKED_PATH_SEGMENTS.has(segment));
+  if (blocked) throw new Error(`${label} contains blocked segment "${blocked}".`);
+}
+
+export function assertSafeObject(
+  value: unknown,
+  label = 'value',
+  depth = 0,
+  seen = new WeakSet<object>(),
+): void {
+  if (depth > 100) throw new Error(`${label} exceeds the maximum nesting depth.`);
+  if (!value || typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+  for (const key of Object.keys(value)) {
+    if (BLOCKED_PATH_SEGMENTS.has(key)) throw new Error(`${label} contains blocked key "${key}".`);
+    assertSafeObject((value as Record<string, unknown>)[key], label, depth + 1, seen);
+  }
+}
+
 export interface TemplateContext {
   state: Record<string, unknown>;
   runtime: Record<string, unknown>;
@@ -8,6 +32,7 @@ export interface TemplateContext {
 
 function getContextValue(path: string, context: TemplateContext): unknown {
   const trimmed = path.trim();
+  assertSafePath(trimmed, 'Template path');
   if (trimmed.startsWith('state.')) {
     return _.get(context.state, trimmed.slice(6));
   }
@@ -46,6 +71,7 @@ export function resolveDynamicValues<T>(value: T, context: TemplateContext): T {
   }
 
   if (value && typeof value === 'object') {
+    assertSafeObject(value, 'Template value');
     const output: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value)) {
       output[key] = resolveDynamicValues(val, context);

@@ -9,6 +9,7 @@ import { getInputSchema } from './pluginApi.js';
 import { logLevelSchema, flowSchema, templateClosureSchema, moduleClosureSchema, flowClosureSchema } from './schemas.js';
 import { pluginSpecSchema } from './pluginSpecs.js';
 import { applySecrets, resolveSecrets, type SecretsConfig, type SecretMap } from './secrets.js';
+import { assertSafeData, assertTextSize } from './safeData.js';
 
 export type FlowConfig = z.infer<typeof flowSchema>;
 
@@ -84,7 +85,9 @@ export function parseRunnerConfig(rawConfig: unknown): RunnerConfig {
 export async function readRunnerConfigFile(configPath: string): Promise<RunnerConfigWithMeta> {
   const absolutePath = path.resolve(configPath);
   const file = await fs.readFile(absolutePath, 'utf8');
+  assertTextSize(file, `Runner config ${absolutePath}`);
   const parsed = (yaml.load(file) ?? {}) as Record<string, unknown>;
+  assertSafeData(parsed, `Runner config ${absolutePath}`);
   return {
     config: parsed as RunnerConfig,
     rawConfig: parsed,

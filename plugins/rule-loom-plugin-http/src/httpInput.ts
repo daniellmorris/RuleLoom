@@ -1,6 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors, { type CorsOptions } from 'cors';
 import http from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import createError from 'http-errors';
 import morgan from 'morgan';
 import _ from 'lodash';
@@ -33,6 +34,13 @@ export interface HttpInputConfig extends BaseInputConfig {
     corsOrigins?: string | string[];
     corsMethods?: string | string[];
     corsAllowedHeaders?: string | string[];
+    runnerEndpoint?: {
+      enabled?: boolean;
+      token?: string;
+      allowSimulation?: boolean;
+      maxTraceEvents?: number;
+      maxCallDepth?: number;
+    };
   };
   triggers: HttpTriggerConfig[];
 }
@@ -41,6 +49,7 @@ export type HttpInputApp = express.Express;
 
 type SharedHttpServer = {
   app: express.Express;
+  router: express.Router;
   server: http.Server;
   refs: number;
 };
@@ -115,10 +124,15 @@ function routeHandler(
 function runnerExecuteHandler(
   engine: RuleLoomEngine,
   logger: RuleLoomLogger,
+  endpointConfig: NonNullable<HttpInputConfig['config']>['runnerEndpoint'],
   metadata?: Record<string, unknown>,
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (endpointConfig?.token && !hasValidBearerToken(req, endpointConfig.token)) {
+        res.status(401).json({ error: { message: 'Unauthorized.', status: 401 } });
+        return;
+      }
       const flow = req.body?.flow;
       if (!flow || typeof flow !== 'string') {
         res.status(400).json({ error: { message: 'Runner execution requires a string "flow".', status: 400 } });
@@ -126,6 +140,18 @@ function runnerExecuteHandler(
       }
       const trace: RecorderEvent[] = [];
       const wantsTrace = req.body?.trace !== false;
+      const simulate = Boolean(req.body?.simulate);
+      if (simulate && endpointConfig?.allowSimulation !== true) {
+        res.status(403).json({ error: { message: 'Remote simulation is not enabled.', status: 403 } });
+        return;
+      }
+      const callDepth = parseCallDepth(req.headers['x-ruleloom-call-depth']);
+      const maxCallDepth = Math.max(1, endpointConfig?.maxCallDepth ?? 8);
+      if (callDepth > maxCallDepth) {
+        res.status(508).json({ error: { message: `Runner call depth exceeds ${maxCallDepth}.`, status: 508 } });
+        return;
+      }
+      const maxTraceEvents = Math.max(0, endpointConfig?.maxTraceEvents ?? 1000);
       const state =
         req.body?.state && typeof req.body.state === 'object'
           ? req.body.state
@@ -135,13 +161,18 @@ function runnerExecuteHandler(
       const runtime: ExecutionRuntime = {
         logger,
         configMetadata: metadata,
-        requestId: req.headers['x-request-id'] ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        requestId: req.headers['x-ruleloom-request-id'] ?? req.headers['x-request-id'] ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        callDepth,
         runnerCall: true,
-        simulate: Boolean(req.body?.simulate),
+        simulate,
         ...(wantsTrace
           ? {
               recordLevel: 'full',
-              recorder: { onEvent: (event: RecorderEvent) => trace.push(event) },
+              recorder: {
+                onEvent: (event: RecorderEvent) => {
+                  if (trace.length < maxTraceEvents) trace.push(event);
+                },
+              },
             }
           : {}),
       };
@@ -158,6 +189,20 @@ function runnerExecuteHandler(
   };
 }
 
+function hasValidBearerToken(req: Request, expected: string): boolean {
+  const authorization = req.headers.authorization;
+  const supplied = authorization?.startsWith('Bearer ') ? authorization.slice(7) : '';
+  const suppliedBuffer = Buffer.from(supplied);
+  const expectedBuffer = Buffer.from(expected);
+  return suppliedBuffer.length === expectedBuffer.length && timingSafeEqual(suppliedBuffer, expectedBuffer);
+}
+
+function parseCallDepth(value: string | string[] | undefined): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(raw ?? 1);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
 export interface CreateHttpInputOptions {
   logger: RuleLoomLogger;
   namespace?: string;
@@ -171,6 +216,7 @@ export const httpConfigParameters = [
   { name: 'corsOrigins', type: 'string', required: false, description: 'CORS allowed origins (comma-separated or array)' },
   { name: 'corsMethods', type: 'string', required: false, description: 'CORS allowed methods (comma-separated or array)' },
   { name: 'corsAllowedHeaders', type: 'string', required: false, description: 'CORS allowed headers (comma-separated or array)' },
+  { name: 'runnerEndpoint', type: 'object', required: false, description: 'Opt-in remote runner endpoint settings' },
 ];
 
 export const httpTriggerParameters = [
@@ -197,7 +243,16 @@ function buildHttpSchema() {
   };
   const configShape: Record<string, any> = {};
   httpConfigParameters.forEach((p) => {
-    const shape = p.required ? toZod(p) : toZod(p).optional();
+    const schema = p.name === 'runnerEndpoint'
+      ? z.object({
+          enabled: z.boolean().optional(),
+          token: z.string().min(1).optional(),
+          allowSimulation: z.boolean().optional(),
+          maxTraceEvents: z.number().int().nonnegative().optional(),
+          maxCallDepth: z.number().int().positive().optional(),
+        }).strict()
+      : toZod(p);
+    const shape = p.required ? schema : schema.optional();
     configShape[p.name] = shape;
   });
   const triggerShape: Record<string, any> = {
@@ -261,7 +316,9 @@ function normalizeCorsList(value?: string | string[]) {
 export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions): HttpInputApp {
   const app = express();
   configureHttpApp(app, input);
-  mountHttpInputRoutes(app, engine, input, options);
+  const router = express.Router();
+  app.use(router);
+  mountHttpInputRoutes(router, engine, input, options);
   mountNotFoundHandler(app, options.logger);
   return app;
 }
@@ -273,7 +330,7 @@ function configureHttpApp(app: express.Express, input: HttpInputConfig) {
   app.use(morgan('combined'));
 }
 
-function mountHttpInputRoutes(app: express.Express, engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions) {
+function mountHttpInputRoutes(app: express.Router, engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions) {
   const basePath = combineBasePaths(options.namespace, input.config?.basePath);
   const router = express.Router();
   const corsOrigins = normalizeCorsList(input.config?.corsOrigins);
@@ -289,7 +346,9 @@ function mountHttpInputRoutes(app: express.Express, engine: RuleLoomEngine, inpu
     router.use(cors(corsOptions));
   }
 
-  router.post('/__ruleloom/run', runnerExecuteHandler(engine, options.logger, options.metadata));
+  if (input.config?.runnerEndpoint?.enabled === true) {
+    router.post('/__ruleloom/run', runnerExecuteHandler(engine, options.logger, input.config.runnerEndpoint, options.metadata));
+  }
 
   for (const route of input.triggers) {
     const method = (route.method ?? 'post').toLowerCase();
@@ -336,7 +395,10 @@ export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
     const port = Number(config.config?.port ?? 3000);
     const basePath = combineBasePaths(namespace, config.config?.basePath);
     const shared = await getOrCreateSharedServer(port, config, logger);
-    mountHttpInputRoutes(shared.app, engine, config, { logger, metadata, namespace });
+    const instanceRouter = express.Router();
+    let active = true;
+    shared.router.use((req, res, next) => active ? instanceRouter(req, res, next) : next());
+    mountHttpInputRoutes(instanceRouter, engine, config, { logger, metadata, namespace });
     logger.info?.(`HTTP input listening on port ${actualPort(shared.server, port)}${basePath === '/' ? '' : basePath}`);
     return {
       services: {
@@ -345,6 +407,7 @@ export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
         httpServer: shared.server,
       },
       cleanup: async () => {
+        active = false;
         await releaseSharedServer(port, shared);
       },
     };
@@ -361,6 +424,9 @@ async function getOrCreateSharedServer(port: number, config: HttpInputConfig, lo
   }
   const app = express();
   configureHttpApp(app, config);
+  const router = express.Router();
+  app.use(router);
+  mountNotFoundHandler(app, logger);
   const server = http.createServer(app);
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -370,7 +436,7 @@ async function getOrCreateSharedServer(port: number, config: HttpInputConfig, lo
       resolve();
     });
   });
-  const shared = { app, server, refs: 1 };
+  const shared = { app, router, server, refs: 1 };
   if (port !== 0) {
     sharedServers.set(port, shared);
   }

@@ -128,6 +128,7 @@ export function createHttpClosures(
   return [
     {
       name: closureName,
+      capabilities: ["network"],
       description: closureDescription,
       handler: async (_state: any, context: any) => {
         const params = (context.parameters ?? {}) as Record<string, unknown>;

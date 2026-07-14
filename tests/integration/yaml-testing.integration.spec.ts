@@ -37,6 +37,19 @@ describe("YAML testing framework", () => {
     expect(result.results[0].failures[0].trace?.length).toBeGreaterThan(0);
   });
 
+  it("supports exact expectation matching", async () => {
+    const raw = yaml.load(await fs.readFile(CONFIG_PATH, "utf8")) as any;
+    raw.tests[0].expect.match = "exact";
+    raw.plugins[0].path = path.resolve(CONFIG_DIR, "../../../plugins/rule-loom-core");
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rule-loom-testing-exact-"));
+    const configPath = path.join(dir, "exact.yaml");
+    await fs.writeFile(configPath, yaml.dump(raw));
+
+    const result = await runYamlTests({ configPath });
+    expect(result.passed).toBe(false);
+    expect(result.results[0].failures.some((failure) => failure.path === "state")).toBe(true);
+  });
+
   it("CLI exits non-zero and emits trace data for failing YAML tests", async () => {
     const configPath = await writeBadConfig();
     const repoRoot = path.resolve(CONFIG_DIR, "../../..");

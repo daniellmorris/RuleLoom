@@ -4,6 +4,8 @@ pluginVersion: 0.1.0
 entry: dist/index.js
 closures:
   - name: http.request
+    capabilities:
+      - network
     description: Performs an HTTP request and returns status, headers, and body.
     signature:
       description: Performs an HTTP request and returns status, headers, and body.
@@ -58,6 +60,10 @@ inputs:
         type: string
         required: false
         description: CORS allowed headers (comma-separated or array)
+      - name: runnerEndpoint
+        type: object
+        required: false
+        description: Opt-in remote runner endpoint settings
     triggerParameters:
       - name: method
         type: string

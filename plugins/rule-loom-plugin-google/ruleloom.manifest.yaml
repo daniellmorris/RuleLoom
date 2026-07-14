@@ -4,6 +4,8 @@ pluginVersion: 0.1.0
 entry: dist/index.js
 closures:
   - name: google.sheets.append
+    capabilities:
+      - network
     description: Append rows to a Google Sheet
     signature:
       parameters:
@@ -20,6 +22,8 @@ closures:
           type: array
           required: true
   - name: google.drive.upload
+    capabilities:
+      - network
     description: Upload a file to Google Drive (or GCS via storage)
     signature:
       parameters:
@@ -39,6 +43,8 @@ closures:
           type: any
           required: true
   - name: google.gmail.send
+    capabilities:
+      - network
     description: Send an email via Gmail API using service account (domain-wide delegation)
     signature:
       parameters:

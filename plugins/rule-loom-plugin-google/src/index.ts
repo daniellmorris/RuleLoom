@@ -29,6 +29,7 @@ export const plugin = {
   async register(ctx: PluginRegistrationContext) {
     ctx.registerClosure({
       name: 'google.sheets.append',
+      capabilities: ['network'],
       description: 'Append rows to a Google Sheet',
       signature: {
         parameters: [
@@ -58,6 +59,7 @@ export const plugin = {
 
     ctx.registerClosure({
       name: 'google.drive.upload',
+      capabilities: ['network'],
       description: 'Upload a file to Google Drive (or GCS via storage)',
       signature: {
         parameters: [
@@ -85,6 +87,7 @@ export const plugin = {
 
     ctx.registerClosure({
       name: 'google.gmail.send',
+      capabilities: ['network'],
       description: 'Send an email via Gmail API using service account (domain-wide delegation)',
       signature: {
         parameters: [

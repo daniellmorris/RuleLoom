@@ -16,7 +16,10 @@ vi.mock('mqtt', () => {
 describe('rule-loom-plugin-mqtt', () => {
   it('registers mqtt.publish', async () => {
     const registerClosure = vi.fn();
-    await plugin.register({ registerClosure, logger: {} } as any);
+    const registerInputPlugin = vi.fn();
+    await plugin.register({ registerClosure, registerInputPlugin, logger: {} } as any);
+    expect(registerInputPlugin).toHaveBeenCalledTimes(1);
+    expect(registerInputPlugin.mock.calls[0][0].type).toBe('mqtt');
     expect(registerClosure).toHaveBeenCalledTimes(1);
     expect(registerClosure.mock.calls[0][0].name).toBe('mqtt.publish');
   });

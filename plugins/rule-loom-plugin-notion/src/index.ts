@@ -18,6 +18,7 @@ export const plugin = {
   async register(ctx: PluginRegistrationContext) {
     ctx.registerClosure({
       name: 'notion.createPage',
+      capabilities: ['network'],
       description: 'Create a page in a Notion database',
       signature: {
         parameters: [
@@ -37,6 +38,7 @@ export const plugin = {
 
     ctx.registerClosure({
       name: 'notion.queryDatabase',
+      capabilities: ['network'],
       description: 'Query a Notion database',
       signature: {
         parameters: [

@@ -40,6 +40,8 @@ tests:
     mocks:
       - name: core.length
         id: count-items
+        when:
+          target: payload.items
         output: 7
     expect:
       nodes:

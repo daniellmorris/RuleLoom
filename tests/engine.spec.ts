@@ -291,12 +291,45 @@ async function testImplicitBranchClosure() {
   assert.equal(state.branch?.hit, 'implicit-branch');
 }
 
+async function testUnsafeStateWritesAreRejected() {
+  const engine = new RuleLoomEngine({ closures: createCoreClosures() });
+  engine.registerFlow({
+    name: 'unsafe-assignment',
+    steps: [{
+      closure: 'core.assign',
+      parameters: { target: 'constructor.prototype.polluted', value: true },
+    }],
+  });
+
+  await assert.rejects(
+    engine.execute('unsafe-assignment'),
+    /blocked segment "constructor"/,
+  );
+  assert.equal((Object.prototype as Record<string, unknown>).polluted, undefined);
+
+  engine.registerClosure({
+    name: 'unsafe-result',
+    handler: () => JSON.parse('{"constructor":{"prototype":{"polluted":true}}}'),
+  });
+  engine.registerFlow({
+    name: 'unsafe-merge',
+    steps: [{ closure: 'unsafe-result', mergeResult: true }],
+  });
+
+  await assert.rejects(
+    engine.execute('unsafe-merge'),
+    /blocked key "constructor"/,
+  );
+  assert.equal((Object.prototype as Record<string, unknown>).polluted, undefined);
+}
+
 async function run() {
   await testBranchInference();
   await testFlowClosure();
   await testForEachClosure();
   await testClosureParameterReference();
   await testImplicitBranchClosure();
+  await testUnsafeStateWritesAreRejected();
   // eslint-disable-next-line no-console
   console.log('All engine tests passed');
 }

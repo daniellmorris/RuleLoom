@@ -1,5 +1,7 @@
 # UI validation highlights
 
+**Status: Implemented.** Pure validation, canvas highlighting, tooltips, inspector hints, nested `flowSteps` validation, and plugin validators are present. Remaining polish: an overlay toggle and an explicit export warning/blocking policy.
+
 ## Overview
 Highlight nodes with missing required params or missing connectors directly on the canvas (e.g., red border/label).
 

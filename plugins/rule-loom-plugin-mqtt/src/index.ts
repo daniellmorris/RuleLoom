@@ -101,6 +101,7 @@ export const plugin = {
 
     ctx.registerClosure({
       name: 'mqtt.publish',
+      capabilities: ['message', 'network'],
       description: 'Publish a message to an MQTT topic',
       signature: {
         parameters: [

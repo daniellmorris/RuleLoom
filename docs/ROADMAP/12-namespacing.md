@@ -1,5 +1,7 @@
 # Closure namespacing / modules
 
+**Status: Implemented at the registry, engine, validator, manifest, and palette levels.** Remaining work: a migration/lint command, explicit version-resolution semantics, and runner-scoped registries.
+
 ## Overview
 Introduce namespaces/modules for closures beyond the informal `core.` prefix to organize discovery, versioning, and collision avoidance.
 

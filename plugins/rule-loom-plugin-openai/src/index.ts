@@ -12,6 +12,7 @@ export const plugin = {
   async register(ctx: PluginRegistrationContext) {
     ctx.registerClosure({
       name: 'openai.chatCompletion',
+      capabilities: ['network'],
       description: 'Call OpenAI chat completions',
       signature: {
         parameters: [

@@ -34,7 +34,27 @@ async function withOrchestrator(
   }
 }
 
-describe.skip("Orchestrator API", () => {
+describe("Orchestrator API", () => {
+  itHttp("protects API and metrics endpoints when auth is configured", async () => {
+    await withOrchestrator("orchestrator-auth.yaml", async (app) => {
+      const request = supertest(app);
+      expect((await request.get("/api/health")).status).toBe(401);
+      expect((await request.get("/metrics")).status).toBe(401);
+
+      const health = await request
+        .get("/api/health")
+        .set("Authorization", "Bearer test-orchestrator-token");
+      expect(health.status).toBe(200);
+      expect(health.body).toMatchObject({ status: "ok", runners: 0 });
+
+      const meta = await request
+        .get("/api/meta")
+        .set("Authorization", "Bearer test-orchestrator-token");
+      expect(meta.status).toBe(200);
+      expect(meta.body.name).toBe("rule-loom-orchestrator");
+    });
+  });
+
   itHttp("creates, lists, and removes runners via API", async () => {
     await withOrchestrator("orchestrator-empty.yaml", async (app) => {
       const request = supertest(app);
@@ -106,11 +126,11 @@ describe.skip("Orchestrator API", () => {
       const request = supertest(app);
       const corePluginPath = path.resolve(
         CONFIG_DIR,
-        "../../plugins/rule-loom-core",
+        "../../../plugins/rule-loom-core",
       );
       const httpPluginPath = path.resolve(
         CONFIG_DIR,
-        "../../plugins/rule-loom-plugin-http",
+        "../../../plugins/rule-loom-plugin-http",
       );
       const invalidConfig = `version: 1
 plugins:

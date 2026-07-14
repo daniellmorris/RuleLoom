@@ -47,6 +47,8 @@ function printResult(result: RuleLoomTestRunResult, reporter: string): void {
     console.log(`${test.passed ? 'PASS' : 'FAIL'} ${test.name}`);
     test.failures.forEach((failure) => {
       console.log(`  - ${failure.message}`);
+      if (failure.expected !== undefined) console.log(`    expected: ${JSON.stringify(failure.expected)}`);
+      if (failure.actual !== undefined) console.log(`    actual: ${JSON.stringify(failure.actual)}`);
       console.log(`    trace events: ${failure.trace?.length ?? test.trace.length}`);
     });
   });

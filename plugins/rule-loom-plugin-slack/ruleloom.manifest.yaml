@@ -4,6 +4,8 @@ pluginVersion: 0.1.0
 entry: dist/index.js
 closures:
   - name: slack.postMessage
+    capabilities:
+      - network
     description: Send a message to a Slack channel
     signature:
       parameters:

@@ -1,5 +1,7 @@
 # Canvas sticky notes
 
+**Status: Implemented.** Notes support create, edit, move, delete, and YAML round trips. Remaining polish: extract the note UI from `Canvas` and add hide/show filtering.
+
 ## Overview
 Allow authors to drop notes at x/y positions on the canvas; store content and position in `$meta`.
 

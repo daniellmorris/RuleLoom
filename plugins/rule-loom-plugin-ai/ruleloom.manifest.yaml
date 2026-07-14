@@ -6,6 +6,8 @@ closures:
   - name: ai.generate
     namespace: ai
     version: 0.1.0
+    capabilities:
+      - network
     description: Generate text or JSON with a configured AI provider.
     signature:
       description: Provider-neutral AI generation. Use assign to store text/json output in state.
@@ -54,6 +56,8 @@ closures:
   - name: ai.extract
     namespace: ai
     version: 0.1.0
+    capabilities:
+      - network
     description: Extract structured data from text or state using a schema.
     signature:
       description: Structured extraction helper that returns parsed JSON when available.
@@ -92,6 +96,8 @@ closures:
   - name: ai.classify
     namespace: ai
     version: 0.1.0
+    capabilities:
+      - network
     description: Classify input into one of a fixed set of labels.
     signature:
       description: Classification helper with constrained labels.
@@ -130,6 +136,8 @@ closures:
   - name: ai.embed
     namespace: ai
     version: 0.1.0
+    capabilities:
+      - network
     description: Create embeddings for text using a configured AI provider.
     signature:
       description: Provider-neutral embedding generation.

@@ -3,6 +3,7 @@ import express from 'express';
 import morgan from 'morgan';
 import fs from 'node:fs';
 import path from 'node:path';
+import { timingSafeEqual } from 'node:crypto';
 import { createLogger, type RuleLoomLogger } from 'rule-loom-lib';
 import { loadOrchestratorConfig, type OrchestratorConfig } from './config.js';
 import { RunnerRegistry } from './registry.js';
@@ -37,13 +38,14 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
   await seedConfiguredRunners(config, runnerStore, registry, logger, persisted);
   const metricsRegistry = registry.getMetricsRegistry();
 
-  app.get('/metrics', (_req, res) => {
+  const authMiddleware = createBearerAuthMiddleware(config.auth?.token);
+  app.get('/metrics', ...(config.auth?.protectMetrics === false ? [] : [authMiddleware]), (_req, res) => {
     res.setHeader('Content-Type', metricsRegistry.contentType);
     res.send(metricsRegistry.render());
   });
 
   const apiRouter = await createOrchestratorApi(registry, runnerStore);
-  app.use('/api', apiRouter);
+  app.use('/api', authMiddleware, apiRouter);
 
   const uiDistPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../rule-loom-orchestrator-ui/dist');
   if (fs.existsSync(uiDistPath)) {
@@ -101,6 +103,21 @@ export async function createOrchestrator(configPath: string): Promise<Orchestrat
     runnerStore,
     listen,
     close,
+  };
+}
+
+function createBearerAuthMiddleware(token?: string): express.RequestHandler {
+  if (!token) return (_req, _res, next) => next();
+  return (req, res, next) => {
+    const authorization = req.headers.authorization;
+    const supplied = authorization?.startsWith('Bearer ') ? authorization.slice(7) : '';
+    const suppliedBuffer = Buffer.from(supplied);
+    const expectedBuffer = Buffer.from(token);
+    if (suppliedBuffer.length !== expectedBuffer.length || !timingSafeEqual(suppliedBuffer, expectedBuffer)) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+    next();
   };
 }
 

@@ -1,5 +1,11 @@
 import _ from 'lodash';
-import RuleLoomEngine, { resolveDynamicValues, type ClosureDefinition, type ClosureContext } from 'rule-loom-engine';
+import RuleLoomEngine, {
+  assertSafeObject,
+  assertSafePath,
+  resolveDynamicValues,
+  type ClosureDefinition,
+  type ClosureContext,
+} from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
 import type { ClosureConfig } from './config.js';
 import { importClosureModule } from './config.js';
@@ -8,8 +14,10 @@ function buildSetStateClosure(entry: Extract<ClosureConfig, { type: 'template'; 
   const { name, target, value, merge } = entry;
   return {
     name,
+    capabilities: ['pure'],
     description: entry.description,
     handler: async (state: any, context: ClosureContext) => {
+      assertSafePath(target, `Template closure "${name}" target`);
       const templateContext = {
         state,
         runtime: context.runtime,
@@ -21,6 +29,7 @@ function buildSetStateClosure(entry: Extract<ClosureConfig, { type: 'template'; 
         : parameterValue !== undefined
           ? resolveDynamicValues(parameterValue, templateContext)
           : undefined;
+      assertSafeObject(resolvedValue, `Template closure "${name}" value`);
 
       if (merge) {
         const current = _.get(state, target);
@@ -49,6 +58,7 @@ function buildRespondClosure(entry: Extract<ClosureConfig, { type: 'template'; t
   const { name, status, headers, body } = entry;
   return {
     name,
+    capabilities: ['pure'],
     description: entry.description,
     handler: async (state: any, context: ClosureContext) => {
       const templateContext = {
@@ -149,6 +159,7 @@ export async function buildClosures(
     } else if (entry.type === 'flow') {
       closures.push({
         name: entry.name,
+        capabilities: ['pure'],
         description: entry.description,
         handler: async (state: any, context: ClosureContext) => {
           const engine = context.runtime.engine;

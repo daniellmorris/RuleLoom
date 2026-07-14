@@ -1,0 +1,5 @@
+version: 1
+auth:
+  token: test-orchestrator-token
+  protectMetrics: true
+runners: []

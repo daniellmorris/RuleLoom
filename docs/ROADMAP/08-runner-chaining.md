@@ -1,5 +1,7 @@
 # Runner chaining
 
+**Status: Operational and hardened; UI trace polish remains.** `core.runner-call` supports timeout/retry handling, authentication, correlation propagation, loop-depth limits, opt-in downstream endpoints, HTTPS/host/redirect policy, state merging, and trace return. Retry backoff policy and a richer chained-trace UI remain.
+
 ## Overview
 Allow a flow to invoke another RuleLoom runner (local or remote) as a first-class closure/input.
 

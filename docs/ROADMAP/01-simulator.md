@@ -1,5 +1,7 @@
 # Simulator (input-aware flow simulation)
 
+**Status: Safe execution foundation implemented; product experience remains partial.** Closures declare capabilities, pure closures execute normally, side-effect closures require an explicit simulator, and simulation fails closed otherwise. Recorder traces and YAML tests use this policy. Input-specific simulators, a dedicated runner API/CLI, and the UI trace experience remain.
+
 This is a WIP: I don't think the following is complete or even really what we want for this feature. But it's a start.
 
 ## Overview
@@ -26,6 +28,8 @@ Simulating close to production logic finds config errors early and enables repea
 - `POST /simulate` returns trace events for a flow with at least one input providing `simulate`.
 - UI can run a simulation, show per-node enter/exit, and mark nodes on the canvas.
 - No real network/DB/file calls occur during simulation (verified by stubbing in tests).
+
+The final criterion is covered by integration tests. The endpoint and UI criteria remain open.
 
 ## Code Cleanliness
 - Centralize simulation flags in runtime to avoid “if simulate” scattering.

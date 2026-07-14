@@ -1,5 +1,7 @@
 # More core closures (date/string/collection utils)
 
+**Status: Implemented.** Date, string, collection, and math closures ship with manifest metadata and integration coverage. Remaining polish: examples, timezone policy documentation, and palette categorization/icons.
+
 ## Overview
 Expand the core closure set with common utility operations (date/time, string, collection helpers) backed by strong metadata.
 

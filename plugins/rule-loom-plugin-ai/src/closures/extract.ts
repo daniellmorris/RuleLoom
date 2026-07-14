@@ -6,6 +6,7 @@ export function aiExtractClosure(): AiClosureDefinition {
     namespace: 'ai',
     version: '0.1.0',
     name: 'ai.extract',
+    capabilities: ['network'],
     description: 'Extract structured data from text or state using a schema.',
     handler: async (_state, context) => {
       const params = context.parameters ?? {};

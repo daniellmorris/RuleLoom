@@ -4,6 +4,8 @@ pluginVersion: 0.1.0
 entry: dist/index.js
 closures:
   - name: s3.putObject
+    capabilities:
+      - network
     description: Upload an object to S3/MinIO
     signature:
       parameters:
@@ -32,6 +34,8 @@ closures:
           type: string
           required: false
   - name: s3.getPresignedUrl
+    capabilities:
+      - network
     description: Generate a presigned GET URL
     signature:
       parameters:

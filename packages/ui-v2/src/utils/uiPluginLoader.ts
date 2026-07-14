@@ -202,10 +202,22 @@ function isBlock(value: unknown): value is UiPluginBlockDescriptor {
 }
 
 function buildRawUrl(base: string, repo: string, ref: string, path: string): string {
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  if (path.startsWith('http://') || path.startsWith('https://')) return requireTrustedModuleUrl(path);
   const normalizedBase = base.replace(/\/$/, '');
   const normalizedPath = path.replace(/^\//, '');
-  return `${normalizedBase}/${repo}/${ref}/${normalizedPath}`;
+  return requireTrustedModuleUrl(`${normalizedBase}/${repo}/${ref}/${normalizedPath}`);
+}
+
+function requireTrustedModuleUrl(value: string): string {
+  const url = new URL(value);
+  const loopback = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
+    throw new Error(`UI plugin URL must use HTTPS: ${value}`);
+  }
+  if (url.username || url.password) {
+    throw new Error('UI plugin URLs cannot contain credentials.');
+  }
+  return url.toString();
 }
 
 function buildNpmModuleSpec(pkg: string, path: string, moduleBase?: string): string {

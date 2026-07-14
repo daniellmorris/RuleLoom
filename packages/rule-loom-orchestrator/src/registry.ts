@@ -150,17 +150,40 @@ export class RunnerRegistry {
       inheritedInlineContent = await fs.readFile(existing.configPath, 'utf8');
     }
 
+    const configPath = options.configPath ?? (existing.configSource === 'path' ? existing.configPath : undefined);
+    const configContent = options.configContent ?? inheritedInlineContent;
+    const resolved = await this.resolveConfig({ configPath, configContent });
+    let replacementInstance: RunnerInstance;
+    try {
+      replacementInstance = await createRunner(resolved.configPath);
+    } catch (error) {
+      if (resolved.tempDir) {
+        await fs.rm(resolved.tempDir, { recursive: true, force: true }).catch(() => undefined);
+      }
+      throw error;
+    }
+
+    this.attachLoggerMirrors(id, replacementInstance.logger);
+    const cleanup = this.attachMetrics(id, replacementInstance);
+    const replacement: RunnerRecord = {
+      id,
+      basePath: newBasePath,
+      configPath: resolved.configPath,
+      configSource: resolved.configSource,
+      tempDir: resolved.tempDir,
+      instance: replacementInstance,
+      createdAt: existing.createdAt,
+      cleanup,
+    };
+
+    this.records.set(id, replacement);
     existing.cleanup?.();
     await existing.instance.close().catch(() => undefined);
     if (existing.tempDir) {
       await fs.rm(existing.tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
-    this.records.delete(id);
-
-    const configPath = options.configPath ?? (existing.configSource === 'path' ? existing.configPath : undefined);
-    const configContent = options.configContent ?? inheritedInlineContent;
-
-    return this.addRunner({ id, configPath, configContent, basePath: newBasePath });
+    this.logger.info?.(`Runner ${id} updated at ${newBasePath}`);
+    return replacement;
   }
 
   async getRunnerConfig(id: string): Promise<{ content: string; source: 'path' | 'inline' }> {

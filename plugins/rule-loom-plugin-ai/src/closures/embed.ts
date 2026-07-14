@@ -6,6 +6,7 @@ export function aiEmbedClosure(): AiClosureDefinition {
     namespace: 'ai',
     version: '0.1.0',
     name: 'ai.embed',
+    capabilities: ['network'],
     description: 'Create embeddings for text using a configured AI provider.',
     handler: async (_state, context) => {
       const params = context.parameters ?? {};

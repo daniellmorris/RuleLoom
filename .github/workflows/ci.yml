@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Report dependency audit
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build workspaces
+        run: npm run build
+
+      - name: Run all tests
+        run: npm run test:all
+
+      - name: Check source cleanliness
+        run: |
+          git diff --check
+          git diff --exit-code -- '**/ruleloom.manifest.yaml'
+          test -z "$(find packages plugins -path '*/src/*' -type f \( -name '*.js' -o -name '*.js.map' -o -name '*.d.ts.map' -o -name '*.tsbuildinfo' \) -print)"

@@ -3,7 +3,7 @@ import path from 'node:path';
 import yaml from 'js-yaml';
 import _ from 'lodash';
 import { z } from 'zod';
-import type { ClosureDefinition, ClosureHandler, RecorderEvent } from 'rule-loom-engine';
+import { assertSafeObject, assertSafePath, type ClosureDefinition, type ClosureHandler, type RecorderEvent } from 'rule-loom-engine';
 import { createRunner } from 'rule-loom-runner';
 import { resetClosureRegistry } from 'rule-loom-runner/closureRegistry';
 import { resetLoadedPlugins } from 'rule-loom-runner/pluginLoader';
@@ -18,6 +18,7 @@ const mockSchema = z.object({
   sequence: z.array(z.any()).optional(),
   error: z.string().optional(),
   passthrough: z.boolean().optional(),
+  when: z.record(z.any()).optional(),
   set: patchSchema,
   patchAfter: patchSchema,
 });
@@ -36,6 +37,7 @@ const testSchema = z.object({
   seed: z.record(z.any()).optional(),
   mocks: z.array(mockSchema).optional(),
   expect: z.object({
+    match: z.enum(['partial', 'exact']).optional().default('partial'),
     nodes: z.array(nodeExpectationSchema).optional(),
     response: z.any().optional(),
     state: z.any().optional(),
@@ -124,6 +126,7 @@ async function runSingleYamlTest(configPath: string, test: RuleLoomYamlTest): Pr
       recorder,
       recordLevel: 'full',
       testing: true,
+      simulate: true,
     });
     const failures = evaluateExpectations(test, result.state, result.lastResult, trace);
     return {
@@ -169,16 +172,23 @@ function installMocks(engine: any, mocks: RuleLoomYamlMock[], activeSteps: Activ
       throw new Error(`Mock references unknown closure "${name}".`);
     }
     const original = closure.handler;
-    closure.handler = async (state, context) => {
+    const originalSimulator = closure.simulate;
+    const mockHandler: ClosureHandler = async (state, context) => {
       const callIndex = (closureCallCounts.get(name) ?? 0) + 1;
       closureCallCounts.set(name, callIndex);
       const active = findActiveForClosure(activeSteps, name);
-      const mock = closureMocks.find((candidate) => mockMatches(candidate, active, callIndex));
+      const mock = closureMocks.find((candidate) => mockMatches(candidate, active, callIndex, context.parameters));
       if (!mock) return original(state, context);
+      if (mock.passthrough && (closure.capabilities ?? ['process']).some((capability) => capability !== 'pure')) {
+        throw new Error(`Mock passthrough is not allowed for side-effect closure "${name}" during simulation.`);
+      }
       return executeMock(mock, original, state, context);
     };
+    closure.handler = mockHandler;
+    closure.simulate = mockHandler;
     restored.push(() => {
       closure.handler = original;
+      closure.simulate = originalSimulator;
     });
   }
 
@@ -209,9 +219,15 @@ function installMocks(engine: any, mocks: RuleLoomYamlMock[], activeSteps: Activ
   return () => restored.reverse().forEach((fn) => fn());
 }
 
-function mockMatches(mock: RuleLoomYamlMock, active: ActiveStep | undefined, callIndex: number): boolean {
+function mockMatches(
+  mock: RuleLoomYamlMock,
+  active: ActiveStep | undefined,
+  callIndex: number,
+  parameters: Record<string, unknown> | undefined,
+): boolean {
   if (mock.callIndex && mock.callIndex !== callIndex) return false;
   if (mock.id && mock.id !== active?.step) return false;
+  if (mock.when && !objectContains(parameters ?? {}, mock.when)) return false;
   return true;
 }
 
@@ -231,7 +247,9 @@ function findActiveStepIndex(activeSteps: ActiveStep[], event: RecorderEvent): n
 
 function applyPatchMap(state: Record<string, unknown>, patch?: Record<string, unknown>): void {
   if (!patch) return;
+  assertSafeObject(patch, 'YAML test state patch');
   Object.entries(patch).forEach(([key, value]) => {
+    assertSafePath(key, 'YAML test state patch path');
     _.set(state, key, _.cloneDeep(value));
   });
 }
@@ -245,12 +263,13 @@ function evaluateExpectations(
   const failures: RuleLoomTestFailure[] = [];
   const expectation = test.expect;
   if (!expectation) return failures;
+  const exact = expectation.match === 'exact';
 
   if ('response' in expectation) {
-    addMatchFailure(failures, 'response', expectation.response, _.get(state, 'response'), trace);
+    addMatchFailure(failures, 'response', expectation.response, _.get(state, 'response'), trace, exact);
   }
   if ('state' in expectation) {
-    addMatchFailure(failures, 'state', expectation.state, state, trace);
+    addMatchFailure(failures, 'state', expectation.state, state, trace, exact);
   }
 
   (expectation.nodes ?? []).forEach((node) => {
@@ -260,10 +279,10 @@ function evaluateExpectations(
       return;
     }
     if ('output' in node) {
-      addMatchFailure(failures, `nodes.${node.id}.output`, node.output, (event as any).output, trace);
+      addMatchFailure(failures, `nodes.${node.id}.output`, node.output, (event as any).output, trace, exact);
     }
     if ('state' in node) {
-      addMatchFailure(failures, `nodes.${node.id}.state`, node.state, (event as any).stateAfter, trace);
+      addMatchFailure(failures, `nodes.${node.id}.state`, node.state, (event as any).stateAfter, trace, exact);
     }
   });
 
@@ -286,8 +305,9 @@ function addMatchFailure(
   expected: unknown,
   actual: unknown,
   trace: RecorderEvent[],
+  exact = false,
 ): void {
-  if (matchesExpected(actual, expected)) return;
+  if (matchesExpected(actual, expected, exact)) return;
   failures.push({
     message: `Expectation failed at ${pathName}.`,
     path: pathName,
@@ -297,8 +317,8 @@ function addMatchFailure(
   });
 }
 
-function matchesExpected(actual: unknown, expected: unknown): boolean {
-  if (_.isPlainObject(expected) && _.isPlainObject(actual)) {
+function matchesExpected(actual: unknown, expected: unknown, exact = false): boolean {
+  if (!exact && _.isPlainObject(expected) && _.isPlainObject(actual)) {
     return objectContains(actual as Record<string, unknown>, expected as Record<string, unknown>);
   }
   return _.isEqual(actual, expected);

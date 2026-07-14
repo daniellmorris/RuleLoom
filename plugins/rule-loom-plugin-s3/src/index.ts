@@ -5,6 +5,7 @@ export const plugin = {
   async register(ctx: PluginRegistrationContext) {
     ctx.registerClosure({
       name: 's3.putObject',
+      capabilities: ['network'],
       description: 'Upload an object to S3/MinIO',
       signature: {
         parameters: [
@@ -45,6 +46,7 @@ export const plugin = {
 
     ctx.registerClosure({
       name: 's3.getPresignedUrl',
+      capabilities: ['network'],
       description: 'Generate a presigned GET URL',
       signature: {
         parameters: [

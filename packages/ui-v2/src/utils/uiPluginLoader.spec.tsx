@@ -53,19 +53,28 @@ describe('ui plugin loader', () => {
     expect(result.errors.length).toBe(0);
   });
 
-  it('allows plugin blocks to override core blocks in the registry', () => {
+  it('prevents plugin blocks from overriding core blocks', () => {
     const registry = createComponentRegistry();
     const override = () => null;
-    registry.registerPluginBlocks(
+    expect(() => registry.registerPluginBlocks(
       {
         id: 'override-test',
         version: '0.0.1',
         blocks: [{ type: 'canvas', name: 'Canvas', module: 'override.js' }]
       },
       { 'override.js': { default: override } }
-    );
+    )).toThrow('cannot replace registered block');
+  });
 
-    expect(registry.resolve('Canvas')?.component).toBe(override);
+  it('rejects duplicate plugin ids and insecure remote URLs', async () => {
+    const registry = createComponentRegistry();
+    const manifest = { id: 'duplicate', version: '1.0.0', blocks: [] };
+    registry.registerPluginBlocks(manifest, {});
+    expect(() => registry.registerPluginBlocks(manifest, {})).toThrow('conflicts with already loaded version');
+
+    await expect(loadPlugins([{ ...source, baseUrl: 'http://plugins.example.com' }], {
+      fetchImpl: vi.fn() as any,
+    })).rejects.toThrow('must use HTTPS');
   });
 
   it('registers extension slots and rejects unknown slot types', () => {

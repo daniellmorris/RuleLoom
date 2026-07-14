@@ -19,10 +19,12 @@ RuleLoom is a configuration-first execution platform for composing rules, closur
 | --- | --- |
 | [`rule-loom-lib`](packages/rule-loom-lib/README.md) | Shared utilities (loggers, future helpers) consumed by other packages. |
 | [`rule-loom-engine`](packages/rule-loom-engine/README.md) | Core execution engine that processes flows, closures, branching, and `$call` directives. |
-| [`rule-loom-core`](packages/rule-loom-core/README.md) | Reusable closure library + built-in plugin (assign/respond/log/comparisons/iterators/http, etc.). |
-| [`rule-loom-inputs`](packages/rule-loom-inputs/README.md) | Transport adapters (HTTP server, scheduler, future AMQP/MQTT) used by the runner/orchestrator. |
+| [`rule-loom-core`](plugins/rule-loom-core/README.md) | Reusable namespaced closures for state, response, branching, collections, dates, strings, math, and runner chaining. |
+| [`plugins`](plugins/) | Input and closure plugins for HTTP, scheduler, WebSocket, MQTT, AI, data stores, and external services. |
 | [`rule-loom-runner`](packages/rule-loom-runner/README.md) | CLI + library for serving a single YAML config over HTTP. |
 | [`rule-loom-orchestrator`](packages/rule-loom-orchestrator/README.md) | Aggregates multiple runner configs behind one Express app. |
+| [`rule-loom-testing`](packages/rule-loom-testing/README.md) | YAML test runner with mocks, expectations, traces, and CI-friendly reporters. |
+| [`ui-v2`](packages/ui-v2/README.md) | Visual YAML editor with validation, notes, dynamic connectors, dashboards, and trusted UI plugins. |
 
 ## Documentation
 
@@ -32,7 +34,7 @@ RuleLoom is a configuration-first execution platform for composing rules, closur
 ## Getting Started
 
 ```bash
-npm install
+npm ci
 npx prisma migrate deploy --schema prisma/schema.prisma
 npm run build --workspace rule-loom-orchestrator-ui
 npm run build
@@ -66,7 +68,9 @@ npx prisma migrate deploy --schema prisma/schema.prisma
 ## Testing
 
 ```bash
-npm run test
+npm test
+npm run test:unit
+npm run test:workspaces
 npm run test:integration
 ```
 
@@ -89,6 +93,8 @@ This uses `docker-compose.yml` together with `docker/orchestrator.yaml` (which y
 
 - TypeScript project references (see `tsconfig.base.json`) ensure packages build in dependency order (`lib` → `engine` → `core` → `runner` → `orchestrator`).
 - Build outputs live under each package’s `dist/` directory.
+- `package-lock.json` is committed; use `npm ci` in CI and clean environments.
+- Never commit `.env` files. Copy `.env.example` locally and provide production values through secret management.
 - When adding new closure metadata (e.g., functional parameters), update `rule-loom-engine`’s `ClosureDefinition` and the runner schema to keep YAML parsing aligned.
 
 Happy harvesting! 🚜

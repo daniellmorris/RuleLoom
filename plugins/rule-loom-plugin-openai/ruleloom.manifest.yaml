@@ -4,6 +4,8 @@ pluginVersion: 0.1.0
 entry: dist/index.js
 closures:
   - name: openai.chatCompletion
+    capabilities:
+      - network
     description: Call OpenAI chat completions
     signature:
       parameters:

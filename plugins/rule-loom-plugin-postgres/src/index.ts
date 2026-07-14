@@ -11,6 +11,7 @@ export const plugin = {
   async register(ctx: PluginRegistrationContext) {
     ctx.registerClosure({
       name: 'postgres.query',
+      capabilities: ['database', 'network'],
       description: 'Execute a SQL query against Postgres',
       signature: {
         parameters: [

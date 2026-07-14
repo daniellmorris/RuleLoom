@@ -13,13 +13,14 @@
 ## CLI Usage
 
 ```bash
-npx ruleloom-runner --config path/to/config.yaml --port 4000
+npx ruleloom-runner --config path/to/config.yaml
+npx ruleloom-runner validate --config path/to/config.yaml
 ```
 
 Options:
 
 - `--config, -c` – path to the YAML config (defaults to `config.yaml`).
-- `--port, -p` – port to listen on (defaults to `3000` when omitted).
+HTTP ports are configured per input in YAML (`inputs[].config.port`).
 
 ## Library Usage
 
@@ -27,12 +28,11 @@ Options:
 import { createRunner, startRunner } from 'rule-loom-runner';
 
 const instance = await createRunner('config.yaml');
-await instance.listen();
-// ... later
+console.log(instance.config.flows.map((flow) => flow.name));
 await instance.close();
 ```
 
-`createRunner` returns the underlying `RuleLoomEngine`, Express app, resolved config metadata, and convenience `listen/close` helpers.
+`createRunner` returns the engine, parsed config, initialized services, runner-scoped plugin inventory, lifecycle events, logger, and `close()` cleanup function. HTTP inputs start listening during creation.
 
 ## Configuration Schema
 
@@ -44,19 +44,23 @@ logger:
   level: info
 inputs:
   - type: http
-    routes:
+    config:
+      port: 4000
+      runnerEndpoint:
+        enabled: false
+    triggers:
       - method: post
         path: /echo
         flow: echo-request
   - type: scheduler
-    jobs:
+    triggers:
       - name: heartbeat
         flow: heartbeat
         interval: "1m"
 closures:
   - type: module           # optional custom closures
   - type: flow             # config-defined closure flows
-  # Core/http closures are available automatically via the built-in plugin.
+  # Load core/http plugins explicitly in the top-level plugins array.
 flows:
   - name: echo-request
     steps:
@@ -65,10 +69,10 @@ flows:
           closure: core.truthy
           parameters:
             value: "${state.payload}"
-        steps:
-          - closure: respond-success
-        otherwise:
-          - closure: respond-empty
+      - closure: core.respond
+        parameters:
+          status: 200
+          body: "${state.payload}"
 ```
 
 See [Configuration How-To](../../docs/CONFIGURATION.md) for the full schema, examples of `$call`, branches, inline steps, and closure types.
@@ -78,7 +82,7 @@ See [Configuration How-To](../../docs/CONFIGURATION.md) for the full schema, exa
 ```yaml
 inputs:
   - type: scheduler
-    jobs:
+    triggers:
       - name: heartbeat
         flow: heartbeat-flow
         interval: "1m"
@@ -86,10 +90,10 @@ inputs:
           source: scheduler
 ```
 
-Each job executes the named flow using the runner’s engine; results are recorded on `runner.scheduler.jobStates`.
+Each job executes the named flow using the runner’s engine; scheduler services expose job state for orchestration and testing.
 
 ## Development
 
 - `npm run dev` (at repo root) launches the runner via `ts-node` with `packages/rule-loom-runner/config/example.http.yaml`.
 - TypeScript build: `npm run build --workspace rule-loom-runner`.
-- Tests covering runner/engine features live in `tests/engine.spec.ts`.
+- Tests covering runner/engine features live in `tests/engine.spec.ts` and `tests/integration/`.

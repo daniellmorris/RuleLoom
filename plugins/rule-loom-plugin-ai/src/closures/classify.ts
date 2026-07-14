@@ -6,6 +6,7 @@ export function aiClassifyClosure(): AiClosureDefinition {
     namespace: 'ai',
     version: '0.1.0',
     name: 'ai.classify',
+    capabilities: ['network'],
     description: 'Classify input into one of a fixed set of labels.',
     handler: async (_state, context) => {
       const params = context.parameters ?? {};

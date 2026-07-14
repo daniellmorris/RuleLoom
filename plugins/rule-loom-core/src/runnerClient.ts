@@ -17,6 +17,11 @@ export interface RunnerCallRequest {
   retries?: number;
   simulate?: boolean;
   trace?: boolean;
+  allowedHosts?: string[];
+  allowInsecureHttp?: boolean;
+  requestId?: string;
+  callDepth?: number;
+  maxCallDepth?: number;
 }
 
 export interface RunnerCallResponse {
@@ -55,8 +60,22 @@ function resolveEndpoint(request: RunnerCallRequest): string {
   if (!trimmed) {
     throw new Error('core.runner-call requires a non-empty "url" or "host".');
   }
-  if (request.url) return trimmed;
-  return `${trimmed.replace(/\/+$/, '')}/__ruleloom/run`;
+  const endpoint = request.url ? trimmed : `${trimmed.replace(/\/+$/, '')}/__ruleloom/run`;
+  const url = new URL(endpoint);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error(`Runner call protocol "${url.protocol}" is not supported.`);
+  }
+  if (url.username || url.password) {
+    throw new Error('Runner call URLs cannot contain credentials. Use the auth parameter.');
+  }
+  const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+  if (url.protocol === 'http:' && !isLoopback && request.allowInsecureHttp !== true) {
+    throw new Error('Runner calls require HTTPS unless allowInsecureHttp is enabled for a trusted host.');
+  }
+  if (request.allowedHosts?.length && !request.allowedHosts.includes(url.host) && !request.allowedHosts.includes(url.hostname)) {
+    throw new Error(`Runner call host "${url.host}" is not allowed.`);
+  }
+  return url.toString();
 }
 
 async function postRunnerCall(endpoint: string, request: RunnerCallRequest, timeoutMs: number): Promise<RunnerCallResponse> {
@@ -65,7 +84,7 @@ async function postRunnerCall(endpoint: string, request: RunnerCallRequest, time
   try {
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: buildHeaders(request.auth),
+      headers: buildHeaders(request),
       body: JSON.stringify({
         flow: request.flow,
         state: request.state,
@@ -74,6 +93,7 @@ async function postRunnerCall(endpoint: string, request: RunnerCallRequest, time
         trace: request.trace !== false,
       }),
       signal: controller.signal,
+      redirect: 'error',
     });
     const body = await readResponseBody(res);
     if (!res.ok) {
@@ -94,8 +114,16 @@ async function postRunnerCall(endpoint: string, request: RunnerCallRequest, time
   }
 }
 
-function buildHeaders(auth?: string | RunnerCallAuth): Record<string, string> {
+function buildHeaders(request: RunnerCallRequest): Record<string, string> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const callDepth = Math.max(1, request.callDepth ?? 1);
+  const maxCallDepth = Math.max(1, request.maxCallDepth ?? 8);
+  if (callDepth > maxCallDepth) {
+    throw new Error(`Runner call depth exceeds ${maxCallDepth}.`);
+  }
+  headers['x-ruleloom-call-depth'] = String(callDepth);
+  if (request.requestId) headers['x-ruleloom-request-id'] = request.requestId;
+  const auth = request.auth;
   if (!auth) return headers;
   if (typeof auth === 'string') {
     headers.authorization = `Bearer ${auth}`;

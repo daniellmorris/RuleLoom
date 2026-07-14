@@ -52,6 +52,7 @@ const coreBlocks: RegisteredBlock[] = [
 export function createComponentRegistry(): ComponentRegistry {
   const registry = new Map<string, RegisteredBlock>();
   const extensions: RegisteredExtension[] = [];
+  const pluginVersions = new Map<string, string>();
 
   const registerBlock = (block: RegisteredBlock) => {
     registry.set(block.name, block);
@@ -62,6 +63,11 @@ export function createComponentRegistry(): ComponentRegistry {
   };
 
   const registerPluginBlocks = (plugin: UiPluginManifest, modules: Record<string, any>) => {
+    const existingVersion = pluginVersions.get(plugin.id);
+    if (existingVersion) {
+      throw new Error(`UI plugin ${plugin.id}@${plugin.version} conflicts with already loaded version ${existingVersion}.`);
+    }
+    pluginVersions.set(plugin.id, plugin.version);
     for (const block of plugin.blocks ?? []) {
       if (!layoutBlockTypes.has(block.type) && !extensionTypes.has(block.type)) {
         throw new Error(`Plugin ${plugin.id} requested unknown UI slot "${block.type}".`);
@@ -78,6 +84,9 @@ export function createComponentRegistry(): ComponentRegistry {
         continue;
       }
       if (extensionTypes.has(block.type)) {
+        if (extensions.some((entry) => entry.pluginId === plugin.id && entry.type === block.type && entry.name === block.name)) {
+          throw new Error(`UI plugin ${plugin.id} registered duplicate ${block.type} extension "${block.name}".`);
+        }
         registerExtension({
           name: block.name,
           type: block.type as RegisteredExtension['type'],
@@ -90,6 +99,9 @@ export function createComponentRegistry(): ComponentRegistry {
       if (typeof value !== 'function') {
         console.error(`Plugin ${plugin.id} module ${block.module} export ${exportName} is not a component`);
         continue;
+      }
+      if (registry.has(block.name)) {
+        throw new Error(`UI plugin ${plugin.id} cannot replace registered block "${block.name}".`);
       }
       registerBlock({ name: block.name, type: block.type, component: value, pluginId: plugin.id, spec: block.spec });
     }

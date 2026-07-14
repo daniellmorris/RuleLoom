@@ -9,6 +9,8 @@
 - Health probe at `/__ruleloom/health` plus per-runner health endpoints.
 - Scheduler awareness (surface configured jobs and last run state).
 - SQLite persistence via Prisma so API-created runners survive orchestrator restarts.
+- Transactional runner replacement: invalid replacements leave the existing runner active.
+- Optional Bearer authentication for API and metrics endpoints.
 
 ## CLI Usage
 
@@ -37,6 +39,9 @@ The orchestrator will automatically create the directory if it does not exist, b
 
 ```yaml
 version: 1
+auth:
+  token: "${ORCHESTRATOR_TOKEN}" # resolve before deployment; omit only on trusted networks
+  protectMetrics: true
 runners:
   - name: echo
     config: ../rule-loom-runner/config/example.http.yaml
@@ -50,10 +55,13 @@ Each entry is loaded with `rule-loom-runner`, and the Express app is mounted at 
 An OpenAPI 3.0 spec is served at `/api/docs` (Swagger UI). Core endpoints include:
 
 - `GET /api/runners` – list current runner instances.
+- `GET /api/health`, `GET /api/meta` – service health and build metadata.
 - `POST /api/runners` – create a runner from a YAML config path (optionally specify `id`/`basePath`).
 - `GET /api/runners/{id}` – inspect routes, scheduler jobs, and metadata.
 - `DELETE /api/runners/{id}` – stop and remove a runner.
 - `GET /api/runners/{id}/routes`, `/jobs`, `/health` – inspect configuration and runtime state.
+
+When `auth.token` is set, send `Authorization: Bearer <token>` to `/api` and, by default, `/metrics`. Without a token the API is unauthenticated and should only be exposed on a trusted network.
 
 ## Web UI
 

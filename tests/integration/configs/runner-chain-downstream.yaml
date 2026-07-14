@@ -1,0 +1,31 @@
+version: 1
+plugins:
+  - source: file
+    path: ../../../plugins/rule-loom-core
+  - source: file
+    path: ../../../plugins/rule-loom-plugin-http
+inputs:
+  - type: http
+    config:
+      port: 0
+    triggers:
+      - method: post
+        path: /unused
+        flow: downstream-flow
+flows:
+  - name: downstream-flow
+    steps:
+      - closure: core.assign
+        parameters:
+          target: downstream.message
+          value: "${state.payload.message}"
+        $meta:
+          id: downstream-assign
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            ok: true
+            echoed: "${state.downstream.message}"
+        $meta:
+          id: downstream-respond

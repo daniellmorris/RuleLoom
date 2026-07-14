@@ -4,6 +4,8 @@ pluginVersion: 0.1.0
 entry: dist/index.js
 closures:
   - name: core.assign
+    namespace: core
+    version: 0.1.0
     signature:
       description: Assigns a value from parameters/state/runtime into state at the provided path.
       parameters:
@@ -23,6 +25,8 @@ closures:
       mutates:
         - state
   - name: core.respond
+    namespace: core
+    version: 0.1.0
     signature:
       description: Sets state.response so HTTP inputs send a response downstream.
       parameters:
@@ -42,6 +46,8 @@ closures:
       mutates:
         - state.response
   - name: core.log
+    namespace: core
+    version: 0.1.0
     signature:
       description: Logs a message using the configured logger.
       parameters:
@@ -56,6 +62,8 @@ closures:
         type: string
         description: The message that was logged.
   - name: core.truthy
+    namespace: core
+    version: 0.1.0
     signature:
       description: Returns true when the provided value is truthy.
       parameters:
@@ -66,6 +74,8 @@ closures:
         type: boolean
         description: Whether the value is truthy.
   - name: core.equals
+    namespace: core
+    version: 0.1.0
     signature:
       description: Performs a deep equality comparison between `left` and `right`.
       parameters:
@@ -78,6 +88,8 @@ closures:
       returns:
         type: boolean
   - name: core.greater-than
+    namespace: core
+    version: 0.1.0
     signature:
       description: Compares whether `left` is greater than `right` after numeric coercion.
       parameters:
@@ -90,6 +102,8 @@ closures:
       returns:
         type: boolean
   - name: core.less-than
+    namespace: core
+    version: 0.1.0
     signature:
       description: Compares whether `left` is less than `right` after numeric coercion.
       parameters:
@@ -102,6 +116,8 @@ closures:
       returns:
         type: boolean
   - name: core.includes
+    namespace: core
+    version: 0.1.0
     signature:
       description: Checks if an item exists inside an array, string, or object values.
       parameters:
@@ -114,6 +130,8 @@ closures:
       returns:
         type: boolean
   - name: core.length
+    namespace: core
+    version: 0.1.0
     signature:
       description: Calculates the length of an array/string/object.
       parameters:
@@ -127,6 +145,8 @@ closures:
       returns:
         type: number
   - name: core.for-each
+    namespace: core
+    version: 0.1.0
     signature:
       description: Iterates over each entry in `collection` and executes nested steps.
       parameters:
@@ -145,6 +165,8 @@ closures:
         - state.currentItem
         - state.currentIndex
   - name: core.branch
+    namespace: core
+    version: 0.1.0
     signature:
       description: Branches execution based on conditional cases.
       parameters:
@@ -152,8 +174,14 @@ closures:
           type: array
           skipTemplateResolution: true
           required: true
+          itemLabelKey: label
+          labelTemplate: '{itemLabel} {name}'
           description: 'Array of branch cases; each entry must include `when: FlowStep[]` and `then: FlowStep[]`.'
           children:
+            - name: label
+              type: string
+              required: false
+              description: Optional UI label for this branch case.
             - name: when
               type: flowSteps
               required: true
@@ -170,6 +198,352 @@ closures:
         description: Result of the executed branch steps.
     implicitFields:
       - cases
+  - name: core.runner-call
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Invokes another RuleLoom runner through its HTTP runner endpoint.
+      parameters:
+        - name: url
+          type: string
+          description: Full runner endpoint URL. If omitted, host + /__ruleloom/run is used.
+        - name: host
+          type: string
+          description: Runner host/base URL used to build /__ruleloom/run.
+        - name: flow
+          type: string
+          required: true
+          description: Downstream flow name to execute.
+        - name: state
+          type: any
+          description: Initial downstream state. Takes precedence over payload.
+        - name: payload
+          type: any
+          description: Convenience payload stored as downstream state.payload.
+        - name: auth
+          type: any
+          description: Bearer token string or auth/header object.
+        - name: timeoutMs
+          type: number
+          description: Request timeout in milliseconds. Defaults to 5000.
+        - name: retries
+          type: number
+          description: Number of retry attempts after the initial request.
+        - name: simulate
+          type: boolean
+          description: Ask the downstream runner to execute in simulation mode when supported.
+        - name: trace
+          type: boolean
+          description: Ask the downstream runner to return recorder trace. Defaults to true.
+        - name: mergeState
+          type: any
+          description: true to merge downstream state into current state, or a state path to store it.
+      returns:
+        type: object
+        description: Downstream runner response with state, lastResult, and optional trace.
+  - name: core.date-add
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Adds a date/time amount and returns an ISO string, date string, or timestamp.
+      parameters:
+        - name: date
+          type: any
+          required: true
+          description: Date, ISO string, or timestamp to add to.
+        - name: amount
+          type: number
+          required: true
+          description: Amount to add. Negative values subtract.
+        - name: unit
+          type: string
+          description: millisecond, second, minute, hour, day, week, month, or year.
+          defaultValue: millisecond
+        - name: output
+          type: string
+          description: iso, date, or timestamp.
+          defaultValue: iso
+      allowAdditionalParameters: false
+      returns:
+        type:
+          - string
+          - number
+        description: Formatted date result.
+  - name: core.date-parse
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: 'Parses a date-like value without throwing; invalid inputs return `{ valid: false }`.'
+      parameters:
+        - name: date
+          type: any
+          required: true
+          description: Date, ISO string, or timestamp to parse.
+      allowAdditionalParameters: false
+      returns:
+        type: object
+        description: Parse result with valid, iso, and timestamp fields.
+  - name: core.date-format
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Formats a date with Intl.DateTimeFormat.
+      parameters:
+        - name: date
+          type: any
+          required: true
+          description: Date, ISO string, or timestamp to format.
+        - name: locale
+          type: string
+          description: BCP 47 locale.
+          defaultValue: en-US
+        - name: timeZone
+          type: string
+          description: IANA timezone, e.g. America/Chicago.
+        - name: options
+          type: object
+          description: Intl.DateTimeFormat options.
+      allowAdditionalParameters: false
+      returns:
+        type: string
+        description: Localized date/time string.
+  - name: core.string-replace
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Replaces text using a literal search string or regular expression.
+      parameters:
+        - name: value
+          type: string
+          required: true
+          description: Input text.
+        - name: search
+          type: string
+          required: true
+          description: Literal search string or regex pattern. Empty search returns input unchanged.
+        - name: replacement
+          type: string
+          description: Replacement text.
+          defaultValue: ''
+        - name: all
+          type: boolean
+          description: Replace all literal matches. Set false to replace the first match only.
+          defaultValue: true
+        - name: regex
+          type: boolean
+          description: Treat search as a regular expression.
+          defaultValue: false
+        - name: flags
+          type: string
+          description: Regex flags when regex is true.
+          defaultValue: g
+      allowAdditionalParameters: false
+      returns:
+        type: string
+  - name: core.string-split
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Splits text into an array. Omit separator to split into characters.
+      parameters:
+        - name: value
+          type: string
+          required: true
+          description: Input text.
+        - name: separator
+          type: string
+          description: Separator string. Defaults to empty string.
+        - name: limit
+          type: number
+          description: Maximum number of parts.
+      allowAdditionalParameters: false
+      returns:
+        type: array
+  - name: core.string-slugify
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Converts text into a URL-safe slug.
+      parameters:
+        - name: value
+          type: string
+          required: true
+          description: Input text.
+        - name: separator
+          type: string
+          description: Separator to place between words.
+          defaultValue: '-'
+        - name: lower
+          type: boolean
+          description: Lowercase the output.
+          defaultValue: true
+      allowAdditionalParameters: false
+      returns:
+        type: string
+  - name: core.collection-map
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Maps an array or object values to a field path, or returns each item when path is omitted.
+      parameters:
+        - name: collection
+          type: any
+          required: true
+          description: Array or object to read.
+        - name: path
+          type: string
+          description: Item path to pluck. Omit to return each item.
+      allowAdditionalParameters: false
+      returns:
+        type: array
+  - name: core.collection-filter
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Filters an array or object values by item value or path.
+      parameters:
+        - name: collection
+          type: any
+          required: true
+          description: Array or object to filter.
+        - name: path
+          type: string
+          description: Item path to compare. Omit to compare the item itself.
+        - name: operator
+          type: string
+          description: equals, not-equals, truthy, falsy, greater-than, less-than, or includes.
+          defaultValue: equals
+        - name: value
+          type: any
+          description: Comparison value. False, 0, and empty strings are preserved.
+        - name: includeMissing
+          type: boolean
+          description: Allow items missing the path to be compared as undefined.
+          defaultValue: false
+      allowAdditionalParameters: false
+      returns:
+        type: array
+  - name: core.collection-reduce
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Reduces a collection with common operations.
+      parameters:
+        - name: collection
+          type: any
+          required: true
+          description: Array or object to reduce.
+        - name: operation
+          type: string
+          description: sum, product, min, max, count, or join.
+          defaultValue: sum
+        - name: path
+          type: string
+          description: Item path to reduce. Omit to reduce each item.
+        - name: initial
+          type: number
+          description: Initial value for sum/product, or empty min/max fallback.
+        - name: separator
+          type: string
+          description: Join separator.
+          defaultValue: ','
+      allowAdditionalParameters: false
+      returns:
+        type: any
+  - name: core.math-add
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Adds numeric values.
+      parameters:
+        - name: values
+          type: array
+          description: Numeric values. Takes precedence over left/right.
+        - name: left
+          type: number
+          description: Left operand when values is omitted.
+        - name: right
+          type: number
+          description: Right operand when values is omitted.
+      allowAdditionalParameters: false
+      returns:
+        type: number
+  - name: core.math-subtract
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Subtracts numeric values from the first value.
+      parameters:
+        - name: values
+          type: array
+          description: Numeric values. Takes precedence over left/right.
+        - name: left
+          type: number
+          description: Left operand when values is omitted.
+        - name: right
+          type: number
+          description: Right operand when values is omitted.
+      allowAdditionalParameters: false
+      returns:
+        type: number
+  - name: core.math-multiply
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Multiplies numeric values.
+      parameters:
+        - name: values
+          type: array
+          description: Numeric values. Takes precedence over left/right.
+        - name: left
+          type: number
+          description: Left operand when values is omitted.
+        - name: right
+          type: number
+          description: Right operand when values is omitted.
+      allowAdditionalParameters: false
+      returns:
+        type: number
+  - name: core.math-divide
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Divides the first numeric value by remaining values.
+      parameters:
+        - name: values
+          type: array
+          description: Numeric values. Takes precedence over left/right.
+        - name: left
+          type: number
+          description: Left operand when values is omitted.
+        - name: right
+          type: number
+          description: Right operand when values is omitted.
+      allowAdditionalParameters: false
+      returns:
+        type: number
+  - name: core.math-round
+    namespace: core
+    version: 0.1.0
+    signature:
+      description: Rounds a number to optional decimal precision.
+      parameters:
+        - name: values
+          type: array
+          description: Numeric values. Takes precedence over left/right.
+        - name: left
+          type: number
+          description: Left operand when values is omitted.
+        - name: right
+          type: number
+          description: Right operand when values is omitted.
+        - name: precision
+          type: number
+          description: Decimal places for rounding.
+          defaultValue: 0
+      allowAdditionalParameters: false
+      returns:
+        type: number
 inputs:
   - type: init
     configParameters: []

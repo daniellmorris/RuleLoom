@@ -1,0 +1,337 @@
+openapi: 3.1.1
+info:
+  title: RuleLoom Orchestrator V2 API
+  version: 0.1.0
+  description: |
+    Orchestrator V2 manages multiple runner instances behind a single control plane.
+    This API supports creating, inspecting, and removing runners, plus validating
+    runner configurations before activation.
+servers:
+  - url: /api
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: |
+        Lightweight liveness check for the orchestrator API. Use this to confirm
+        the process is reachable and responding. It does not guarantee runner
+        availability or external dependencies.
+      operationId: getHealth
+      tags: [system]
+      responses:
+        "200":
+          description: Service health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /meta:
+    get:
+      summary: Service metadata
+      description: |
+        Returns static and build-time information about the running orchestrator
+        instance. Useful for UI headers, diagnostics, and verifying which build
+        is deployed (e.g., name/version/commit SHA). This endpoint should not
+        include secrets or environment-specific configuration values.
+      operationId: getMeta
+      tags: [system]
+      responses:
+        "200":
+          description: Build and runtime metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetaResponse"
+  /runners:
+    get:
+      summary: List runner instances
+      description: |
+        Returns all runner instances currently registered with the orchestrator,
+        including their status, namespace, and creation time. Use this to
+        populate dashboards or discover active runners.
+      operationId: listRunners
+      tags: [runners]
+      responses:
+        "200":
+          description: Runner list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RunnerSummary"
+    post:
+      summary: Create a runner from configuration
+      description: |
+        Registers and boots a new runner using the supplied configuration.
+        The runner becomes available under its configured namespace once started.
+      operationId: createRunner
+      tags: [runners]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRunnerRequest"
+          application/yaml:
+            schema:
+              $ref: "#/components/schemas/CreateRunnerRequest"
+          text/yaml:
+            schema:
+              $ref: "#/components/schemas/CreateRunnerRequest"
+      responses:
+        "201":
+          description: Runner created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunnerDetail"
+            application/yaml:
+              schema:
+                $ref: "#/components/schemas/RunnerDetail"
+            text/yaml:
+              schema:
+                $ref: "#/components/schemas/RunnerDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /runners/validate:
+    post:
+      summary: Validate a runner configuration without creating it
+      description: |
+        Parses and validates a runner configuration without registering or
+        starting a runner. Useful for pre-flight checks in UIs or CI.
+      operationId: validateRunnerConfig
+      tags: [validation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateRunnerRequest"
+          application/yaml:
+            schema:
+              $ref: "#/components/schemas/ValidateRunnerRequest"
+          text/yaml:
+            schema:
+              $ref: "#/components/schemas/ValidateRunnerRequest"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /runners/{runnerId}:
+    parameters:
+      - $ref: "#/components/parameters/RunnerId"
+    get:
+      summary: Get runner details
+      description: |
+        Returns a detailed view of a single runner, including the raw runner
+        configuration and metadata when available.
+      operationId: getRunner
+      tags: [runners]
+      responses:
+        "200":
+          description: Runner details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunnerDetail"
+            application/yaml:
+              schema:
+                $ref: "#/components/schemas/RunnerDetail"
+            text/yaml:
+              schema:
+                $ref: "#/components/schemas/RunnerDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update a runner configuration
+      description: |
+        Updates a runner's configuration and/or namespace. Depending on the
+        implementation, this may trigger a reload or restart of the runner.
+      operationId: updateRunner
+      tags: [runners]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRunnerRequest"
+          application/yaml:
+            schema:
+              $ref: "#/components/schemas/UpdateRunnerRequest"
+          text/yaml:
+            schema:
+              $ref: "#/components/schemas/UpdateRunnerRequest"
+      responses:
+        "200":
+          description: Runner updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunnerDetail"
+            application/yaml:
+              schema:
+                $ref: "#/components/schemas/RunnerDetail"
+            text/yaml:
+              schema:
+                $ref: "#/components/schemas/RunnerDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Remove a runner
+      description: |
+        Unregisters a runner and releases its routes from the orchestrator.
+        Any in-flight work should be allowed to finish according to the
+        implementation.
+      operationId: deleteRunner
+      tags: [runners]
+      responses:
+        "204":
+          description: Runner deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  parameters:
+    RunnerId:
+      name: runnerId
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Entity not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        time:
+          type: string
+          format: date-time
+        uptimeSeconds:
+          type: number
+      required: [status, time]
+    MetaResponse:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        buildSha:
+          type: string
+        buildTime:
+          type: string
+          format: date-time
+      required: [name, version]
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+        requestId:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+      required: [message]
+    RunnerSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [starting, running, stopped, error]
+        namespace:
+          type: string
+          description: Optional runner namespace used for HTTP input routing.
+          pattern: "^[A-Za-z0-9_-]+$"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, status, createdAt]
+    RunnerDetail:
+      allOf:
+        - $ref: "#/components/schemas/RunnerSummary"
+        - type: object
+          properties:
+            config:
+              $ref: "#/components/schemas/RunnerConfig"
+          required: [config]
+    RunnerConfig:
+      type: object
+      description: Root runner configuration.
+      properties:
+        namespace:
+          type: string
+          description: Optional namespace for HTTP input routing.
+          pattern: "^[A-Za-z0-9_-]+$"
+      additionalProperties: true
+    CreateRunnerRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        config:
+          $ref: "#/components/schemas/RunnerConfig"
+      required: [config]
+    ValidateRunnerRequest:
+      type: object
+      properties:
+        config:
+          $ref: "#/components/schemas/RunnerConfig"
+      required: [config]
+    UpdateRunnerRequest:
+      type: object
+      properties:
+        config:
+          $ref: "#/components/schemas/RunnerConfig"
+      required: [config]
+    ValidationIssue:
+      type: object
+      properties:
+        level:
+          type: string
+          enum: [error, warning]
+        message:
+          type: string
+        flow:
+          type: string
+        closure:
+          type: string
+        path:
+          type: string
+      required: [level, message]
+    ValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+      required: [valid, issues]

@@ -1,0 +1,28 @@
+version: 1
+plugins:
+  - source: file
+    path: ../../../plugins/rule-loom-core
+flows:
+  - name: upstream-flow
+    steps:
+      - closure: core.runner-call
+        parameters:
+          host: "${state.runnerHost}"
+          flow: downstream-flow
+          payload:
+            message: "${state.message}"
+          timeoutMs: 1000
+          retries: 1
+          mergeState: downstreamState
+        assign: downstreamResult
+        $meta:
+          id: runner-call
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            downstream: "${state.downstreamResult.lastResult.body}"
+            merged: "${state.downstreamState.downstream.message}"
+            traceCount: "${state.downstreamResult.trace.length}"
+        $meta:
+          id: upstream-respond

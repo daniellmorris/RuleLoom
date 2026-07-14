@@ -1,0 +1,157 @@
+version: 1
+name: rule-loom-plugin-ai
+pluginVersion: 0.1.0
+entry: dist/index.js
+closures:
+  - name: ai.generate
+    namespace: ai
+    version: 0.1.0
+    description: Generate text or JSON with a configured AI provider.
+    signature:
+      description: Provider-neutral AI generation. Use assign to store text/json output in state.
+      parameters:
+        - name: provider
+          type: string
+          description: AI provider id, e.g. mock or openai.
+          defaultValue: mock
+        - name: model
+          type: string
+          description: Provider model id.
+        - name: apiKey
+          type: string
+          description: Provider API key or resolved secret. Not required for mock.
+        - name: system
+          type: string
+          description: System instruction.
+        - name: prompt
+          type: string
+          description: User prompt. If omitted, input/messages are used.
+        - name: messages
+          type: array
+          description: Chat messages with role/content.
+        - name: input
+          type: any
+          description: Input value to serialize into the prompt.
+        - name: temperature
+          type: number
+          description: Sampling temperature.
+        - name: maxOutputTokens
+          type: number
+          description: Maximum generated tokens.
+        - name: responseFormat
+          type: string
+          description: text or json.
+        - name: schema
+          type: object
+          description: Expected JSON schema for structured output.
+        - name: providerOptions
+          type: object
+          description: Provider-specific request options.
+      allowAdditionalParameters: false
+      returns:
+        type: object
+        description: AI result containing text/json, usage, model, and optional raw response.
+  - name: ai.extract
+    namespace: ai
+    version: 0.1.0
+    description: Extract structured data from text or state using a schema.
+    signature:
+      description: Structured extraction helper that returns parsed JSON when available.
+      parameters:
+        - name: provider
+          type: string
+          description: AI provider id, e.g. mock or openai.
+          defaultValue: mock
+        - name: model
+          type: string
+          description: Provider model id.
+        - name: apiKey
+          type: string
+          description: Provider API key or resolved secret. Not required for mock.
+        - name: input
+          type: any
+          required: true
+          description: Text or object to extract from.
+        - name: schema
+          type: object
+          required: true
+          description: JSON schema describing the extracted object.
+        - name: system
+          type: string
+          description: Optional extraction instructions.
+        - name: prompt
+          type: string
+          description: Optional prompt override.
+        - name: providerOptions
+          type: object
+          description: Provider-specific request options.
+      allowAdditionalParameters: false
+      returns:
+        type: any
+        description: Extracted JSON object when available.
+  - name: ai.classify
+    namespace: ai
+    version: 0.1.0
+    description: Classify input into one of a fixed set of labels.
+    signature:
+      description: Classification helper with constrained labels.
+      parameters:
+        - name: provider
+          type: string
+          description: AI provider id, e.g. mock or openai.
+          defaultValue: mock
+        - name: model
+          type: string
+          description: Provider model id.
+        - name: apiKey
+          type: string
+          description: Provider API key or resolved secret. Not required for mock.
+        - name: input
+          type: any
+          required: true
+          description: Text or object to classify.
+        - name: labels
+          type: array
+          required: true
+          description: Allowed labels.
+        - name: system
+          type: string
+          description: Optional classification instructions.
+        - name: prompt
+          type: string
+          description: Optional prompt override.
+        - name: providerOptions
+          type: object
+          description: Provider-specific request options.
+      allowAdditionalParameters: false
+      returns:
+        type: object
+        description: Classification result with label, confidence, and reason when available.
+  - name: ai.embed
+    namespace: ai
+    version: 0.1.0
+    description: Create embeddings for text using a configured AI provider.
+    signature:
+      description: Provider-neutral embedding generation.
+      parameters:
+        - name: provider
+          type: string
+          description: AI provider id, e.g. mock or openai.
+          defaultValue: mock
+        - name: model
+          type: string
+          description: Embedding model id.
+        - name: apiKey
+          type: string
+          description: Provider API key or resolved secret. Not required for mock.
+        - name: input
+          type: any
+          required: true
+          description: String or string array to embed.
+        - name: providerOptions
+          type: object
+          description: Provider-specific request options.
+      allowAdditionalParameters: false
+      returns:
+        type: object
+        description: Embedding result with embeddings, usage, model, and optional raw response.

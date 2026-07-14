@@ -36,6 +36,8 @@ export interface PluginActions {
   setActiveMode: (mode: 'flow' | 'closure') => void;
   selectNode: (nodeId: string | null) => void;
   addTrigger: (type: string, flowName: string) => void;
+  updateInputId: (inputIdx: number, id: string) => void;
+  removeInputInstance: (inputIdx: number) => void;
   addClosureStep: (collection: 'flows' | 'closures', idx: number, closureName: string) => void;
   updateStepParam: (flowName: string, nodeId: string, key: string, value: any) => void;
   updateNodeUi: (flowName: string, nodeId: string, ui: any) => void;
@@ -85,6 +87,8 @@ export const PluginApiProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setActiveMode: useFlowStore.getState().setActiveMode,
     selectNode: useFlowStore.getState().selectNode,
     addTrigger: useAppStore.getState().addTrigger,
+    updateInputId: useAppStore.getState().updateInputId,
+    removeInputInstance: useAppStore.getState().removeInputInstance,
     addClosureStep: useAppStore.getState().addClosureStep,
     updateStepParam: useAppStore.getState().updateStepParam,
     updateNodeUi: useAppStore.getState().updateNodeUi,

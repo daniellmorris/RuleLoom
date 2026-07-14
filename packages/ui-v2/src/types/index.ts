@@ -17,9 +17,11 @@ export interface NodeData {
   paramCalls?: Record<string, boolean>;
   config?: Record<string, unknown>;
   trigger?: Record<string, unknown>;
+  inputType?: string;
+  inputId?: string;
   configParameters?: Array<{ name: string; type?: string; required?: boolean; description?: string; properties?: any; items?: any; enum?: string[] }>;
   triggerParameters?: Array<{ name: string; type?: string; required?: boolean; description?: string; properties?: any; items?: any; enum?: string[] }>;
-  ui?: { x?: number; y?: number; w?: number; h?: number; color?: string; collapsed?: boolean };
+  ui?: { x?: number; y?: number; w?: number; h?: number; color?: string; collapsed?: boolean; connectorLabels?: Record<string, string> };
   branchRules?: Array<{ label: string; condition: string }>;
   description?: string;
   parametersMeta?: Array<{ name: string; type?: string; required?: boolean; description?: string }>;

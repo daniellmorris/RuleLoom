@@ -5,7 +5,7 @@ import createError from 'http-errors';
 import morgan from 'morgan';
 import _ from 'lodash';
 import { z } from 'zod';
-import type { RuleLoomEngine, ExecutionRuntime } from 'rule-loom-engine';
+import type { RuleLoomEngine, ExecutionRuntime, RecorderEvent } from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
 import type { BaseInputConfig, InputPlugin, InputPluginContext } from 'rule-loom-runner/src/pluginApi.js';
 
@@ -39,8 +39,17 @@ export interface HttpInputConfig extends BaseInputConfig {
 
 export type HttpInputApp = express.Express;
 
-function buildInitialState(req: Request) {
+type SharedHttpServer = {
+  app: express.Express;
+  server: http.Server;
+  refs: number;
+};
+
+const sharedServers = new Map<number, SharedHttpServer>();
+
+function buildInitialState(req: Request, inputId?: string) {
   return {
+    ...(inputId ? { inputId } : {}),
     request: {
       method: req.method,
       path: req.path,
@@ -82,14 +91,16 @@ function routeHandler(
   route: HttpTriggerConfig,
   logger: RuleLoomLogger,
   metadata?: Record<string, unknown>,
+  inputId?: string,
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const initialState = buildInitialState(req);
+      const initialState = buildInitialState(req, inputId);
       const runtime: ExecutionRuntime = {
         logger,
         route,
         configMetadata: metadata,
+        inputId,
         requestId: req.headers['x-request-id'] ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       };
 
@@ -101,8 +112,55 @@ function routeHandler(
   };
 }
 
+function runnerExecuteHandler(
+  engine: RuleLoomEngine,
+  logger: RuleLoomLogger,
+  metadata?: Record<string, unknown>,
+) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const flow = req.body?.flow;
+      if (!flow || typeof flow !== 'string') {
+        res.status(400).json({ error: { message: 'Runner execution requires a string "flow".', status: 400 } });
+        return;
+      }
+      const trace: RecorderEvent[] = [];
+      const wantsTrace = req.body?.trace !== false;
+      const state =
+        req.body?.state && typeof req.body.state === 'object'
+          ? req.body.state
+          : Object.prototype.hasOwnProperty.call(req.body ?? {}, 'payload')
+            ? { payload: req.body.payload }
+            : {};
+      const runtime: ExecutionRuntime = {
+        logger,
+        configMetadata: metadata,
+        requestId: req.headers['x-request-id'] ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        runnerCall: true,
+        simulate: Boolean(req.body?.simulate),
+        ...(wantsTrace
+          ? {
+              recordLevel: 'full',
+              recorder: { onEvent: (event: RecorderEvent) => trace.push(event) },
+            }
+          : {}),
+      };
+      const result = await engine.execute(flow, state, runtime);
+      res.json({
+        flow,
+        state: result.state,
+        lastResult: result.lastResult,
+        ...(wantsTrace ? { trace } : {}),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
 export interface CreateHttpInputOptions {
   logger: RuleLoomLogger;
+  namespace?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -170,6 +228,18 @@ function normalizeBasePath(basePath?: string) {
   return prefixed.endsWith('/') ? prefixed.slice(0, -1) : prefixed;
 }
 
+function combineBasePaths(namespace?: string, basePath?: string) {
+  const normalizedNamespace = normalizeBasePath(namespace);
+  const normalizedBase = normalizeBasePath(basePath);
+  if (normalizedNamespace === '/') {
+    return normalizedBase;
+  }
+  if (normalizedBase === '/') {
+    return normalizedNamespace;
+  }
+  return `${normalizedNamespace}${normalizedBase}`;
+}
+
 function normalizeRoutePath(path: string) {
   const trimmed = path.trim();
   if (!trimmed || trimmed === '/') {
@@ -190,15 +260,25 @@ function normalizeCorsList(value?: string | string[]) {
 
 export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions): HttpInputApp {
   const app = express();
+  configureHttpApp(app, input);
+  mountHttpInputRoutes(app, engine, input, options);
+  mountNotFoundHandler(app, options.logger);
+  return app;
+}
+
+function configureHttpApp(app: express.Express, input: HttpInputConfig) {
   const limit = input.config?.bodyLimit ?? '1mb';
-  const basePath = normalizeBasePath(input.config?.basePath);
+  app.use(express.json({ limit }));
+  app.use(express.urlencoded({ extended: true, limit }));
+  app.use(morgan('combined'));
+}
+
+function mountHttpInputRoutes(app: express.Express, engine: RuleLoomEngine, input: HttpInputConfig, options: CreateHttpInputOptions) {
+  const basePath = combineBasePaths(options.namespace, input.config?.basePath);
   const router = express.Router();
   const corsOrigins = normalizeCorsList(input.config?.corsOrigins);
   const corsMethods = normalizeCorsList(input.config?.corsMethods);
   const corsAllowedHeaders = normalizeCorsList(input.config?.corsAllowedHeaders);
-  app.use(express.json({ limit }));
-  app.use(express.urlencoded({ extended: true, limit }));
-  app.use(morgan('combined'));
 
   if (corsOrigins || corsMethods || corsAllowedHeaders) {
     const corsOptions: CorsOptions = {
@@ -209,9 +289,11 @@ export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfi
     router.use(cors(corsOptions));
   }
 
+  router.post('/__ruleloom/run', runnerExecuteHandler(engine, options.logger, options.metadata));
+
   for (const route of input.triggers) {
     const method = (route.method ?? 'post').toLowerCase();
-    const handler = routeHandler(engine, route, options.logger, options.metadata);
+    const handler = routeHandler(engine, route, options.logger, options.metadata, input.id);
     const routePath = normalizeRoutePath(route.path);
     (router as any)[method](routePath, handler);
     const fullPath = basePath === '/' ? routePath : `${basePath}${routePath}`;
@@ -223,13 +305,15 @@ export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfi
   } else {
     app.use(basePath, router);
   }
+}
 
+function mountNotFoundHandler(app: express.Express, logger: RuleLoomLogger) {
   app.use((req, res, next) => {
     next(createError(404, `No route configured for ${req.method} ${req.path}`));
   });
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    options.logger.error('Unhandled error during request', err);
+    logger.error?.('Unhandled error during request', err);
     if (res.headersSent) {
       return;
     }
@@ -241,8 +325,6 @@ export function createHttpInputApp(engine: RuleLoomEngine, input: HttpInputConfi
       },
     });
   });
-
-  return app;
 }
 
 export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
@@ -250,28 +332,69 @@ export const httpInputPlugin: InputPlugin<HttpInputConfig> = {
   schema: httpInputSchema,
   configParameters: httpConfigParameters,
   triggerParameters: httpTriggerParameters,
-  initialize: async (config: HttpInputConfig, { logger, engine, metadata }: InputPluginContext) => {
-    const httpApp = createHttpInputApp(engine, config, { logger, metadata });
-    const port = config.config?.port ?? 3000;
-    const server = http.createServer(httpApp);
-    await new Promise<void>((resolve) => {
-      server.listen(port, () => {
-        const address = server.address();
-        const actualPort = typeof address === 'object' && address ? address.port : port;
-        logger.info?.(`HTTP input listening on port ${actualPort}${config.config?.basePath ?? ''}`);
-        resolve();
-      });
-    });
+  initialize: async (config: HttpInputConfig, { logger, engine, metadata, namespace }: InputPluginContext) => {
+    const port = Number(config.config?.port ?? 3000);
+    const basePath = combineBasePaths(namespace, config.config?.basePath);
+    const shared = await getOrCreateSharedServer(port, config, logger);
+    mountHttpInputRoutes(shared.app, engine, config, { logger, metadata, namespace });
+    logger.info?.(`HTTP input listening on port ${actualPort(shared.server, port)}${basePath === '/' ? '' : basePath}`);
     return {
       services: {
-        httpApp,
-        httpBasePath: config.config?.basePath ?? '/',
-        httpServer: server,
+        httpApp: shared.app,
+        httpBasePath: combineBasePaths(namespace, config.config?.basePath),
+        httpServer: shared.server,
       },
       cleanup: async () => {
-        await new Promise<void>((resolve) => server.close(() => resolve()));
-        httpApp.removeAllListeners();
+        await releaseSharedServer(port, shared);
       },
     };
   },
 };
+
+async function getOrCreateSharedServer(port: number, config: HttpInputConfig, logger: RuleLoomLogger): Promise<SharedHttpServer> {
+  if (port !== 0) {
+    const existing = sharedServers.get(port);
+    if (existing) {
+      existing.refs += 1;
+      return existing;
+    }
+  }
+  const app = express();
+  configureHttpApp(app, config);
+  const server = http.createServer(app);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, () => {
+      server.off('error', reject);
+      logger.debug?.(`HTTP shared server bound on port ${actualPort(server, port)}`);
+      resolve();
+    });
+  });
+  const shared = { app, server, refs: 1 };
+  if (port !== 0) {
+    sharedServers.set(port, shared);
+  }
+  return shared;
+}
+
+async function releaseSharedServer(port: number, sharedForEphemeral?: SharedHttpServer): Promise<void> {
+  if (port === 0) {
+    if (sharedForEphemeral) {
+      await new Promise<void>((resolve) => sharedForEphemeral.server.close(() => resolve()));
+      sharedForEphemeral.app.removeAllListeners();
+    }
+    return;
+  }
+  const shared = sharedServers.get(port);
+  if (!shared) return;
+  shared.refs -= 1;
+  if (shared.refs > 0) return;
+  sharedServers.delete(port);
+  await new Promise<void>((resolve) => shared.server.close(() => resolve()));
+  shared.app.removeAllListeners();
+}
+
+function actualPort(server: http.Server, fallback: number) {
+  const address = server.address();
+  return typeof address === 'object' && address ? address.port : fallback;
+}

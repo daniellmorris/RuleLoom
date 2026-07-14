@@ -7,6 +7,20 @@
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./closureRegistry": {
+      "import": "./dist/closureRegistry.js",
+      "types": "./dist/closureRegistry.d.ts"
+    },
+    "./pluginLoader": {
+      "import": "./dist/pluginLoader.js",
+      "types": "./dist/pluginLoader.d.ts"
+    }
+  },
   "files": [
     "dist",
     "config"

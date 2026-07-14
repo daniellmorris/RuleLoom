@@ -35,6 +35,12 @@ export interface ClosureParameterDefinition {
   skipTemplateResolution?: boolean;
   /** Nested parameter definitions for array/object values (e.g., shape of array items or object fields). */
   children?: ClosureParameterDefinition[];
+  /** Optional UI display label for connector-like parameters. */
+  label?: string;
+  /** Optional UI label template for dynamic connectors, e.g. "{itemLabel} {name}". */
+  labelTemplate?: string;
+  /** Optional array item key used for dynamic connector labels. */
+  itemLabelKey?: string;
 }
 
 export interface ClosureReturnDefinition {
@@ -53,6 +59,9 @@ export interface ClosureSignature {
 
 export interface ClosureDefinition {
   name: string;
+  namespace?: string;
+  version?: string;
+  aliases?: string[];
   handler: ClosureHandler;
   description?: string;
   metadata?: Record<string, unknown>;
@@ -92,6 +101,20 @@ export interface FlowDefinition {
 export interface EngineOptions {
   closures?: ClosureDefinition[];
   flows?: FlowDefinition[];
+}
+
+export function canonicalClosureName(definition: Pick<ClosureDefinition, 'name' | 'namespace'>): string {
+  const name = definition.name.trim();
+  const namespace = definition.namespace?.trim();
+  if (!namespace || name.startsWith(`${namespace}.`)) {
+    return name;
+  }
+  return `${namespace}.${name}`;
+}
+
+export function closureLookupNames(definition: Pick<ClosureDefinition, 'name' | 'namespace' | 'aliases'>): string[] {
+  const canonical = canonicalClosureName(definition);
+  return Array.from(new Set([canonical, definition.name, ...(definition.aliases ?? [])].filter(Boolean)));
 }
 
 export interface ExecutionResult {
@@ -153,6 +176,7 @@ export interface Recorder {
 
 export class RuleLoomEngine {
   private closures = new Map<string, ClosureDefinition>();
+  private closureAliases = new Map<string, string>();
   private implicitClosures: ClosureDefinition[] = [];
   private flows = new Map<string, FlowDefinition>();
 
@@ -166,13 +190,25 @@ export class RuleLoomEngine {
   }
 
   registerClosure(definition: ClosureDefinition): void {
-    if (this.closures.has(definition.name)) {
-      throw new Error(`Closure named "${definition.name}" is already registered.`);
+    const canonical = canonicalClosureName(definition);
+    if (this.closures.has(canonical)) {
+      throw new Error(`Closure named "${canonical}" is already registered.`);
     }
-    this.closures.set(definition.name, definition);
+
+    const stored = canonical === definition.name ? definition : { ...definition, name: canonical };
+    const aliases = closureLookupNames(definition).filter((name) => name !== canonical);
+    for (const alias of aliases) {
+      const existing = this.resolveClosureName(alias);
+      if (existing && existing !== canonical) {
+        throw new Error(`Closure alias "${alias}" is already registered for "${existing}".`);
+      }
+    }
+
+    this.closures.set(canonical, stored);
+    aliases.forEach((alias) => this.closureAliases.set(alias, canonical));
 
     if (definition.implicitFields && definition.implicitFields.length) {
-      this.implicitClosures.push(definition);
+      this.implicitClosures.push(stored);
     }
   }
 
@@ -196,7 +232,8 @@ export class RuleLoomEngine {
   }
 
   getClosure(name: string): ClosureDefinition | undefined {
-    return this.closures.get(name);
+    const resolved = this.resolveClosureName(name);
+    return resolved ? this.closures.get(resolved) : undefined;
   }
 
   getImplicitClosures(): ClosureDefinition[] {
@@ -312,7 +349,7 @@ export class RuleLoomEngine {
   ): Promise<boolean> {
     const list = Array.isArray(conditions) ? conditions : [conditions];
     for (const condition of list) {
-      const closure = this.closures.get(condition.closure);
+      const closure = this.getClosure(condition.closure);
       if (!closure) {
         throw new Error(`Condition closure "${condition.closure}" is not registered.`);
       }
@@ -349,7 +386,7 @@ export class RuleLoomEngine {
       throw new Error('invokeStep requires a closure name.');
     }
 
-    const closure = this.closures.get(step.closure);
+    const closure = this.getClosure(step.closure);
     if (!closure) {
       throw new Error(`Closure "${step.closure}" is not registered.`);
     }
@@ -553,7 +590,7 @@ export class RuleLoomEngine {
       throw new Error('$call requires either a name or steps array.');
     }
 
-    const target = this.closures.get(ref.name);
+    const target = this.getClosure(ref.name);
     if (!target) {
       throw new Error(`Referenced closure "${ref.name}" is not registered.`);
     }
@@ -565,6 +602,13 @@ export class RuleLoomEngine {
       runtime,
     };
     return target.handler(state, context);
+  }
+
+  private resolveClosureName(name: string): string | undefined {
+    if (this.closures.has(name)) {
+      return name;
+    }
+    return this.closureAliases.get(name);
   }
 }
 

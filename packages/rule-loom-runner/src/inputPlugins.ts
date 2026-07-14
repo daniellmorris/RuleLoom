@@ -13,6 +13,7 @@ export async function initializeInputs(
   inputs: BaseInputConfig[],
   engine: RuleLoomEngine,
   logger: RuleLoomLogger,
+  namespace: string | undefined,
   metadata: Record<string, unknown> | undefined,
   events: EventEmitter,
 ): Promise<InitializedInputs> {
@@ -25,7 +26,7 @@ export async function initializeInputs(
     if (!plugin) {
       throw new Error(`No input plugin registered for type "${(input as any).type}".`);
     }
-    const context: InputPluginContext = { logger, engine, metadata, events };
+    const context: InputPluginContext = { logger, engine, namespace, metadata, events };
     const result = await plugin.initialize(input as any, context);
     if (result?.services) {
       Object.assign(services, result.services);

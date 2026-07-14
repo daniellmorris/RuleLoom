@@ -56,7 +56,7 @@ export function puckDataToLayout(data: PuckData): PuckLayout {
   const shell = (data.content ?? []).find((node) => node?.type === 'Shell');
   const props = (shell?.props as any) ?? {};
 
-  const regions: LayoutRegion[] = regionIds.map((regionId) => {
+  const regions: LayoutRegion[] = regionIds.flatMap((regionId) => {
     const blocks: PuckBlockDescriptor[] = (props[regionId] ?? []).map((child: any) => {
       const childProps = child?.props ?? {};
       return {
@@ -67,11 +67,13 @@ export function puckDataToLayout(data: PuckData): PuckLayout {
       };
     });
 
-    return {
+    if (blocks.length === 0) return [];
+
+    return [{
       id: regionId,
       label: props?.label,
       blocks
-    } satisfies LayoutRegion;
+    } satisfies LayoutRegion];
   });
 
   return { version: 1, regions };

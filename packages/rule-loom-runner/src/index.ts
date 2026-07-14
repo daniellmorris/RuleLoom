@@ -82,6 +82,7 @@ export async function createRunner(configPath: string): Promise<RunnerInstance> 
     config.inputs as BaseInputConfig[],
     engine,
     logger,
+    config.namespace,
     config.metadata,
     events,
   );

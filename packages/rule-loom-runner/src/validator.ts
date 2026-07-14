@@ -1,4 +1,4 @@
-import type { ClosureDefinition, ClosureSignature, FlowDefinition, FlowInvokeStep, ConditionDefinition } from 'rule-loom-engine';
+import { closureLookupNames, type ClosureDefinition, type ClosureSignature, type FlowDefinition, type FlowInvokeStep, type ConditionDefinition } from 'rule-loom-engine';
 import type { RunnerConfig } from './config.js';
 import type { BaseInputConfig } from './pluginApi.js';
 
@@ -39,16 +39,53 @@ export function validateRunnerConfig(config: RunnerConfig, closures: ClosureDefi
       });
       continue;
     }
-    signatureByClosure.set(closure.name, closure.signature);
+    for (const lookupName of closureLookupNames(closure)) {
+      signatureByClosure.set(lookupName, closure.signature);
+    }
   }
 
   validateInputTriggers(config.inputs ?? [], flowNames, issues);
+  validateInputInstances(config.inputs ?? [], issues);
 
   for (const flow of config.flows ?? []) {
     validateFlow(flow, signatureByClosure, implicitClosures, issues);
   }
 
   return { valid: issues.every((issue) => issue.level !== 'error'), issues };
+}
+
+function validateInputInstances(inputs: BaseInputConfig[], issues: ValidationIssue[]) {
+  const byType = new Map<string, BaseInputConfig[]>();
+  inputs.forEach((input) => {
+    const type = (input as any).type;
+    if (!type) return;
+    byType.set(type, [...(byType.get(type) ?? []), input]);
+  });
+
+  for (const [type, instances] of byType.entries()) {
+    if (instances.length <= 1) continue;
+    const seen = new Set<string>();
+    instances.forEach((input) => {
+      const idx = inputs.indexOf(input);
+      const id = input.id;
+      if (!id || typeof id !== 'string') {
+        issues.push({
+          level: 'error',
+          message: `Input type "${type}" has multiple instances; each instance must provide a unique "id".`,
+          path: `inputs[${idx}]`,
+        });
+        return;
+      }
+      if (seen.has(id)) {
+        issues.push({
+          level: 'error',
+          message: `Input type "${type}" has duplicate instance id "${id}".`,
+          path: `inputs[${idx}].id`,
+        });
+      }
+      seen.add(id);
+    });
+  }
 }
 
 function validateInputTriggers(inputs: BaseInputConfig[], flowNames: Set<string>, issues: ValidationIssue[]) {

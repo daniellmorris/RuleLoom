@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import defaultLayout from './config/layout.default.json';
 import { PluginApiProvider } from './state/pluginApi';
 import type { LayoutRegionId, PuckBlockDescriptor, PuckLayout } from './types/puckLayout';
-import type { ComponentRegistry, RegisteredBlock } from './utils/componentRegistry';
+import type { ComponentRegistry, RegisteredBlock, RegisteredExtension } from './utils/componentRegistry';
 import PuckLayoutEditor from './components/PuckLayoutEditor';
 
 interface AppProps {
@@ -47,6 +47,11 @@ const BlockRenderer: React.FC<BlockRendererProps> = ({ descriptor, registry, hos
   return <Component {...props} />;
 };
 
+const ExtensionRenderer: React.FC<{ extension: RegisteredExtension; hostProps: BlockHostProps }> = ({ extension, hostProps }) => {
+  const Component = extension.value as React.ComponentType<any>;
+  return <Component {...hostProps} pluginId={extension.pluginId} extensionName={extension.name} />;
+};
+
 const regionSort = (blocks: PuckBlockDescriptor[]) => [...blocks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
 const groupBlocksBySlot = (blocks: PuckBlockDescriptor[]) => {
@@ -86,6 +91,9 @@ const App: React.FC<AppProps> = ({ layout, registry, onReloadPlugins, pluginErro
   const hasSidebar = resolveRegionBlocks('sidebar').length > 0;
   const hasInspector = resolveRegionBlocks('inspector').length > 0;
   const shellClass = !hasSidebar && !hasInspector ? 'app-shell app-shell--wide' : 'app-shell';
+  const panelExtensions = useMemo(() => registry.extensions('panel'), [registry]);
+  const sidebarPanels = panelExtensions.filter((panel) => ['left', 'sidebar'].includes(String(panel.spec?.slot ?? '')));
+  const inspectorPanels = panelExtensions.filter((panel) => !['left', 'sidebar'].includes(String(panel.spec?.slot ?? '')));
 
   return (
     <PluginApiProvider>
@@ -105,6 +113,9 @@ const App: React.FC<AppProps> = ({ layout, registry, onReloadPlugins, pluginErro
                     <BlockRenderer key={`${slot}-${block.name}`} descriptor={block} registry={registry} hostProps={hostProps} />
                   ))}
                 </React.Fragment>
+              ))}
+              {sidebarPanels.map((panel) => (
+                <ExtensionRenderer key={`${panel.pluginId ?? 'plugin'}-${panel.name}`} extension={panel} hostProps={hostProps} />
               ))}
             </div>
           </div>
@@ -128,6 +139,9 @@ const App: React.FC<AppProps> = ({ layout, registry, onReloadPlugins, pluginErro
                   <BlockRenderer key={`${slot}-${block.name}`} descriptor={block} registry={registry} hostProps={hostProps} />
                 ))}
               </React.Fragment>
+            ))}
+            {inspectorPanels.map((panel) => (
+              <ExtensionRenderer key={`${panel.pluginId ?? 'plugin'}-${panel.name}`} extension={panel} hostProps={hostProps} />
             ))}
           </div>
         </aside>

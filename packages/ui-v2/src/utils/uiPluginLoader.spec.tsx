@@ -5,6 +5,8 @@ import type { PuckLayout } from '../types/puckLayout';
 import type { UiPluginSource } from '../types/uiPlugin';
 import { createComponentRegistry } from './componentRegistry';
 import { loadPlugins } from './uiPluginLoader';
+import { validateApp } from './validation';
+import { applyBeforeExport, applyBeforeImport } from '../components/ImportExport';
 
 const source: UiPluginSource = {
   repo: 'example/repo',
@@ -64,6 +66,89 @@ describe('ui plugin loader', () => {
     );
 
     expect(registry.resolve('Canvas')?.component).toBe(override);
+  });
+
+  it('registers extension slots and rejects unknown slot types', () => {
+    const registry = createComponentRegistry();
+    const Panel = () => null;
+    const Overlay = () => null;
+    const validator = { validate: () => [] };
+    const transformer = { beforeExport: (text: string) => `${text}\n# transformed` };
+
+    registry.registerPluginBlocks(
+      {
+        id: 'extensions-test',
+        version: '0.0.1',
+        blocks: [
+          { type: 'panel', name: 'Panel', module: 'plugin.js', spec: { export: 'Panel', slot: 'right' } },
+          { type: 'canvasOverlay', name: 'Overlay', module: 'plugin.js', spec: { export: 'Overlay' } },
+          { type: 'validator', name: 'Validator', module: 'plugin.js', spec: { export: 'validator' } },
+          { type: 'transformer', name: 'Transformer', module: 'plugin.js', spec: { export: 'transformer' } },
+        ]
+      },
+      { 'plugin.js': { Panel, Overlay, validator, transformer } }
+    );
+
+    expect(registry.extensions('panel')[0].value).toBe(Panel);
+    expect(registry.extensions('canvasOverlay')[0].value).toBe(Overlay);
+    expect(registry.extensions('validator')[0].value).toBe(validator);
+    expect(registry.extensions('transformer')[0].value).toBe(transformer);
+
+    expect(() =>
+      registry.registerPluginBlocks(
+        { id: 'bad-slot', version: '0.0.1', blocks: [{ type: 'unknownSlot', name: 'Bad', module: 'bad.js' }] },
+        { 'bad.js': { default: () => null } }
+      )
+    ).toThrow('unknown UI slot');
+  });
+
+  it('merges plugin validator issues and applies import/export transformers', () => {
+    const app: any = {
+      flows: [{ name: 'Demo', steps: [{ closure: 'core.log', parameters: {}, $meta: { id: 'node-1' } }] }],
+      closures: [],
+      inputs: []
+    };
+    const validator = {
+      validate: () => [
+        {
+          id: 'plugin-warning',
+          nodeId: 'node-1',
+          flowName: 'Demo',
+          field: 'plugin',
+          message: 'Plugin warning',
+          severity: 'warning',
+          kind: 'plugin',
+        },
+      ],
+    };
+    const result = validateApp(app, { closuresMeta: {}, inputsMeta: {} }, [validator as any]);
+
+    expect(result.byNodeId['node-1'].some((issue) => issue.id === 'plugin-warning')).toBe(true);
+    expect(app.flows[0].steps[0].parameters).toEqual({});
+
+    const transformer = {
+      beforeExport: (text: string) => `${text.trimEnd()}\n# exported`,
+      beforeImport: (text: string) => text.replace('# exported', '# imported'),
+    };
+
+    expect(applyBeforeExport('version: 1\n', [transformer], { app })).toContain('# exported');
+    expect(applyBeforeImport('version: 1\n# exported', [transformer])).toContain('# imported');
+  });
+
+  it('renders plugin panel extensions without adding them to the core layout', () => {
+    const registry = createComponentRegistry();
+    const PluginPanel = () => <div>Plugin panel mounted</div>;
+    registry.registerExtension({
+      name: 'PluginPanel',
+      type: 'panel',
+      pluginId: 'panel-test',
+      value: PluginPanel,
+      spec: { slot: 'right' }
+    });
+
+    const html = renderToString(<App registry={registry} />);
+
+    expect(html).toContain('Plugin panel mounted');
   });
 
   it('loads manifests and modules from npm-installed plugins', async () => {

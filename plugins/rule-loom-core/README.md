@@ -15,6 +15,10 @@
 | `core.includes` | Checks arrays/strings/object values for membership. |
 | `core.length` | Returns the length/size of arrays, strings, or objects. |
 | `core.for-each` | Iterates over a `collection` and runs inline `steps` for each item; exposes `state.currentItem` and `state.currentIndex`. |
+| `core.date-add` / `core.date-parse` / `core.date-format` | Date arithmetic, non-throwing parse results, and timezone-aware `Intl.DateTimeFormat` output. |
+| `core.string-replace` / `core.string-split` / `core.string-slugify` | Common string transforms with predictable empty-search and slug behavior. |
+| `core.collection-map` / `core.collection-filter` / `core.collection-reduce` | Collection pluck/filter/reduce helpers that preserve `false`, `0`, and empty string comparison values. |
+| `core.math-add` / `core.math-subtract` / `core.math-multiply` / `core.math-divide` / `core.math-round` | Numeric helpers for arithmetic and rounding. |
 
 ## Usage from Code
 

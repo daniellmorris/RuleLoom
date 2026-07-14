@@ -3,9 +3,23 @@ import yaml from "js-yaml";
 import { nanoid } from "../utils/id";
 import { walkFlow, type StepVisit } from "./walk";
 
-export type Meta = { x?: number; y?: number; w?: number; h?: number; color?: string; collapsed?: boolean; id?: string };
+export type Meta = {
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  color?: string;
+  collapsed?: boolean;
+  id?: string;
+  connectorLabels?: Record<string, string>;
+};
+export type CanvasNote = { id: string; x: number; y: number; text: string };
 export type StepWithMeta = any & { $meta?: Meta };
-export type FlowWithMeta = { name: string; steps: StepWithMeta[]; $meta?: { id?: string; x?: number; y?: number; disconnected?: { steps: StepWithMeta[] }[] } };
+export type FlowWithMeta = {
+  name: string;
+  steps: StepWithMeta[];
+  $meta?: { id?: string; x?: number; y?: number; disconnected?: { steps: StepWithMeta[] }[]; notes?: CanvasNote[] };
+};
 
 export type NodeIndexEntry = {
   id: string;
@@ -141,12 +155,17 @@ interface AppStore {
   removeConnection: (flowName: string, fromId: string, toId: string, label?: string) => OperationResult;
   deleteNode: (flowName: string, nodeId: string) => OperationResult;
   updateNodeUi: (flowName: string, nodeId: string, ui: Meta) => void;
+  addNote: (flowName: string, note?: Partial<Omit<CanvasNote, "id">>) => string | null;
+  updateNote: (flowName: string, noteId: string, patch: Partial<Omit<CanvasNote, "id">>) => void;
+  deleteNote: (flowName: string, noteId: string) => void;
   addDisconnected: (flowName: string, steps: StepWithMeta[]) => void;
   addTrigger: (type: string, flowName: string) => void;
   addClosureStep: (collection: "flows" | "closures", idx: number, closureName: string) => void;
   updateStepParam: (flowName: string, nodeId: string, key: string, value: any) => void;
   updateTriggerField: (triggerId: string, key: string, value: any) => void;
   updateInputConfig: (inputIdx: number, key: string, value: any) => void;
+  updateInputId: (inputIdx: number, id: string) => void;
+  removeInputInstance: (inputIdx: number) => void;
 }
 
 type OperationResult = { ok: true } | { ok: false; error: string };
@@ -160,7 +179,7 @@ const defaultState: AppState = {
     {
       name: "Flow 1",
       steps: [],
-      $meta: { id: nanoid(), x: 1000, y: 1000, disconnected: [] }
+      $meta: { id: nanoid(), x: 1000, y: 1000, disconnected: [], notes: [] }
     }
   ],
   dashboards: defaultDashboards,
@@ -173,6 +192,7 @@ function ensureFlowMeta(flow: FlowWithMeta) {
   flow.$meta.x = flow.$meta.x ?? 1000;
   flow.$meta.y = flow.$meta.y ?? 1000;
   flow.$meta.disconnected = flow.$meta.disconnected ?? [];
+  flow.$meta.notes = flow.$meta.notes ?? [];
 }
 
 function ensureStepMeta(step: StepWithMeta) {
@@ -225,10 +245,28 @@ function parse(text: string): AppState {
     ensureFlowMeta(f);
     seedIds(f.steps ?? []);
     (f?.$meta?.disconnected ?? []).forEach((d: any) => seedIds(d.steps ?? []));
+    f.$meta.notes = (f.$meta.notes ?? []).map((note: any) => ({
+      id: note.id ?? nanoid(),
+      x: typeof note.x === "number" ? note.x : 120,
+      y: typeof note.y === "number" ? note.y : 120,
+      text: typeof note.text === "string" ? note.text : ""
+    }));
   };
   (obj?.flows ?? []).forEach(seedFlow);
   (obj?.closures ?? []).forEach(seedFlow);
+  const inputTypeCounts = new Map<string, number>();
+  const inputIds = new Set<string>();
   (obj?.inputs ?? []).forEach((inp: any) => {
+    const type = inp?.type ?? "input";
+    const count = (inputTypeCounts.get(type) ?? 0) + 1;
+    inputTypeCounts.set(type, count);
+    if (!inp.id) {
+      inp.id = nextInputInstanceId(obj?.inputs ?? [], type, count);
+    }
+    while (inputIds.has(inp.id)) {
+      inp.id = nextInputInstanceId(obj?.inputs ?? [], type, count + inputIds.size);
+    }
+    inputIds.add(inp.id);
     inp.triggers = inp.triggers ?? [];
     inp.triggers.forEach((t: any, idx: number) => {
       t.$meta = t.$meta ?? {};
@@ -578,12 +616,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setFlows: (flows) => set((state) => ({ app: { ...state.app, flows } })),
   addFlow: (name = "New Flow") =>
     set((state) => {
-      const flows = [...state.app.flows, { name, steps: [], $meta: { id: nanoid(), x: 60, y: 120, disconnected: [] } }];
+      const flows = [...state.app.flows, { name, steps: [], $meta: { id: nanoid(), x: 60, y: 120, disconnected: [], notes: [] } }];
       return { app: { ...state.app, flows } };
     }),
   addClosure: (name = "New Closure") =>
     set((state) => {
-      const closures = [...state.app.closures, { name, steps: [], $meta: { id: nanoid(), x: 60, y: 120, disconnected: [] } }];
+      const closures = [...state.app.closures, { name, steps: [], $meta: { id: nanoid(), x: 60, y: 120, disconnected: [], notes: [] } }];
       return { app: { ...state.app, closures } };
     }),
   setCurrentDashboard: (id) =>
@@ -871,6 +909,59 @@ export const useAppStore = create<AppStore>((set, get) => ({
       });
       return { app: { ...state.app, [where.kind]: list } as AppState };
     }),
+  addNote: (flowName, note) => {
+    const noteId = nanoid();
+    let added = false;
+    set((state) => {
+      const where = findFlowOrClosure(state.app, flowName);
+      if (!where) return state;
+      const list = state.app[where.kind].map((f: FlowWithMeta, i: number) => {
+        if (i !== where.idx) return f;
+        const copy: FlowWithMeta = JSON.parse(JSON.stringify(f));
+        ensureFlowMeta(copy);
+        const nextNote: CanvasNote = {
+          id: noteId,
+          x: typeof note?.x === "number" ? note.x : 120,
+          y: typeof note?.y === "number" ? note.y : 120,
+          text: typeof note?.text === "string" ? note.text : ""
+        };
+        copy.$meta = { ...(copy.$meta ?? {}), notes: [...(copy.$meta?.notes ?? []), nextNote] };
+        added = true;
+        return copy;
+      });
+      return { app: { ...state.app, [where.kind]: list } as AppState };
+    });
+    return added ? noteId : null;
+  },
+  updateNote: (flowName, noteId, patch) =>
+    set((state) => {
+      const where = findFlowOrClosure(state.app, flowName);
+      if (!where) return state;
+      const list = state.app[where.kind].map((f: FlowWithMeta, i: number) => {
+        if (i !== where.idx) return f;
+        const copy: FlowWithMeta = JSON.parse(JSON.stringify(f));
+        ensureFlowMeta(copy);
+        copy.$meta = {
+          ...(copy.$meta ?? {}),
+          notes: (copy.$meta?.notes ?? []).map((note) => (note.id === noteId ? { ...note, ...patch, id: note.id } : note))
+        };
+        return copy;
+      });
+      return { app: { ...state.app, [where.kind]: list } as AppState };
+    }),
+  deleteNote: (flowName, noteId) =>
+    set((state) => {
+      const where = findFlowOrClosure(state.app, flowName);
+      if (!where) return state;
+      const list = state.app[where.kind].map((f: FlowWithMeta, i: number) => {
+        if (i !== where.idx) return f;
+        const copy: FlowWithMeta = JSON.parse(JSON.stringify(f));
+        ensureFlowMeta(copy);
+        copy.$meta = { ...(copy.$meta ?? {}), notes: (copy.$meta?.notes ?? []).filter((note) => note.id !== noteId) };
+        return copy;
+      });
+      return { app: { ...state.app, [where.kind]: list } as AppState };
+    }),
   addDisconnected: (flowName, steps) =>
     set((state) => {
       const flows = state.app.flows.map((f) => {
@@ -885,14 +976,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
   addTrigger: (type, flowName) =>
     set((state) => {
       const inputs = state.app.inputs.map((i) => ({ ...i, triggers: i.triggers ? [...i.triggers] : [] }));
-      let target = inputs.find((i) => i.type === type);
-      if (!target) {
-        target = { type, config: {}, triggers: [] as any[] };
-        inputs.push(target);
-      }
+      const instanceIndex = inputs.filter((i) => i.type === type).length + 1;
+      const target = { type, id: nextInputInstanceId(inputs, type, instanceIndex), config: {}, triggers: [] as any[] };
+      inputs.push(target);
       target.triggers = [
         ...(target.triggers ?? []),
-        { flow: flowName, $meta: { id: nanoid(), x: 40, y: 160 + (target.triggers?.length ?? 0) * 90 } }
+        { flow: flowName, $meta: { id: nanoid(), x: 40, y: 160 + (inputs.length - 1) * 120 } }
       ];
       return { app: { ...state.app, inputs } };
     }),
@@ -949,7 +1038,32 @@ export const useAppStore = create<AppStore>((set, get) => ({
       inputs[inputIdx] = { ...inputs[inputIdx], config: cfg };
       return { app: { ...state.app, inputs } };
     }),
+  updateInputId: (inputIdx, id) =>
+    set((state) => {
+      const inputs = JSON.parse(JSON.stringify(state.app.inputs ?? []));
+      if (!inputs[inputIdx]) return state;
+      inputs[inputIdx] = { ...inputs[inputIdx], id };
+      return { app: { ...state.app, inputs } };
+    }),
+  removeInputInstance: (inputIdx) =>
+    set((state) => {
+      const inputs = JSON.parse(JSON.stringify(state.app.inputs ?? []));
+      if (!inputs[inputIdx]) return state;
+      inputs.splice(inputIdx, 1);
+      return { app: { ...state.app, inputs } };
+    }),
 }));
+
+function nextInputInstanceId(inputs: any[], type: string, preferredIndex: number): string {
+  const existing = new Set(inputs.map((input) => input?.id).filter(Boolean));
+  let idx = preferredIndex;
+  let candidate = `${type}-${idx}`;
+  while (existing.has(candidate)) {
+    idx += 1;
+    candidate = `${type}-${idx}`;
+  }
+  return candidate;
+}
 
 const SLOT_X = 240;
 const SLOT_Y = 160;

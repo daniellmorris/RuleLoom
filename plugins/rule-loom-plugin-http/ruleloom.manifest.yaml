@@ -19,7 +19,7 @@ closures:
           type: string
           description: Override base URL for this invocation.
         - name: headers
-          type: object
+          type: any
           description: Additional request headers.
         - name: body
           type: any

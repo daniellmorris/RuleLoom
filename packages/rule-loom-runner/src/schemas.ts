@@ -22,6 +22,7 @@ const invokeStepSchema = z
     assign: z.string().min(1).optional(),
     mergeResult: z.boolean().optional(),
     when: whenSchema.optional(),
+    $meta: z.record(z.any()).optional(),
   })
   .passthrough()
   .superRefine((step, ctx) => {
@@ -33,7 +34,7 @@ const invokeStepSchema = z
     }
   })
   .transform((step) => {
-    const { type, closure, parameters, assign, mergeResult, when, ...rest } = step as any;
+    const { type, closure, parameters, assign, mergeResult, when, $meta, ...rest } = step as any;
     const computedParams: Record<string, unknown> = { ...(parameters ?? {}) };
 
     for (const [key, value] of Object.entries(rest)) {
@@ -52,19 +53,21 @@ const invokeStepSchema = z
       assign,
       mergeResult,
       when,
+      ...($meta ? { $meta } : {}),
     } satisfies FlowInvokeStep;
   });
 
 const branchCaseSchema = z.object({
   when: z.lazy(() => flowStepSchema.array().min(1)),
   then: z.lazy(() => flowStepSchema.array().min(1)),
-});
+}).passthrough();
 
 const rawBranchStepSchema = z
   .object({
     type: z.literal('branch').optional(),
     cases: z.array(branchCaseSchema).min(1),
     otherwise: z.lazy(() => flowStepSchema.array()).optional(),
+    $meta: z.record(z.any()).optional(),
   })
   .superRefine((value, ctx) => {
     if ('closure' in (value as Record<string, unknown>)) {
@@ -85,6 +88,7 @@ const branchStepSchema = rawBranchStepSchema.transform((step) => ({
   type: 'branch' as const,
   cases: step.cases,
   otherwise: step.otherwise,
+  ...(step.$meta ? { $meta: step.$meta } : {}),
 })) as unknown as z.ZodType<FlowBranchStep>;
 
 flowStepSchema = z.union([

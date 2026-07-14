@@ -11,6 +11,9 @@ import type { PluginRegistrationContext, RuleLoomPlugin } from './pluginLoader.j
 
 export interface RuleLoomManifestClosure {
   name: string;
+  namespace?: string;
+  version?: string;
+  aliases?: string[];
   description?: string;
   signature?: ClosureSignature;
   implicitFields?: string[];
@@ -50,8 +53,8 @@ function createSilentLogger() {
 }
 
 function sanitizeClosure(closure: ClosureDefinition): RuleLoomManifestClosure {
-  const { name, description, signature, implicitFields, metadata } = closure;
-  return { name, description, signature, implicitFields, metadata };
+  const { name, namespace, version, aliases, description, signature, implicitFields, metadata } = closure;
+  return { name, namespace, version, aliases, description, signature, implicitFields, metadata };
 }
 
 function sanitizeInputPlugin(plugin: InputPlugin<BaseInputConfig>): RuleLoomManifestInputPlugin {

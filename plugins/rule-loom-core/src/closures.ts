@@ -2,6 +2,8 @@ import _ from 'lodash';
 import type { ClosureDefinition, FlowBranchCase, FlowStep } from 'rule-loom-engine';
 import RuleLoomEngine from 'rule-loom-engine';
 import type { RuleLoomLogger } from 'rule-loom-lib';
+import { callRuleLoomRunner, type RunnerCallResponse } from './runnerClient.js';
+import { createUtilityClosures } from './utilityClosures.js';
 
 export function coreAssignClosure(): ClosureDefinition {
   return {
@@ -292,8 +294,11 @@ export function coreBranchClosure(): ClosureDefinition {
           type: 'array',
           skipTemplateResolution: true,
           required: true,
+          itemLabelKey: 'label',
+          labelTemplate: '{itemLabel} {name}',
           description: 'Array of branch cases; each entry must include `when: FlowStep[]` and `then: FlowStep[]`.',
           children: [
+            { name: 'label', type: 'string', required: false, description: 'Optional UI label for this branch case.' },
             { name: 'when', type: 'flowSteps', required: true, description: 'Step array evaluated for truthiness (last result).' },
             { name: 'then', type: 'flowSteps', required: true, description: 'Step array executed when `when` is truthy.' },
           ],
@@ -306,6 +311,69 @@ export function coreBranchClosure(): ClosureDefinition {
       ],
       returns: { type: 'any', description: 'Result of the executed branch steps.' },
     },
+  };
+}
+
+export function coreRunnerCallClosure(): ClosureDefinition {
+  return {
+    name: 'core.runner-call',
+    handler: async (state: any, context: any) => {
+      const params = context.parameters ?? {};
+      const flow = params.flow as string | undefined;
+      if (!flow) {
+        throw new Error('core.runner-call requires a "flow" parameter.');
+      }
+      const response = await callRuleLoomRunner({
+        url: params.url as string | undefined,
+        host: params.host as string | undefined,
+        flow,
+        state: params.state,
+        payload: params.payload,
+        auth: params.auth as any,
+        timeoutMs: params.timeoutMs as number | undefined,
+        retries: params.retries as number | undefined,
+        simulate: params.simulate as boolean | undefined,
+        trace: params.trace as boolean | undefined,
+      });
+      mergeRunnerState(state, response, params.mergeState);
+      return response;
+    },
+    signature: {
+      description: 'Invokes another RuleLoom runner through its HTTP runner endpoint.',
+      parameters: [
+        { name: 'url', type: 'string', description: 'Full runner endpoint URL. If omitted, host + /__ruleloom/run is used.' },
+        { name: 'host', type: 'string', description: 'Runner host/base URL used to build /__ruleloom/run.' },
+        { name: 'flow', type: 'string', required: true, description: 'Downstream flow name to execute.' },
+        { name: 'state', type: 'any', description: 'Initial downstream state. Takes precedence over payload.' },
+        { name: 'payload', type: 'any', description: 'Convenience payload stored as downstream state.payload.' },
+        { name: 'auth', type: 'any', description: 'Bearer token string or auth/header object.' },
+        { name: 'timeoutMs', type: 'number', description: 'Request timeout in milliseconds. Defaults to 5000.' },
+        { name: 'retries', type: 'number', description: 'Number of retry attempts after the initial request.' },
+        { name: 'simulate', type: 'boolean', description: 'Ask the downstream runner to execute in simulation mode when supported.' },
+        { name: 'trace', type: 'boolean', description: 'Ask the downstream runner to return recorder trace. Defaults to true.' },
+        { name: 'mergeState', type: 'any', description: 'true to merge downstream state into current state, or a state path to store it.' },
+      ],
+      returns: { type: 'object', description: 'Downstream runner response with state, lastResult, and optional trace.' },
+    },
+  };
+}
+
+function mergeRunnerState(state: any, response: RunnerCallResponse, mergeState: unknown): void {
+  if (!mergeState || !response.state || typeof response.state !== 'object') return;
+  if (mergeState === true) {
+    _.merge(state, response.state);
+    return;
+  }
+  if (typeof mergeState === 'string') {
+    _.set(state, mergeState, response.state);
+  }
+}
+
+function withCoreNamespace(closure: ClosureDefinition): ClosureDefinition {
+  return {
+    ...closure,
+    namespace: closure.namespace ?? 'core',
+    version: closure.version ?? '0.1.0',
   };
 }
 
@@ -322,5 +390,7 @@ export function createCoreClosures(): ClosureDefinition[] {
     coreLengthClosure(),
     coreForEachClosure(),
     coreBranchClosure(),
-  ];
+    coreRunnerCallClosure(),
+    ...createUtilityClosures(),
+  ].map(withCoreNamespace);
 }

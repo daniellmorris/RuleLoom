@@ -21,6 +21,41 @@
         "order": 20,
         "export": "SampleInspectorSection"
       }
+    },
+    {
+      "type": "panel",
+      "name": "SampleRightRailPanel",
+      "module": "packages/ui-v2/examples/ui-plugin-sample/dist/plugin.js",
+      "spec": {
+        "slot": "right",
+        "order": 30,
+        "export": "SampleRightRailPanel"
+      }
+    },
+    {
+      "type": "canvasOverlay",
+      "name": "SampleCanvasOverlay",
+      "module": "packages/ui-v2/examples/ui-plugin-sample/dist/plugin.js",
+      "spec": {
+        "order": 10,
+        "export": "SampleCanvasOverlay"
+      }
+    },
+    {
+      "type": "validator",
+      "name": "SampleValidator",
+      "module": "packages/ui-v2/examples/ui-plugin-sample/dist/plugin.js",
+      "spec": {
+        "export": "SampleValidator"
+      }
+    },
+    {
+      "type": "transformer",
+      "name": "SampleTransformer",
+      "module": "packages/ui-v2/examples/ui-plugin-sample/dist/plugin.js",
+      "spec": {
+        "export": "SampleTransformer"
+      }
     }
   ],
   "source": {

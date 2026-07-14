@@ -4,6 +4,9 @@ import { useAppStore } from "../state/appStore";
 import { useCatalogStore } from "../state/catalogStore";
 import { buildGraph } from "../utils/graph";
 import { buildNodeIndex } from "../state/appStore";
+import { validateApp, type ValidationIssue } from "../utils/validation";
+import { buildConnectorsForNode } from "../utils/connectors";
+import type { ComponentRegistry } from "../utils/componentRegistry";
 import yaml from "js-yaml";
 
 type ParamMeta = { name: string; type?: string; required?: boolean; enum?: string[]; children?: ParamMeta[]; skipTemplateResolution?: boolean };
@@ -38,18 +41,27 @@ function findTriggerById(app: any, flowName: string | undefined, triggerId: stri
   return null;
 }
 
-const Inspector: React.FC = () => {
+const Inspector: React.FC<{ registry?: ComponentRegistry }> = ({ registry }) => {
   const selection = useFlowStore((s) => s.selection.nodeId);
   const app = useAppStore((s) => s.app);
   const mode = useFlowStore((s) => s.activeMode);
   const flowIdx = useFlowStore((s) => (s.activeMode === "flow" ? s.activeFlowId : s.activeClosureId));
   const updateStepParam = useAppStore((s) => s.updateStepParam);
+  const updateNodeUi = useAppStore((s) => s.updateNodeUi);
   const updateTriggerField = useAppStore((s) => s.updateTriggerField);
   const updateInputConfig = useAppStore((s) => s.updateInputConfig);
+  const updateInputId = useAppStore((s) => s.updateInputId);
+  const removeInputInstance = useAppStore((s) => s.removeInputInstance);
   const catalog = useCatalogStore((s) => s);
   const flow = mode === "flow" ? app.flows[flowIdx] ?? app.flows[0] : app.closures[flowIdx] ?? app.closures[0];
   const graph = flow ? buildGraph(flow as any, app.inputs) : { pathById: {} as Record<string, string>, nodes: [] as any[] };
   const nodeIndex = flow ? buildNodeIndex(flow as any) : { byId: {}, idByPath: {}, pathById: {} };
+  const pluginValidators = React.useMemo(() => registry?.extensions("validator").map((entry) => entry.value) ?? [], [registry]);
+  const validation = React.useMemo(
+    () => validateApp(app, { closuresMeta: catalog.closuresMeta, inputsMeta: catalog.inputsMeta }, pluginValidators),
+    [app, catalog.closuresMeta, catalog.inputsMeta, pluginValidators]
+  );
+  const selectedIssues = selection ? validation.byNodeId[selection] ?? [] : [];
 
   if (!selection || !flow) {
     return (
@@ -73,14 +85,33 @@ const Inspector: React.FC = () => {
 
     return (
       <div className="panel">
-        <h3>Input: {input?.type}</h3>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3>Input: {input?.type}</h3>
+          <button
+            className="button tertiary"
+            style={{ padding: "4px 8px" }}
+            onClick={() => removeInputInstance(inputIdx)}
+          >
+            Delete instance
+          </button>
+        </div>
         <div className="stack" style={{ gap: 8 }}>
+          <ValidationIssueList issues={selectedIssues} />
+          <strong>Instance</strong>
+          <ParamRow
+            param={{ name: "id", type: "string", required: true }}
+            value={input?.id ?? ""}
+            onValue={(val) => updateInputId(inputIdx, val)}
+            onCallToggle={() => null}
+            onInitFlowSteps={() => null}
+          />
           <strong>Config</strong>
           {configParams.map((p) => (
             <ParamRow
               key={p.name}
               param={p}
               value={input?.config?.[p.name]}
+              issue={findIssue(selectedIssues, `config.${p.name}`)}
               onValue={(val) => updateInputConfig(inputIdx, p.name, val)}
               onCallToggle={() => null}
               onInitFlowSteps={() => null}
@@ -92,6 +123,7 @@ const Inspector: React.FC = () => {
               key={p.name}
               param={p}
               value={trigger?.[p.name]}
+              issue={findIssue(selectedIssues, `trigger.${p.name}`)}
               onValue={p.name === "flow" || p.type === "flow" ? () => null : (val) => updateTriggerField(selection, p.name, val)}
               lockedValue={p.name === "flow" || p.type === "flow" ? currentFlowName : undefined}
               readOnly={p.name === "flow" || p.type === "flow"}
@@ -134,6 +166,14 @@ const Inspector: React.FC = () => {
     return { name, type: isFlow || isCallFlow ? "flowSteps" : "string" };
   });
   const params: ParamMeta[] = metaParams.length ? metaParams : fallbackParams;
+  const dynamicConnectors = node ? buildConnectorsForNode(node as any, meta).filter((connector) => connector.direction === "dynamic") : [];
+  const connectorLabels = step?.$meta?.connectorLabels ?? {};
+  const updateConnectorLabel = (connectorId: string, label: string) => {
+    const nextLabels = { ...connectorLabels };
+    if (label.trim()) nextLabels[connectorId] = label;
+    else delete nextLabels[connectorId];
+    updateNodeUi(flow.name, selection, { connectorLabels: nextLabels });
+  };
 
   return (
     <div className="panel">
@@ -143,11 +183,13 @@ const Inspector: React.FC = () => {
         <span className="badge" title={`Source: ${source}`}>{shortSourceLabel(source)}</span>
       </div>
       <div className="stack" style={{ gap: 8 }}>
+        <ValidationIssueList issues={selectedIssues} />
         {params.map((p) => (
           <ParamRow
             key={p.name}
             param={p}
             value={step?.parameters?.[p.name]}
+            issue={findIssue(selectedIssues, p.name)}
             onValue={(val) => updateStepParam(flow.name, selection, p.name, val)}
             onCallToggle={(enabled) =>
               updateStepParam(flow.name, selection, p.name, enabled ? { $call: "" } : "")
@@ -156,6 +198,22 @@ const Inspector: React.FC = () => {
             allowCall
           />
         ))}
+        {dynamicConnectors.length > 0 && (
+          <div className="stack" style={{ gap: 6, borderTop: "1px solid var(--panel-border)", paddingTop: 10 }}>
+            <strong>Connector labels</strong>
+            {dynamicConnectors.map((connector) => (
+              <div key={connector.id} className="stack" style={{ gap: 4 }}>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>{connector.id}</span>
+                <input
+                  className="input"
+                  value={connectorLabels[connector.id] ?? ""}
+                  placeholder={connector.label}
+                  onChange={(e) => updateConnectorLabel(connector.id, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -170,7 +228,8 @@ const ParamRow: React.FC<{
   allowCall?: boolean;
   readOnly?: boolean;
   lockedValue?: any;
-}> = ({ param, value, onValue, onCallToggle, onInitFlowSteps, allowCall, readOnly, lockedValue }) => {
+  issue?: ValidationIssue;
+}> = ({ param, value, onValue, onCallToggle, onInitFlowSteps, allowCall, readOnly, lockedValue, issue }) => {
   const isFlowSteps = param.type === "flowSteps";
   const isArray = param.type === "array";
   const isAny = param.type === "any";
@@ -231,6 +290,7 @@ const ParamRow: React.FC<{
                   key={child.name}
                   param={child}
                   value={item?.[child.name]}
+                  issue={undefined}
                   onValue={(val) => updateItem(idx, child.name, val)}
                   onCallToggle={(enabled) =>
                     updateItem(idx, child.name, enabled ? { $call: "" } : "")
@@ -286,11 +346,28 @@ const ParamRow: React.FC<{
         )}
       </div>
       {field}
+      {issue && <div className="validation-hint">{issue.message}</div>}
     </div>
   );
 };
 
 export default Inspector;
+
+const ValidationIssueList: React.FC<{ issues: ValidationIssue[] }> = ({ issues }) => {
+  const errors = issues.filter((issue) => issue.severity === "error");
+  if (errors.length === 0) return null;
+  return (
+    <div className="validation-summary">
+      {errors.map((issue) => (
+        <div key={issue.id}>{issue.message}</div>
+      ))}
+    </div>
+  );
+};
+
+function findIssue(issues: ValidationIssue[], field: string): ValidationIssue | undefined {
+  return issues.find((issue) => issue.field === field);
+}
 
 function createDefaultArrayItem(children: ParamMeta[]): any {
   if (!children || children.length === 0) return "";

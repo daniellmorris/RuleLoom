@@ -1,0 +1,66 @@
+version: 1
+plugins:
+  - source: file
+    path: ../../../plugins/rule-loom-core
+inputs: []
+flows:
+  - name: yaml-test-flow
+    steps:
+      - closure: core.assign
+        parameters:
+          target: payload
+          value: "${state.request.body}"
+        $meta:
+          id: assign-payload
+      - closure: core.length
+        parameters:
+          target: payload.items
+        assign: itemCount
+        $meta:
+          id: count-items
+      - closure: core.respond
+        parameters:
+          status: 200
+          body:
+            ok: true
+            count: "${state.itemCount}"
+            echoed: "${state.payload.name}"
+        $meta:
+          id: respond-ok
+tests:
+  - name: mocks closure output and asserts response
+    flow: yaml-test-flow
+    state:
+      request:
+        body:
+          name: sample
+          items:
+            - a
+            - b
+    mocks:
+      - name: core.length
+        id: count-items
+        output: 7
+    expect:
+      nodes:
+        - id: count-items
+          output: 7
+          state:
+            itemCount: 7
+        - id: respond-ok
+          output:
+            status: 200
+            body:
+              ok: true
+              count: 7
+              echoed: sample
+      response:
+        status: 200
+        body:
+          ok: true
+          count: 7
+          echoed: sample
+      state:
+        itemCount: 7
+        payload:
+          name: sample

@@ -12,6 +12,7 @@ export interface BaseInputConfig {
 export interface InputPluginContext {
   engine: RuleLoomEngine;
   logger: RuleLoomLogger;
+  namespace?: string;
   metadata?: Record<string, unknown>;
   events: EventEmitter;
 }

@@ -84,11 +84,11 @@ export function buildGraph(flow: FlowWithMeta, inputs: any[] = []): GraphBuild {
       nodes.push({
         id,
         kind: "input",
-        label: inp.type,
+        label: inp.id ? `${inp.type}:${inp.id}` : inp.type,
         x: trigMeta.x ?? 40,
         y: trigMeta.y ?? 160 + ti * 80,
         connectors: [{ id: "next", label: "next", direction: "next" }],
-        data: { config: inp.config ?? {}, trigger: tr, ui: trigMeta }
+        data: { config: inp.config ?? {}, trigger: tr, ui: trigMeta, inputType: inp.type, inputId: inp.id }
       });
       edges.push({ id: nanoid(), from: id, to: startId, kind: "control", label: "next" });
     });

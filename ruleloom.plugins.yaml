@@ -15,10 +15,10 @@ plugins:
     name: "Scheduler Input"
     description: "Bree-backed scheduler input plugin."
     manifest: plugins/rule-loom-plugin-scheduler/ruleloom.manifest.yaml
-  - id: openai
-    name: "OpenAI"
-    description: "OpenAI API closures."
-    manifest: plugins/rule-loom-plugin-openai/ruleloom.manifest.yaml
+  - id: ai
+    name: "AI"
+    description: "Provider-neutral AI generation, extraction, classification, and embedding closures."
+    manifest: plugins/rule-loom-plugin-ai/ruleloom.manifest.yaml
   - id: slack
     name: "Slack"
     description: "Slack message closures."

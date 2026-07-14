@@ -6,6 +6,9 @@ import { useCatalogStore } from "../state/catalogStore";
 import { buildGraph } from "../utils/graph";
 import { getNodeColor } from "../styles/palette";
 import { Connector, Edge, Node } from "../types";
+import { validateApp } from "../utils/validation";
+import { buildConnectorsForNode } from "../utils/connectors";
+import type { ComponentRegistry } from "../utils/componentRegistry";
 
 const NODE_WIDTH = 180;
 const NODE_MAX_WIDTH = 360;
@@ -14,7 +17,7 @@ const CANVAS_PADDING = 800;
 const NODE_MIN_HEIGHT = 80;
 const CONNECTOR_COLORS = ["#7dd3fc", "#fbbf24", "#a78bfa", "#34d399", "#f87171", "#38bdf8"];
 
-const Canvas: React.FC = () => {
+const Canvas: React.FC<{ registry?: ComponentRegistry }> = ({ registry }) => {
   const app = useAppStore((s) => s.app);
   const mode = useFlowStore((s) => s.activeMode);
   const activeFlowIdx = useFlowStore((s) => s.activeFlowId);
@@ -29,7 +32,14 @@ const Canvas: React.FC = () => {
   const moveStepChainAfter = useAppStore((s) => s.moveStepChainAfter);
   const removeConnection = useAppStore((s) => s.removeConnection);
   const deleteNode = useAppStore((s) => s.deleteNode);
+  const addNote = useAppStore((s) => s.addNote);
+  const updateNote = useAppStore((s) => s.updateNote);
+  const deleteNote = useAppStore((s) => s.deleteNote);
   const closuresMeta = useCatalogStore((s) => s.closuresMeta);
+  const inputsMeta = useCatalogStore((s) => s.inputsMeta);
+  const pluginValidators = React.useMemo(() => registry?.extensions("validator").map((entry) => entry.value) ?? [], [registry]);
+  const validation = React.useMemo(() => validateApp(app, { closuresMeta, inputsMeta }, pluginValidators), [app, closuresMeta, inputsMeta, pluginValidators]);
+  const overlays = React.useMemo(() => registry?.extensions("canvasOverlay") ?? [], [registry]);
 
   const [pan, setPan] = useState({ x: -900, y: -900 });
   const [scale, setScale] = useState(1);
@@ -38,6 +48,7 @@ const Canvas: React.FC = () => {
   const errorTimer = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
+  const noteDragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null);
   const panningRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   const linkRef = useRef<{ fromId: string; connectorId: string; color: string }>({ fromId: "", connectorId: "", color: "" });
 
@@ -67,10 +78,17 @@ const Canvas: React.FC = () => {
   const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     // pan when background drag (no node)
     if ((e.target as HTMLElement).dataset.nodeId) return;
+    if ((e.target as HTMLElement).closest("[data-note-id]")) return;
     panningRef.current = { startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y };
   };
 
   const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (noteDragRef.current && flow) {
+      const { id, offsetX, offsetY } = noteDragRef.current;
+      const wp = worldPos(e.clientX, e.clientY);
+      updateNote(flow.name, id, { x: wp.x - offsetX, y: wp.y - offsetY });
+      return;
+    }
     if (dragRef.current) {
       const { id, offsetX, offsetY } = dragRef.current;
       const wp = worldPos(e.clientX, e.clientY);
@@ -92,6 +110,7 @@ const Canvas: React.FC = () => {
 
   const onMouseUp = () => {
     dragRef.current = null;
+    noteDragRef.current = null;
     panningRef.current = null;
     linkRef.current = { fromId: "", connectorId: "", color: "" };
     setGhost(null);
@@ -109,6 +128,16 @@ const Canvas: React.FC = () => {
   const offsetY = -minY;
   const width = Math.max(...nodes.map((n) => n.x + (widthByNode[n.id] ?? NODE_WIDTH)), 1200) + offsetX + CANVAS_PADDING;
   const height = Math.max(...nodes.map((n) => n.y + NODE_MIN_HEIGHT), 720) + offsetY + CANVAS_PADDING;
+  const notes = flow?.$meta?.notes ?? [];
+
+  const addNoteAtViewportCenter = () => {
+    if (!flow) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    const centerX = rect ? rect.left + rect.width / 2 : 0;
+    const centerY = rect ? rect.top + rect.height / 2 : 0;
+    const pos = worldPos(centerX, centerY);
+    addNote(flow.name, { x: pos.x - 90, y: pos.y - 60, text: "" });
+  };
 
   function clampPan(next: { x: number; y: number }, customScale?: number) {
     const viewportW = containerRef.current?.clientWidth ?? 0;
@@ -145,7 +174,7 @@ const Canvas: React.FC = () => {
   // Precompute connectors per node for edge anchoring
   const connectorsByNode: Record<string, Connector[]> = {};
   nodes.forEach((n) => {
-    connectorsByNode[n.id] = buildConnectors(n, closuresMeta[n.data?.closureName ?? ""]);
+    connectorsByNode[n.id] = buildConnectorsForNode(n, closuresMeta[n.data?.closureName ?? ""]);
   });
 
   useEffect(() => {
@@ -216,11 +245,14 @@ const Canvas: React.FC = () => {
           const nodeWidth = widthByNode[node.id] ?? NODE_WIDTH;
           const connectors = connectorsByNode[node.id] ?? [];
           const nodeHeight = Math.max(NODE_MIN_HEIGHT, 60 + connectors.length * 28);
+          const nodeIssues = validation.byNodeId[node.id] ?? [];
+          const hasValidationErrors = nodeIssues.some((issue) => issue.severity === "error");
           return (
             <div
               key={node.id}
               data-node-id={node.id}
-              className={clsx("node-card", selection === node.id && "selected")}
+              className={clsx("node-card", selection === node.id && "selected", hasValidationErrors && "has-validation-error")}
+              title={nodeIssues.map((issue) => issue.message).join("\n") || undefined}
               onMouseDown={(e) => {
                 e.stopPropagation();
                 const nodeId = node.id;
@@ -271,14 +303,16 @@ const Canvas: React.FC = () => {
                 width: nodeWidth,
                 minHeight: nodeHeight,
                 borderRadius: 14,
-                border: "1px solid var(--panel-border)",
+                border: hasValidationErrors ? "1px solid var(--danger)" : "1px solid var(--panel-border)",
                 background: "rgba(255,255,255,0.03)",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+                boxShadow: hasValidationErrors
+                  ? "0 10px 30px rgba(0,0,0,0.25), 0 0 0 2px rgba(248,113,113,0.3)"
+                  : "0 10px 30px rgba(0,0,0,0.25)",
                 overflow: "visible",
                 paddingRight: 10
               }}
             >
-              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", alignItems: "center", gap: 10, marginBottom: 6 }}>
                 <div style={{ width: 12, height: 12, borderRadius: 6, background: getNodeColor(node.kind), boxShadow: `0 0 0 4px ${getNodeColor(node.kind)}22` }} />
                 <div
                   style={{
@@ -291,6 +325,11 @@ const Canvas: React.FC = () => {
                 >
                   {node.label}
                 </div>
+                {hasValidationErrors && (
+                  <span className="validation-dot" title={nodeIssues.map((issue) => issue.message).join("\n")}>
+                    !
+                  </span>
+                )}
                 <button
                   className="button tertiary"
                   style={{ padding: "2px 6px", justifySelf: "end", marginRight: -6, marginTop: -4 }}
@@ -342,12 +381,66 @@ const Canvas: React.FC = () => {
             </div>
           );
         })}
+        {notes.map((note) => (
+          <div
+            key={note.id}
+            data-note-id={note.id}
+            className="canvas-note"
+            style={{ left: note.x + offsetX, top: note.y + offsetY }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              const target = e.target as HTMLElement;
+              if (target.closest("[data-note-control]")) return;
+              const wp = worldPos(e.clientX, e.clientY);
+              noteDragRef.current = { id: note.id, offsetX: wp.x - note.x, offsetY: wp.y - note.y };
+            }}
+          >
+            <div className="canvas-note-header">
+              <span>Note</span>
+              <button
+                className="button tertiary"
+                data-note-control
+                style={{ padding: "2px 6px" }}
+                title="Delete note"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteNote(flow.name, note.id);
+                }}
+              >
+                x
+              </button>
+            </div>
+            <textarea
+              data-note-control
+              className="canvas-note-text"
+              value={note.text}
+              placeholder="Write a note"
+              onMouseDown={(e) => e.stopPropagation()}
+              onChange={(e) => updateNote(flow.name, note.id, { text: e.target.value })}
+            />
+          </div>
+        ))}
       </div>
+      <button
+        className="button secondary"
+        style={{ position: "absolute", top: 12, left: 12, zIndex: 16, padding: "8px 10px" }}
+        onClick={addNoteAtViewportCenter}
+      >
+        Add note
+      </button>
       {errorMsg && (
         <div style={{ position: "absolute", top: 12, right: 16, background: "rgba(248,113,113,0.9)", color: "#fff", padding: "8px 12px", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.3)", zIndex: 20 }}>
           {errorMsg}
         </div>
       )}
+      {overlays.map((overlay) => {
+        const Overlay = overlay.value as React.ComponentType<any>;
+        return (
+          <div key={`${overlay.pluginId ?? "plugin"}-${overlay.name}`} style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 18 }}>
+            <Overlay app={app} flow={flow} nodes={nodes} edges={edges} validation={validation} />
+          </div>
+        );
+      })}
       <Overview
         width={width}
         height={height}
@@ -374,8 +467,10 @@ const EdgeLine: React.FC<{
   const to = nodes.find((n) => n.id === edge.to);
   if (!from || !to) return null;
   const fromConnectors = connectorsByNode[from.id] ?? [];
-  const connIdx = Math.max(0, fromConnectors.findIndex((c) => c.id === edge.label));
+  const rawConnIdx = fromConnectors.findIndex((c) => c.id === edge.label);
+  const connIdx = Math.max(0, rawConnIdx);
   const color = CONNECTOR_COLORS[connIdx % CONNECTOR_COLORS.length];
+  const displayLabel = rawConnIdx >= 0 ? fromConnectors[rawConnIdx]?.label : edge.label;
   const startX = from.x + offset.x + (widthByNode[from.id] ?? NODE_WIDTH) + 8;
   const startY = from.y + offset.y + 40 + connIdx * 28 + 7;
   const endHeight = Math.max(NODE_MIN_HEIGHT, 60 + (connectorsByNode[to.id]?.length ?? 0) * 28);
@@ -397,53 +492,14 @@ const EdgeLine: React.FC<{
         fill="none"
         markerEnd={`url(#arrow-color-${connIdx % CONNECTOR_COLORS.length})`}
       />
-      {edge.label && (
+      {displayLabel && (
         <text x={midX} y={(startY + endY) / 2 - 6} fill={color} fontSize={12} textAnchor="middle">
-          {edge.label}
+          {displayLabel}
         </text>
       )}
     </g>
   );
 };
-
-function buildConnectors(node: Node, meta?: any): Connector[] {
-  const seen = new Set<string>();
-  const connectors: Connector[] = [];
-  const add = (c: Connector) => {
-    if (seen.has(c.id)) return;
-    seen.add(c.id);
-    connectors.push(c);
-  };
-  add({ id: "next", label: "next", direction: "next" });
-  if (node.kind !== "closure") return connectors;
-  const paramsMeta = meta?.signature?.parameters ?? [];
-  const paramsValue = node.data?.params ?? {};
-
-  const visit = (param: any, val: any, base: string) => {
-    if (!param) return;
-    if (param.type === "flowSteps") {
-      add({ id: base, label: base, direction: "dynamic" });
-      return;
-    }
-    if (param.type === "array" && Array.isArray(val) && Array.isArray(param.children)) {
-      val.forEach((item: any, idx: number) => {
-        param.children.forEach((child: any) => {
-          visit(child, item?.[child.name], `${base}[${idx}].${child.name}`);
-        });
-      });
-      return;
-    }
-  };
-
-  paramsMeta.forEach((p: any) => {
-    visit(p, paramsValue[p.name], p.name);
-  });
-
-  Object.entries(node.data?.params ?? {})
-    .filter(([, v]) => typeof v === "object" && v !== null && "$call" in (v as any))
-    .forEach(([name]) => add({ id: name, label: name, direction: "param" }));
-  return connectors;
-}
 
 export default Canvas;
 

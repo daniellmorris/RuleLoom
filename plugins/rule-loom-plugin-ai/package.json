@@ -1,0 +1,28 @@
+{
+  "name": "rule-loom-plugin-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "ruleloom.manifest.yaml"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "test": "vitest run",
+    "manifest": "npm -w rule-loom-runner run build --if-present && node ../../packages/rule-loom-runner/dist/cli.js manifest .",
+    "postbuild": "npm run manifest"
+  },
+  "dependencies": {
+    "openai": "^4.68.0",
+    "rule-loom-engine": "0.1.0",
+    "rule-loom-lib": "0.1.0"
+  },
+  "devDependencies": {
+    "rule-loom-runner": "0.1.0",
+    "typescript": "^5.4.2",
+    "vitest": "^2.0.5"
+  }
+}

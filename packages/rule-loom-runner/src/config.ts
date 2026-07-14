@@ -49,6 +49,10 @@ export function createRunnerConfigSchema() {
 
   return z.object({
     version: z.number().int().positive().optional().default(1),
+    namespace: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]+$/)
+      .optional(),
     logger: z
       .object({
         level: logLevelSchema.optional(),

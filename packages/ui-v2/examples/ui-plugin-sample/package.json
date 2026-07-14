@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json && cp manifest.json dist/manifest.json"
+    "build": "tsc -p tsconfig.json && cp dist/index.js dist/plugin.js && cp manifest.json dist/manifest.json"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

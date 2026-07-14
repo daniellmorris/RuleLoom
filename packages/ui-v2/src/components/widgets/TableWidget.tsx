@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { loadDashboardData, type DashboardSourceType } from '../../utils/dashboardDataSource';
 
 type TableData = { columns: string[]; rows: any[] };
 
@@ -6,8 +7,13 @@ const TableWidget: React.FC<{
   title?: string;
   data?: any;
   endpoint?: string;
+  sourceType?: DashboardSourceType;
+  flowName?: string;
+  flowEndpoint?: string;
+  flowState?: string;
+  resultPath?: string;
   columns?: string;
-}> = ({ title, data, endpoint, columns }) => {
+}> = ({ title, data, endpoint, sourceType, flowName, flowEndpoint, flowState, resultPath, columns }) => {
   const [resolved, setResolved] = useState<TableData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -15,14 +21,14 @@ const TableWidget: React.FC<{
   useEffect(() => {
     let cancelled = false;
     const fromConfig = toTableData(data, columns);
-    if (!endpoint) {
+    const hasRemoteSource = sourceType === 'flow' || sourceType === 'endpoint' || (!sourceType && Boolean(endpoint));
+    if (!hasRemoteSource) {
       setResolved(fromConfig);
       setError(null);
       return;
     }
     setLoading(true);
-    fetch(endpoint)
-      .then((r) => r.json())
+    loadDashboardData({ sourceType, data, endpoint, flowName, flowEndpoint, flowState, resultPath })
       .then((json) => {
         if (cancelled) return;
         const fromFetch = toTableData(json, columns);
@@ -40,7 +46,7 @@ const TableWidget: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [endpoint, data, columns]);
+  }, [sourceType, endpoint, flowName, flowEndpoint, flowState, resultPath, data, columns]);
 
   const parsed = resolved;
   const hasTable =

@@ -1,4 +1,7 @@
 version: 1
+secrets:
+  env:
+    HA_TOKEN: HOME_ASSISTANT_TOKEN
 plugins:
   - source: github
     repo: daniellmorris/RuleLoom
@@ -50,6 +53,8 @@ inputs:
   - type: http
     config:
       basePath: /api
+      runnerEndpoint:
+        enabled: true
       corsOrigins: http://localhost:4173, http://localhost
       corsMethods: GET, POST
       corsAllowedHeaders: Authorization, Content-Type
@@ -66,8 +71,7 @@ inputs:
       url: ws://dmserver:8123/api/websocket
       connectMessages:
         - type: auth
-          access_token: >-
-            eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo
+          access_token: "${secrets.HA_TOKEN}"
         - id: 1
           type: subscribe_events
           event_type: state_changed
@@ -86,9 +90,7 @@ closures:
           baseUrl: http://dmserver:8123
           url: /api/services/${parameters.domain}/${parameters.service}
           headers:
-            Authorization: >-
-              Bearer
-              eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo
+            Authorization: "Bearer ${secrets.HA_TOKEN}"
           body:
             entity_id: ${parameters.entityId}
         $meta:
@@ -130,9 +132,7 @@ flows:
           baseUrl: http://dmserver:8123
           url: /api/states
           headers:
-            Authorization: >-
-              Bearer
-              eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5YjA2NGIxNzNiMjc0MTk1OGQ2NTAwNDI2Y2Q1NTMzYSIsImlhdCI6MTc2MzY1Mzg1MSwiZXhwIjoyMDc5MDEzODUxfQ.OjNMR4MKTzjYDpdR7-1E5kZez8Wtue6R8sJCjBwDpDo
+            Authorization: "Bearer ${secrets.HA_TOKEN}"
         $meta:
           id: ha-http-entities
           x: 1529.6393977624346
@@ -183,5 +183,7 @@ dashboards:
                 - type: TableWidget
                   props:
                     title: Entities
-                    endpoint: http://localhost:3000/api/entities
+                    sourceType: flow
+                    flowName: ha.get-entities
+                    flowEndpoint: http://localhost:3000/api/__ruleloom/run
                     columns: entity_id,state

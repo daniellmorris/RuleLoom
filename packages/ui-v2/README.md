@@ -24,6 +24,7 @@ Fresh, isolated UI surface for building orchestrated flows. This package does no
 - Plugins can override any block by name; the registry will replace the core registration with the plugin export. New blocks simply need a layout entry to render.
 - The header now shows a page selector when multiple pages are defined.
 - A simple JSON-based dashboard/layout editor is available on the “Dashboard” page; it lets you tweak the Puck layout JSON and re-render live.
+- Table widgets support static JSON, HTTP endpoints, or a named RuleLoom flow as their data source. Flow sources POST to `/__ruleloom/run` by default and use `state.response.body`; configure a runner URL or response path when needed. The runner execution endpoint must be explicitly enabled, and authenticated deployments should provide access through a trusted same-origin proxy rather than storing credentials in dashboard YAML.
 
 ## UI plugins
 - Host plugin sources live in `src/config/plugins.json` (GitHub repo + ref + manifest path). In dev you can reload via the header button or by editing the config (HMR will refetch).

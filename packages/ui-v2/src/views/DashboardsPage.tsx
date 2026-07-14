@@ -296,12 +296,49 @@ function buildDashboardConfig(registry: ComponentRegistry, flows: any[]) {
         label: 'Table',
         fields: {
           title: { type: 'text', label: 'Title' },
+          sourceType: {
+            type: 'select',
+            label: 'Data source',
+            options: [
+              { label: 'Static JSON', value: 'static' },
+              { label: 'HTTP endpoint', value: 'endpoint' },
+              { label: 'RuleLoom flow', value: 'flow' }
+            ],
+            optional: true
+          },
           endpoint: { type: 'text', label: 'Endpoint URL', optional: true },
+          flowName: {
+            type: 'select',
+            label: 'Flow',
+            options: (flows ?? []).map((flow) => ({ label: flow.name, value: flow.name })),
+            optional: true
+          },
+          flowEndpoint: {
+            type: 'text',
+            label: 'Runner URL (defaults to /__ruleloom/run)',
+            optional: true
+          },
+          flowState: { type: 'textarea', label: 'Initial state JSON', optional: true },
+          resultPath: {
+            type: 'text',
+            label: 'Response path (defaults to state.response.body)',
+            optional: true
+          },
           columns: { type: 'text', label: 'Columns (comma-separated, optional)', optional: true },
           data: { type: 'textarea', label: 'Data JSON fallback (columns, rows)', optional: true }
         },
-        render: ({ title, data, endpoint, columns }: any) => (
-          <TableWidget title={title} data={data} endpoint={endpoint} columns={columns} />
+        render: ({ title, data, endpoint, sourceType, flowName, flowEndpoint, flowState, resultPath, columns }: any) => (
+          <TableWidget
+            title={title}
+            data={data}
+            endpoint={endpoint}
+            sourceType={sourceType}
+            flowName={flowName}
+            flowEndpoint={flowEndpoint}
+            flowState={flowState}
+            resultPath={resultPath}
+            columns={columns}
+          />
         )
       }
     }
